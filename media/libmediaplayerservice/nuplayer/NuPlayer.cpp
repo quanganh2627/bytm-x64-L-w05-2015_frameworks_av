@@ -143,6 +143,22 @@ void NuPlayer::setVideoSurfaceTexture(const sp<ISurfaceTexture> &surfaceTexture)
     sp<AMessage> msg = new AMessage(kWhatSetVideoNativeWindow, id());
     sp<SurfaceTextureClient> surfaceTextureClient(surfaceTexture != NULL ?
                 new SurfaceTextureClient(surfaceTexture) : NULL);
+
+    //NOTES: we must re-connect api here because we need to get right
+    //infomation from surface texture's back end. Otherwise, we only get
+    //uninitlized mTransformHint, mDefaultWidth, mDefaultHeight, etc.
+    sp<ANativeWindow> anw = surfaceTextureClient;
+    status_t err = native_window_api_disconnect(anw.get(),
+            NATIVE_WINDOW_API_MEDIA);
+    if (err != OK) {
+        ALOGE("setSurfaceTexture: api disconnect failed: %d", err);
+    }
+
+    err = native_window_api_connect(anw.get(),
+            NATIVE_WINDOW_API_MEDIA);
+    if (err != OK) {
+        ALOGE("setSurfaceTexture: api connect failed: %d", err);
+    }
     msg->setObject("native-window", new NativeWindowWrapper(surfaceTextureClient));
     msg->post();
 }
