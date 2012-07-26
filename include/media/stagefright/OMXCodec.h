@@ -100,6 +100,7 @@ struct OMXCodec : public MediaSource,
         kSupportsMultipleFramesPerInputBuffer = 1024,
         kRequiresLargerEncoderOutputBuffer    = 2048,
         kOutputBuffersAreUnreadable           = 4096,
+        kRequiresHoldExtraBuffers             = 65536,
     };
 
     struct CodecNameAndQuirks {
