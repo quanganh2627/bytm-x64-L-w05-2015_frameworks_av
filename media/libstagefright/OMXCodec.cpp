@@ -277,6 +277,11 @@ uint32_t OMXCodec::getComponentQuirks(
                 index, "requires-loaded-to-idle-after-allocation")) {
         quirks |= kRequiresLoadedToIdleAfterAllocation;
     }
+    if (list->codecHasQuirk(
+                index, "requires-hold-extra-buffers")) {
+        quirks |= kRequiresHoldExtraBuffers;
+    }
+
     return quirks;
 }
 
@@ -1930,6 +1935,14 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         ALOGE("NATIVE_WINDOW_MIN_UNDEQUEUED_BUFFERS query failed: %s (%d)",
                 strerror(-err), -err);
         return err;
+    }
+
+    // XXX: should hold extra two buffers in surface texture back end.
+    // Currently, intel hw overlay need always hold output buffer until
+    // flip to another buffer. So we should hold more buffers to avoid
+    // buffer overwrite by decoder.
+    if (mQuirks & kRequiresHoldExtraBuffers) {
+        minUndequeuedBufs += 2;
     }
 
     // XXX: Is this the right logic to use?  It's not clear to me what the OMX

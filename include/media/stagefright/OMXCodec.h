@@ -102,6 +102,7 @@ struct OMXCodec : public MediaSource,
         kOutputBuffersAreUnreadable           = 4096,
         kRequiresSetProfileLevel              = 8192,
         kRequiresSetFPS                       = 16384,
+        kRequiresHoldExtraBuffers             = 32768,
     };
 
     struct CodecNameAndQuirks {
