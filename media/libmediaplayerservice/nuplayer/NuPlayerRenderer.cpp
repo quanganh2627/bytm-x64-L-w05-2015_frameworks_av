@@ -557,7 +557,7 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
 
         Mutex::Autolock autoLock(mFlushLock);
         mFlushingAudio = false;
-
+        mHasAudio = false;
         mDrainAudioQueuePending = false;
         ++mAudioQueueGeneration;
     } else {
@@ -565,7 +565,7 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
 
         Mutex::Autolock autoLock(mFlushLock);
         mFlushingVideo = false;
-
+        mHasVideo = false;
         mDrainVideoQueuePending = false;
         ++mVideoQueueGeneration;
     }
