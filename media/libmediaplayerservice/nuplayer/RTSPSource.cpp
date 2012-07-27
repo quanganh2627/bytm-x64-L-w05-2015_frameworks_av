@@ -641,8 +641,10 @@ void NuPlayer::RTSPSource::onDisconnected(const sp<AMessage> &msg) {
     CHECK(msg->findInt32("result", &err));
     CHECK_NE(err, (status_t)OK);
 
-    mLooper->unregisterHandler(mHandler->id());
-    mHandler.clear();
+    if (mHandler != NULL) {
+        mLooper->unregisterHandler(mHandler->id());
+        mHandler.clear();
+    }
 
     if (mState == CONNECTING) {
         // We're still in the preparation phase, signal that it
