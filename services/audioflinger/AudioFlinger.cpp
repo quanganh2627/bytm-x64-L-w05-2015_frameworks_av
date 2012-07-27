@@ -672,6 +672,27 @@ status_t AudioFlinger::setMode(audio_mode_t mode)
     return ret;
 }
 
+status_t AudioFlinger::setFmRxMode(int mode) {
+    status_t ret = initCheck();
+    if (ret != NO_ERROR) {
+        return ret;
+    }
+
+    if ((mode < 0) || (mode >= AUDIO_MODE_FM_CNT)) {
+        LOGW("Illegal value: setFmRxMode(%d)", mode);
+        return BAD_VALUE;
+    }
+
+    { // scope for the lock
+        AutoMutex lock(mHardwareLock);
+        mHardwareStatus = AUDIO_HW_SET_MODE;
+        ret = mPrimaryHardwareDev->hwDevice()->set_fmrx_mode(mPrimaryHardwareDev->hwDevice(), mode);
+        mHardwareStatus = AUDIO_HW_IDLE;
+    }
+
+    return ret;
+}
+
 status_t AudioFlinger::setMicMute(bool state)
 {
     status_t ret = initCheck();

@@ -116,6 +116,8 @@ public:
 
     // set audio mode
     virtual     status_t    setMode(audio_mode_t mode) = 0;
+    // set FM RX mode
+    virtual     status_t    setFmRxMode(int mode) = 0;
 
     // mic mute/state
     virtual     status_t    setMicMute(bool state) = 0;
