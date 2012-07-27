@@ -45,6 +45,7 @@ enum {
     STREAM_VOLUME,
     STREAM_MUTE,
     SET_MODE,
+    SET_FMRX_MODE,
     SET_MIC_MUTE,
     GET_MIC_MUTE,
     SET_PARAMETERS,
@@ -305,6 +306,15 @@ public:
         data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
         data.writeInt32(mode);
         remote()->transact(SET_MODE, data, &reply);
+        return reply.readInt32();
+    }
+
+    virtual status_t setFmRxMode(int mode)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
+        data.writeInt32(mode);
+        remote()->transact(SET_FMRX_MODE, data, &reply);
         return reply.readInt32();
     }
 

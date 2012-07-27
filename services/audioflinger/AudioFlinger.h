@@ -133,6 +133,7 @@ public:
     virtual     bool        streamMute(audio_stream_type_t stream) const;
 
     virtual     status_t    setMode(audio_mode_t mode);
+    virtual     status_t    setFmRxMode(int mode);
 
     virtual     status_t    setMicMute(bool state);
     virtual     bool        getMicMute() const;
