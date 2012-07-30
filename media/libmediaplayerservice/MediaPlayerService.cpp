@@ -79,6 +79,10 @@
 #include "HTTPBase.h"
 #include "RemoteDisplay.h"
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayClient.h>
+#endif
+
 namespace {
 using android::media::Metadata;
 using android::status_t;
@@ -221,6 +225,17 @@ MediaPlayerService::MediaPlayerService()
     mBatteryAudio.deviceOn[SPEAKER] = 1;
 
     MediaPlayerFactory::registerBuiltinFactories();
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    // Reset video playback status in case media server crashes.
+    MultiDisplayClient* client = new MultiDisplayClient;
+    if (client) {
+        MDSVideoSourceInfo info;
+        memset(&info, 0, sizeof(MDSVideoSourceInfo));
+        client->setVideoSourceInfo(&info);
+        delete client;
+    }
+#endif
 }
 
 MediaPlayerService::~MediaPlayerService()

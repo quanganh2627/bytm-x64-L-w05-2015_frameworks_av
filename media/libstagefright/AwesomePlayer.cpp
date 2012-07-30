@@ -212,6 +212,9 @@ AwesomePlayer::AwesomePlayer()
       mVPPProcessor(NULL),
       mVPPInit(false),
 #endif
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mMDClient(NULL),
+#endif
       mLastVideoTimeUs(-1),
       mTextDriver(NULL),
       mOffloadAudio(false),
@@ -249,6 +252,9 @@ AwesomePlayer::~AwesomePlayer() {
     reset();
 
     mClient.disconnect();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setDisplaySource_l(false);
+#endif
 }
 
 void AwesomePlayer::cancelPlayerEvents(bool keepNotifications) {
@@ -380,6 +386,64 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
         }
     }
 }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+void AwesomePlayer::notifyMDSPlayerStatus_l(int status) {
+    if (mMDClient == NULL) {
+        mMDClient = new MultiDisplayClient();
+    }
+
+    if (mMDClient != NULL) {
+        mMDClient->setVideoState((MDS_VIDEO_STATE)status);
+
+        if (status == MDS_VIDEO_UNPREPARED) {
+            delete mMDClient;
+            mMDClient = NULL;
+        }
+    } else {
+        LOGI("NULL MDClient in AwesomePlayer!");
+    }
+}
+
+void AwesomePlayer::setDisplaySource_l(bool isplaying) {
+    MDSVideoSourceInfo info;
+    memset(&info, 0, sizeof(MDSVideoSourceInfo));
+
+    if (isplaying) {
+        if (mVideoSource != NULL) {
+            if (mMDClient == NULL) {
+                mMDClient = new MultiDisplayClient();
+            }
+            int wcom = 0;
+            if (mNativeWindow != NULL)
+                mNativeWindow->query(mNativeWindow.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+            /*
+             * 0 means the buffers do not go directly to the window compositor;
+             * 1 means the ANativeWindow DOES send queued buffers
+             * directly to the window compositor;
+             */
+            if (wcom == 1) {
+                info.isplaying = true;
+                info.isprotected = (mDecryptHandle != NULL);
+                {
+                    Mutex::Autolock autoLock(mStatsLock);
+                    info.frameRate = mStats.mFrameRate;
+                    info.displayW = mStats.mVideoWidth;
+                    info.displayH = mStats.mVideoHeight;
+                }
+                mMDClient->setVideoSourceInfo(&info);
+                notifyMDSPlayerStatus_l(MDS_VIDEO_PREPARED);
+            }
+        }
+    } else {
+        if (mMDClient != NULL) {
+           info.isplaying = false;
+           info.isprotected = false;
+           mMDClient->setVideoSourceInfo(&info);
+        }
+    }
+}
+#endif
 
 status_t AwesomePlayer::setDataSource_l(const sp<MediaExtractor> &extractor) {
     // Attempt to approximate overall stream bitrate by summing all
@@ -617,6 +681,7 @@ void AwesomePlayer::reset_l() {
         mStats.mNumVideoFramesDropped = 0;
         mStats.mVideoWidth = -1;
         mStats.mVideoHeight = -1;
+        mStats.mFrameRate = -1;
         mStats.mFlags = 0;
         mStats.mTracks.clear();
     }
@@ -1029,6 +1094,9 @@ status_t AwesomePlayer::play_l() {
         postBufferingEvent_l();
     }
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setDisplaySource_l(true);
+#endif
     return OK;
 }
 
@@ -1169,6 +1237,9 @@ void AwesomePlayer::notifyVideoSize_l() {
         Mutex::Autolock autoLock(mStatsLock);
         mStats.mVideoWidth = usableWidth;
         mStats.mVideoHeight = usableHeight;
+        if (!mVideoTrack->getFormat()->findInt32(kKeyFrameRate, &mStats.mFrameRate)) {
+            mStats.mFrameRate = 0;
+        }
     }
 
     int32_t rotationDegrees;
@@ -1339,6 +1410,9 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer->release();
         mVideoBuffer = NULL;
     }
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setDisplaySource_l(false);
+#endif
 
 #ifdef TARGET_HAS_VPP
     if (mVPPProcessor != NULL) {
