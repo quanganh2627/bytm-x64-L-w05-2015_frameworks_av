@@ -21,6 +21,9 @@
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/foundation/AHandler.h>
 #include <media/stagefright/NativeWindowWrapper.h>
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayClient.h>
+#endif
 
 #ifdef TARGET_HAS_VPP
 #include <NuPlayerVPPProcessor.h>
@@ -165,6 +168,11 @@ private:
 
     int64_t mVideoLateByUs;
     int64_t mNumFramesTotal, mNumFramesDropped;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    MultiDisplayClient* mMDClient;
+    sp<ANativeWindow> mANativeWindow;
+    void setDisplaySource(bool isplaying);
+#endif
 
     int32_t mVideoScalingMode;
 
