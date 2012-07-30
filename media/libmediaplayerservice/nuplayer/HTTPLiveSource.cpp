@@ -203,5 +203,11 @@ bool NuPlayer::HTTPLiveSource::isStreamValid(bool audio) {
     return mTSParser->isStreamValid(type);
 }
 
+void NuPlayer::HTTPLiveSource::stop() {
+    if (mLiveSession != NULL) {
+        mLiveSession->disconnect();
+    }
+}
+
 }  // namespace android
 

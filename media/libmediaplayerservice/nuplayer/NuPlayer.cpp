@@ -245,6 +245,10 @@ void NuPlayer::resume() {
 }
 
 void NuPlayer::resetAsync() {
+    // force stop, there are block functions in mSource
+    if (mSource != NULL) {
+        mSource->stop();
+    }
     (new AMessage(kWhatReset, id()))->post();
 }
 
