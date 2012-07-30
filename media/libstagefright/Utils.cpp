@@ -93,12 +93,14 @@ status_t convertMetaDataToMessage(
     }
 
     if (!strncasecmp("video/", mime, 6)) {
-        int32_t width, height;
+        int32_t width, height, frameRate;
         CHECK(meta->findInt32(kKeyWidth, &width));
         CHECK(meta->findInt32(kKeyHeight, &height));
 
         msg->setInt32("width", width);
         msg->setInt32("height", height);
+        if (meta->findInt32(kKeyFrameRate, &frameRate))
+            msg->setInt32("frame-rate", frameRate);
 
         int32_t sarWidth, sarHeight;
         if (meta->findInt32(kKeySARWidth, &sarWidth)
@@ -401,9 +403,12 @@ void convertMessageToMetaData(const sp<AMessage> &msg, sp<MetaData> &meta) {
     if (mime.startsWith("video/")) {
         int32_t width;
         int32_t height;
+        int32_t frameRate;
         if (msg->findInt32("width", &width) && msg->findInt32("height", &height)) {
             meta->setInt32(kKeyWidth, width);
             meta->setInt32(kKeyHeight, height);
+            if (msg->findInt32("frame-rate", &frameRate))
+                meta->setInt32(kKeyFrameRate, frameRate);
         } else {
             ALOGW("did not find width and/or height");
         }
