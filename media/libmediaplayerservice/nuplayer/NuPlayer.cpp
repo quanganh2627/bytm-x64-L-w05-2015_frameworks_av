@@ -166,11 +166,17 @@ NuPlayer::NuPlayer()
 #ifdef TARGET_HAS_VPP
       mIsVppInit(false),
 #endif
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mMDClient(NULL),
+#endif
       mVideoScalingMode(NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW),
       mStarted(false) {
 }
 
 NuPlayer::~NuPlayer() {
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setDisplaySource(false);
+#endif
 }
 
 void NuPlayer::setUID(uid_t uid) {
@@ -197,6 +203,57 @@ void NuPlayer::setDataSourceAsync(const sp<IStreamSource> &source) {
 
     msg->post();
 }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+void NuPlayer::setDisplaySource(bool isplaying) {
+    MDSVideoSourceInfo info;
+    memset(&info, 0 ,sizeof(&info));
+    if (isplaying) {
+        int wcom = 0;
+        if (mANativeWindow != NULL) {
+            mANativeWindow->query(mANativeWindow.get(),
+                    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+        }
+        if (mVideoDecoder != NULL && wcom == 1) {
+            if (mMDClient == NULL) {
+                mMDClient = new MultiDisplayClient();
+            }
+            sp<AMessage> msg = NULL;
+            int32_t displayW, displayH, frameRate;
+            bool success = false;
+            displayW = displayH = frameRate = 0;
+            info.isplaying = true;
+            info.isprotected = false;
+            msg = mSource->getFormat(false);
+            if (msg != NULL) {
+                success = msg->findInt32("frame-rate", &frameRate);
+                if (!success)
+                    frameRate = 0;
+                success = msg->findInt32("width", &displayW);
+                if (!success)
+                    displayW = 0;
+                success = msg->findInt32("height", &displayH);
+                if (!success)
+                    displayH = 0;
+            }
+            info.frameRate = frameRate;
+            info.displayW  = displayW;
+            info.displayH  = displayH;
+            mMDClient->setVideoSourceInfo(&info);
+            mMDClient->setVideoState(MDS_VIDEO_PREPARED);
+        }
+    } else {
+      if (mMDClient != NULL) {
+          info.isplaying = false;
+          info.isprotected = false;
+          mMDClient->setVideoSourceInfo(&info);
+          mMDClient->setVideoState(MDS_VIDEO_UNPREPARED);
+          delete mMDClient;
+          mMDClient = NULL;
+      }
+    }
+}
+#endif
 
 static bool IsHTTPLiveURL(const char *url) {
     if (!strncasecmp("http://", url, 7)
@@ -287,6 +344,12 @@ void NuPlayer::setVideoSurfaceTextureAsync(
     }
 
     msg->post();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (mVideoDecoder != NULL) {
+        setDisplaySource(false);
+    }
+    mANativeWindow = surfaceTextureClient;
+#endif
 }
 
 void NuPlayer::setAudioSink(const sp<MediaPlayerBase::AudioSink> &sink) {
@@ -1012,6 +1075,10 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
     }
 #endif
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (!audio)
+        setDisplaySource(true);
+#endif
     return OK;
 }
 
