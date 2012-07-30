@@ -27,6 +27,9 @@
 
 namespace android {
 
+// set 4.5 s timeout to avoid block causing ANR
+const static int64_t kTimeOutInNs = 4500000000LL;
+
 NuPlayerDriver::NuPlayerDriver()
     : mResetInProgress(false),
       mDurationUs(-1),
@@ -245,7 +248,11 @@ status_t NuPlayerDriver::reset() {
     mPlayer->resetAsync();
 
     while (mResetInProgress) {
-        mCondition.wait(mLock);
+        status_t err = mCondition.waitRelative(mLock, kTimeOutInNs);
+        if (err != OK) {
+            // in some extreme condition, shouldn't be here
+            ALOGW("reset time out, shouldn't be here");
+        }
     }
 
     mDurationUs = -1;

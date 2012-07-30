@@ -3391,6 +3391,10 @@ void ACodec::IdleToExecutingState::stateEntered() {
 
 bool ACodec::IdleToExecutingState::onMessageReceived(const sp<AMessage> &msg) {
     switch (msg->what()) {
+        case kWhatFlush:
+        {
+            ALOGV("[%s] IdleToExecutingState flushing now ", mCodec->mComponentName.c_str());
+        }
         case kWhatShutdown:
         {
             mCodec->deferMessage(msg);
