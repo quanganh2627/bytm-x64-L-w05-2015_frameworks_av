@@ -183,6 +183,12 @@ LOCAL_STATIC_LIBRARIES += \
 LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
 endif
 
+ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+        LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
+        LOCAL_SHARED_LIBRARIES += libmultidisplay
+        LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+endif
+
 LOCAL_SHARED_LIBRARIES += libstlport
 include external/stlport/libstlport.mk
 
