@@ -129,11 +129,17 @@ NuPlayer::NuPlayer()
       mVideoLateByUs(0ll),
       mNumFramesTotal(0ll),
       mNumFramesDropped(0ll),
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mMDClient(NULL),
+#endif
       mVideoScalingMode(NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW),
       mStarted(false) {
 }
 
 NuPlayer::~NuPlayer() {
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setDisplaySource(false);
+#endif
 }
 
 void NuPlayer::setUID(uid_t uid) {
@@ -160,6 +166,33 @@ void NuPlayer::setDataSourceAsync(const sp<IStreamSource> &source) {
 
     msg->post();
 }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+void NuPlayer::setDisplaySource(bool isplaying) {
+    MDSVideoInfo info;
+    LOGI("%s: MultiDisplay: %d", __func__, isplaying);
+    if (isplaying) {
+        if (mVideoDecoder != NULL) {
+            if (mMDClient == NULL) {
+                mMDClient = new MultiDisplayClient();
+            }
+            memset(&info, 0 ,sizeof(&info));
+            info.isplaying = true;
+            info.isprotected = false;
+            mMDClient->updateVideoInfo(&info);
+        }
+    } else {
+      if (mMDClient != NULL) {
+          memset(&info, 0 ,sizeof(&info));
+          info.isplaying = false;
+          info.isprotected = false;
+          mMDClient->updateVideoInfo(&info);
+          delete mMDClient;
+          mMDClient = NULL;
+      }
+    }
+}
+#endif
 
 static bool IsHTTPLiveURL(const char *url) {
     if (!strncasecmp("http://", url, 7)
@@ -478,6 +511,9 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                 msg->post(100000ll);
                 mScanSourcesPending = true;
             }
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+            setDisplaySource(true);
+#endif
             break;
         }
 

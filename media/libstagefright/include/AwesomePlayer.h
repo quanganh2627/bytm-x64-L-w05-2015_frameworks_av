@@ -31,6 +31,9 @@
 #include <media/stagefright/TimeSource.h>
 #include <utils/threads.h>
 #include <drm/DrmManagerClient.h>
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayClient.h>
+#endif
 
 #include <media/stagefright/MetaData.h> // for AAC aparams
 extern "C" void timerCallback(union sigval);
@@ -218,6 +221,9 @@ private:
 
     bool mWatchForAudioSeekComplete;
     bool mWatchForAudioEOS;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    MultiDisplayClient* mMDClient;
+#endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
     bool mVideoEventPending;
@@ -263,6 +269,9 @@ private:
 
     status_t setDataSource_l(const sp<DataSource> &dataSource);
     status_t setDataSource_l(const sp<MediaExtractor> &extractor);
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    void setDisplaySource_l(bool isplaying);
+#endif
     void reset_l();
     status_t seekTo_l(int64_t timeUs);
     status_t pause_l(bool at_eos = false);
