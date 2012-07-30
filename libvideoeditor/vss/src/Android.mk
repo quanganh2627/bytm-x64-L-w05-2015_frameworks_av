@@ -70,8 +70,17 @@ LOCAL_SHARED_LIBRARIES :=       \
 LOCAL_STATIC_LIBRARIES := \
     libstagefright_color_conversion \
     libvideoeditor_mcs \
-    libvideoeditor_stagefrightshells \
     libvideoeditor_3gpwriter \
+
+ifeq ($(USE_VIDEOEDITOR_INTEL_NV12_VERSION),true)
+LOCAL_STATIC_LIBRARIES += \
+    libvideoeditor_stagefrightshells_intel
+LOCAL_SHARED_LIBRARIES += \
+    libsharedbuffer \
+    libva_videoencoder
+else
+LOCAL_STATIC_LIBRARIES += libvideoeditor_stagefrightshells
+endif
 
 LOCAL_C_INCLUDES += \
     $(TOP)/frameworks/av/libvideoeditor/osal/inc \
