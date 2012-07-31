@@ -771,8 +771,13 @@ void CameraClient::dataCallbackTimestamp(nsecs_t timestamp,
 
 // snapshot taken callback
 void CameraClient::handleShutter(void) {
+    CameraParameters params(mHardware->getParameters());
     if (mPlayShutterSound) {
-        mCameraService->playSound(CameraService::SOUND_SHUTTER);
+        if ((params.get("burst-length") == NULL) ||
+            (params.getInt("burst-length") == 1))
+            mCameraService->playSound(CameraService::SOUND_SHUTTER);
+        else
+            mCameraService->playSound(CameraService::SOUND_BURST);
     }
 
     sp<ICameraClient> c = mCameraClient;
@@ -781,7 +786,10 @@ void CameraClient::handleShutter(void) {
         c->notifyCallback(CAMERA_MSG_SHUTTER, 0, 0);
         if (!lockIfMessageWanted(CAMERA_MSG_SHUTTER)) return;
     }
-    disableMsgType(CAMERA_MSG_SHUTTER);
+
+    if ((params.get("burst-length") == NULL) ||
+        (params.getInt("burst-length") == 1))
+        disableMsgType(CAMERA_MSG_SHUTTER);
 
     mLock.unlock();
 }
@@ -834,7 +842,11 @@ void CameraClient::handlePreviewData(int32_t msgType,
 
 // picture callback - postview image ready
 void CameraClient::handlePostview(const sp<IMemory>& mem) {
-    disableMsgType(CAMERA_MSG_POSTVIEW_FRAME);
+    CameraParameters params(mHardware->getParameters());
+
+    if ((params.get("burst-length") == NULL) ||
+        (params.getInt("burst-length") == 1))
+        disableMsgType(CAMERA_MSG_POSTVIEW_FRAME);
 
     sp<ICameraClient> c = mCameraClient;
     mLock.unlock();

@@ -21,6 +21,7 @@
 #include <binder/BinderService.h>
 #include <camera/ICameraService.h>
 #include <hardware/camera.h>
+#include <media/AudioTrack.h>
 
 /* This needs to be increased if we can have more cameras */
 #define MAX_CAMERAS 2
@@ -65,6 +66,7 @@ public:
     enum sound_kind {
         SOUND_SHUTTER = 0,
         SOUND_RECORDING = 1,
+        SOUND_BURST = 2,
         NUM_SOUNDS
     };
 
@@ -152,10 +154,15 @@ private:
 
     // sounds
     MediaPlayer*        newMediaPlayer(const char *file);
+    void                loadSoundBurst();
 
     Mutex               mSoundLock;
+    //note mSoundPlayer[SOUND_BURST] is left null, because AudioTrack is used
     sp<MediaPlayer>     mSoundPlayer[NUM_SOUNDS];
     int                 mSoundRef;  // reference count (release all MediaPlayer when 0)
+    AudioTrack*         mAudioTrackBurst;
+    uint8_t*            mBufferBurst;
+    int32_t             mBufferBurstSize;
 
     camera_module_t *mModule;
 
