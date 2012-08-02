@@ -155,6 +155,7 @@ private:
     int64_t mNumFramesTotal, mNumFramesDropped;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
+    sp<ANativeWindow> mANativeWindow;
     void setDisplaySource(bool isplaying);
 #endif
 
