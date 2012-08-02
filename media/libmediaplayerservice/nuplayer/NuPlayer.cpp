@@ -111,7 +111,12 @@ void NuPlayer::setDisplaySource(bool isplaying) {
     MDSVideoInfo info;
     LOGI("%s: MultiDisplay: %d", __func__, isplaying);
     if (isplaying) {
-        if (mVideoDecoder != NULL) {
+        int wcom = 0;
+        if (mANativeWindow != NULL) {
+            mANativeWindow->query(mANativeWindow.get(),
+                    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+        }
+        if (mVideoDecoder != NULL && wcom == 1) {
             if (mMDClient == NULL) {
                 mMDClient = new MultiDisplayClient();
             }
@@ -196,6 +201,9 @@ void NuPlayer::setVideoSurfaceTexture(const sp<ISurfaceTexture> &surfaceTexture)
     }
     msg->setObject("native-window", new NativeWindowWrapper(surfaceTextureClient));
     msg->post();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    mANativeWindow = surfaceTextureClient;
+#endif
 }
 
 void NuPlayer::setAudioSink(const sp<MediaPlayerBase::AudioSink> &sink) {
