@@ -662,6 +662,14 @@ status_t ACodec::configureOutputBuffersFromNativeWindow(
         return err;
     }
 
+    // XXX: should hold extra two buffers in surface texture back end.
+    // Currently, intel hw overlay need always hold output buffer until
+    // flip to another buffer. So we should hold more buffers to avoid
+    // buffer overwrite by decoder.
+    if (mQuirks & OMXCodec::kRequiresHoldExtraBuffers) {
+        *minUndequeuedBuffers += 2;
+    }
+
     // XXX: Is this the right logic to use?  It's not clear to me what the OMX
     // buffer counts refer to - how do they account for the renderer holding on
     // to buffers?
