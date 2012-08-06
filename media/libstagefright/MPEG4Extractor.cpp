@@ -2374,12 +2374,20 @@ status_t MPEG4Extractor::updateAudioTrackInfoFromESDS_MPEG4Audio(
         return OK;
     }
 
-    if (objectTypeIndication  == 0x6b) {
+    if (objectTypeIndication  == 0x6b || objectTypeIndication == 0x69) {
+#ifdef USE_INTEL_MDP
+        // This is mp3 audio
+        // Google decoder was not able to handle packetized MP3 audio.
+        // Intel CIP decoder supports and hence the change.
+        // This need not be upstreamed to AOSP, but changes needed in Intel software base.
+        mLastTrack->meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG);
+#else
         // The media subtype is MP3 audio
         // Our software MP3 audio decoder may not be able to handle
         // packetized MP3 audio; for now, lets just return ERROR_UNSUPPORTED
         ALOGE("MP3 track in MP4/3GPP file is not supported");
         return ERROR_UNSUPPORTED;
+#endif
     }
 
     const uint8_t *csd;
