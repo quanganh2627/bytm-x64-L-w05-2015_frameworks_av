@@ -410,7 +410,6 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 void AwesomePlayer::setDisplaySource_l(bool isplaying) {
     MDSVideoInfo info;
-    LOGI("%s: MultiDisplay %d", __func__, isplaying);
     if (isplaying) {
         if (mVideoSource != NULL) {
             if (mMDClient == NULL) {
@@ -438,6 +437,17 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
                     success = meta->findInt32(kKeyFrameRate, &frameRate);
                     if (!success)
                         frameRate = 0;
+                }
+                if (mVideoSource != NULL) {
+                    meta = mVideoSource->getFormat();
+                    if (meta != NULL) {
+                        success = meta->findInt32(kKeyWidth, &displayW);
+                        if (!success)
+                            displayW = 0;
+                        success = meta->findInt32(kKeyHeight, &displayH);
+                        if (!success)
+                            displayH = 0;
+                    }
                 }
                 info.frameRate = frameRate;
                 info.displayW = displayW;
