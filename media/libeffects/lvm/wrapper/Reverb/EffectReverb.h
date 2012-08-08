@@ -28,7 +28,7 @@ extern "C" {
 #define MAX_CALL_SIZE           256
 #define LVREV_MAX_T60           7000
 #define LVREV_MAX_REVERB_LEVEL  2000
-#define LVREV_MAX_FRAME_SIZE    2560
+#define LVREV_MAX_FRAME_SIZE    2560*2 //Max frame size is doubled to support increase in framecount from HAL
 #define LVREV_CUP_LOAD_ARM9E    470    // Expressed in 0.1 MIPS
 #define LVREV_MEM_USAGE         71+(LVREV_MAX_FRAME_SIZE>>7)     // Expressed in kB
 //#define LVM_PCM
