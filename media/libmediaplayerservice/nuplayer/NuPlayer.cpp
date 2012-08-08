@@ -109,7 +109,6 @@ void NuPlayer::setDataSource(const sp<IStreamSource> &source) {
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 void NuPlayer::setDisplaySource(bool isplaying) {
     MDSVideoInfo info;
-    LOGI("%s: MultiDisplay: %d", __func__, isplaying);
     if (isplaying) {
         int wcom = 0;
         if (mANativeWindow != NULL) {
@@ -120,9 +119,28 @@ void NuPlayer::setDisplaySource(bool isplaying) {
             if (mMDClient == NULL) {
                 mMDClient = new MultiDisplayClient();
             }
+            sp<AMessage> msg = NULL;
+            int32_t displayW, displayH, frameRate;
+            bool success = false;
+            displayW = displayH = frameRate = 0;
             memset(&info, 0 ,sizeof(&info));
             info.isplaying = true;
             info.isprotected = false;
+            msg = mSource->getFormat(false);
+            if (msg != NULL) {
+                success = msg->findInt32("frame-rate", &frameRate);
+                if (!success)
+                    frameRate = 0;
+                success = msg->findInt32("width", &displayW);
+                if (!success)
+                    displayW = 0;
+                success = msg->findInt32("height", &displayH);
+                if (!success)
+                    displayH = 0;
+            }
+            info.frameRate = frameRate;
+            info.displayW  = displayW;
+            info.displayH  = displayH;
             mMDClient->updateVideoInfo(&info);
         }
     } else {
@@ -416,9 +434,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                 msg->post(100000ll);
                 mScanSourcesPending = true;
             }
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-            setDisplaySource(true);
-#endif
             break;
         }
 
@@ -873,6 +888,10 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
             driver->notifyDuration(durationUs);
         }
     }
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (!audio)
+        setDisplaySource(true);
+#endif
 
     return OK;
 }
