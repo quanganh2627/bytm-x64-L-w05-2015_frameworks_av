@@ -49,6 +49,10 @@
 
 #define TRANSPARENT_COLOR 0x7E0
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+#include "M4xVSS_NV12.h"
+#endif
+
 /* Prototype of M4VIFI_xVSS_RGB565toYUV420 function (avoid green effect of transparency color) */
 M4VIFI_UInt8 M4VIFI_xVSS_RGB565toYUV420(void *pUserData, M4VIFI_ImagePlane *pPlaneIn,
                                         M4VIFI_ImagePlane *pPlaneOut);
@@ -1616,7 +1620,11 @@ M4OSA_ERR M4xVSS_internalStartConvertPictureTo3gp(M4OSA_Context pContext)
         Params.OutputVideoBitrate);
 /*- New Encoder bitrates */
     Params.OutputFileMaxSize    = M4PTO3GPP_kUNLIMITED;
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    Params.pPictureCallbackFct    = M4xVSS_PictureCallbackFct_NV12;
+#else
     Params.pPictureCallbackFct    = M4xVSS_PictureCallbackFct;
+#endif
     Params.pPictureCallbackCtxt    = pCallBackCtxt;
     /*FB: change to use the converted path (UTF conversion) see the conversion above*/
     /*Fix :- Adding Audio Track in Image as input :AudioTarckFile Setting to NULL */
@@ -2518,8 +2526,14 @@ M4OSA_ERR M4xVSS_internalGenerateEditedFile(M4OSA_Context pContext)
             if (M4xVSS_kVideoEffectType_BlackAndWhite ==
             xVSS_context->pCurrentEditSettings->Effects[j].VideoEffectType)
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
                 xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
-                 M4VSS3GPP_externalVideoEffectColor;
+                    M4VSS3GPP_externalVideoEffectColor_NV12;
+
+#else
+                xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
+                    M4VSS3GPP_externalVideoEffectColor;
+#endif
                 //xVSS_context->pSettings->Effects[j].pExtVideoEffectFctCtxt =
                 // (M4OSA_Void*)M4xVSS_kVideoEffectType_BlackAndWhite;
                 /*commented FB*/
@@ -2530,8 +2544,13 @@ M4OSA_ERR M4xVSS_internalGenerateEditedFile(M4OSA_Context pContext)
             if (M4xVSS_kVideoEffectType_Pink ==
                 xVSS_context->pCurrentEditSettings->Effects[j].VideoEffectType)
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
                 xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
-                 M4VSS3GPP_externalVideoEffectColor;
+                    M4VSS3GPP_externalVideoEffectColor_NV12;
+#else
+                xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
+                    M4VSS3GPP_externalVideoEffectColor;
+#endif
                 //xVSS_context->pSettings->Effects[j].pExtVideoEffectFctCtxt =
                 // (M4OSA_Void*)M4xVSS_kVideoEffectType_Pink; /**< we don't
                 // use any function context */
@@ -2543,8 +2562,13 @@ M4OSA_ERR M4xVSS_internalGenerateEditedFile(M4OSA_Context pContext)
             if (M4xVSS_kVideoEffectType_Green ==
                  xVSS_context->pCurrentEditSettings->Effects[j].VideoEffectType)
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
+                    M4VSS3GPP_externalVideoEffectColor_NV12;
+#else
                 xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
                     M4VSS3GPP_externalVideoEffectColor;
+#endif
                 //xVSS_context->pSettings->Effects[j].pExtVideoEffectFctCtxt =
                     // (M4OSA_Void*)M4xVSS_kVideoEffectType_Green;
                      /**< we don't use any function context */
@@ -2556,8 +2580,13 @@ M4OSA_ERR M4xVSS_internalGenerateEditedFile(M4OSA_Context pContext)
             if (M4xVSS_kVideoEffectType_Sepia ==
                  xVSS_context->pCurrentEditSettings->Effects[j].VideoEffectType)
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
                 xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
-                 M4VSS3GPP_externalVideoEffectColor;
+                    M4VSS3GPP_externalVideoEffectColor_NV12;
+#else
+                xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
+                    M4VSS3GPP_externalVideoEffectColor;
+#endif
                 //xVSS_context->pSettings->Effects[j].pExtVideoEffectFctCtxt =
                 // (M4OSA_Void*)M4xVSS_kVideoEffectType_Sepia;
                 /**< we don't use any function context */
@@ -2578,8 +2607,13 @@ M4OSA_ERR M4xVSS_internalGenerateEditedFile(M4OSA_Context pContext)
             if (M4xVSS_kVideoEffectType_Negative ==
              xVSS_context->pCurrentEditSettings->Effects[j].VideoEffectType)
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
                 xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
-                 M4VSS3GPP_externalVideoEffectColor;
+                    M4VSS3GPP_externalVideoEffectColor_NV12;
+#else
+                xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
+                    M4VSS3GPP_externalVideoEffectColor;
+#endif
                 //xVSS_context->pSettings->Effects[j].pExtVideoEffectFctCtxt =
                 // (M4OSA_Void*)M4xVSS_kVideoEffectType_Negative;
                  /**< we don't use any function context */
@@ -2591,8 +2625,13 @@ M4OSA_ERR M4xVSS_internalGenerateEditedFile(M4OSA_Context pContext)
             if (M4xVSS_kVideoEffectType_Framing ==
              xVSS_context->pCurrentEditSettings->Effects[j].VideoEffectType)
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
                 xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
-                 M4VSS3GPP_externalVideoEffectFraming;
+                    M4VSS3GPP_externalVideoEffectFraming_NV12;
+#else
+                xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
+                    M4VSS3GPP_externalVideoEffectFraming;
+#endif
                 /**
                  * We do not need to set the framing context, it is already set during
                  sendCommand function */
@@ -2630,8 +2669,13 @@ M4OSA_ERR M4xVSS_internalGenerateEditedFile(M4OSA_Context pContext)
             if (M4xVSS_kVideoEffectType_Gradient ==
              xVSS_context->pCurrentEditSettings->Effects[j].VideoEffectType)
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
                 xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
-                 M4VSS3GPP_externalVideoEffectColor;
+                    M4VSS3GPP_externalVideoEffectColor_NV12;
+#else
+                xVSS_context->pCurrentEditSettings->Effects[j].ExtVideoEffectFct =
+                    M4VSS3GPP_externalVideoEffectColor;
+#endif
                 //xVSS_context->pSettings->Effects[j].pExtVideoEffectFctCtxt =
                 // (M4OSA_Void*)M4xVSS_kVideoEffectType_ColorRGB16;
                 /**< we don't use any function context */
@@ -3298,12 +3342,14 @@ M4OSA_ERR M4xVSS_freeSettings(M4VSS3GPP_EditSettings* pSettings)
                             free(framingCtx->aFramingCtx->\
                                 FramingYuv[0].pac_data);
                             framingCtx->aFramingCtx->FramingYuv[0].pac_data = M4OSA_NULL;
-                           free(framingCtx->aFramingCtx->\
+                            free(framingCtx->aFramingCtx->\
                                 FramingYuv[1].pac_data);
                             framingCtx->aFramingCtx->FramingYuv[1].pac_data = M4OSA_NULL;
-                           free(framingCtx->aFramingCtx->\
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
+                            free(framingCtx->aFramingCtx->\
                                 FramingYuv[2].pac_data);
                             framingCtx->aFramingCtx->FramingYuv[2].pac_data = M4OSA_NULL;
+#endif
                             free(framingCtx->aFramingCtx->FramingYuv);
                             framingCtx->aFramingCtx->FramingYuv = M4OSA_NULL;
                         }

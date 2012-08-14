@@ -46,7 +46,11 @@ typedef enum
 {
     M4AIR_kYUV420P,
     M4AIR_kYUV420AP,
-    M4AIR_kJPG
+    M4AIR_kJPG,
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    M4AIR_kNV12P,
+    M4AIR_kNV12AP,
+#endif
 }M4AIR_InputFormatType ;
 
 
