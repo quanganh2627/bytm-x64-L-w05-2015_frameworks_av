@@ -93,6 +93,7 @@ FACTORY_CREATE_ENCODER_DECL(CIPAMRNBEncoder)
 FACTORY_CREATE_DECL(CIPAMRWBDecoder)
 FACTORY_CREATE_ENCODER_DECL(CIPAMRWBEncoder)
 FACTORY_CREATE_DECL(CIPVorbisDecoder)
+FACTORY_CREATE_DECL(CIPWMADecoder)
 #endif
 
 #define FACTORY_REF(name) { #name, Make##name },
@@ -148,6 +149,7 @@ static sp<MediaSource> InstantiateSoftwareCodec(
         FACTORY_REF(CIPAMRNBDecoder)
         FACTORY_REF(CIPAMRWBDecoder)
         FACTORY_REF(CIPVorbisDecoder)
+        FACTORY_REF(CIPWMADecoder)
     };
     for (size_t i = 0;
          i < sizeof(kFactoryInfo) / sizeof(kFactoryInfo[0]); ++i) {
