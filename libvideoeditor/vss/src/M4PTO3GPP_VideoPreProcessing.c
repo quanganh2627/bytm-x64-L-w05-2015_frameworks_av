@@ -64,6 +64,13 @@ M4OSA_ERR M4PTO3GPP_applyVPP(M4VPP_Context pContext, M4VIFI_ImagePlane* pPlaneIn
     M4OSA_ERR    err;
     M4OSA_Double mtDuration;
     M4OSA_UInt32 i;
+    M4OSA_UInt32 planenum;
+
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    planenum = 2;
+#else
+    planenum = 3;
+#endif
 
     /*** NOTE ***/
     /* It's OK to get pPlaneIn == M4OSA_NULL here                        */
@@ -117,7 +124,7 @@ M4OSA_ERR M4PTO3GPP_applyVPP(M4VPP_Context pContext, M4VIFI_ImagePlane* pPlaneIn
 
         /** Copy the last YUV plane into the current one
          * (the last pic is splited due to the callback extra-call... */
-        for (i=0; i<3; i++)
+        for (i=0; i<planenum; i++)
         {
             memcpy((void *)pPlaneOut[i].pac_data,
                  (void *)pC->pSavedPlane[i].pac_data,

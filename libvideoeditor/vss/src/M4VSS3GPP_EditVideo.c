@@ -57,6 +57,9 @@
 #define U_PLANE_BORDER_VALUE    0x80
 #define V_PLANE_BORDER_VALUE    0x80
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+#include "EditVideo_NV12.h"
+#endif
 /************************************************************************/
 /* Static local functions                                               */
 /************************************************************************/
@@ -427,8 +430,11 @@ M4OSA_ERR M4VSS3GPP_intEditStepVideo( M4VSS3GPP_InternalEditContext *pC )
                      M4VIDEOEDITING_kFileType_ARGB8888) &&
                 (M4OSA_FALSE ==
                     pC->pC1->pSettings->ClipProperties.bSetImageData)) {
-
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                err = M4VSS3GPP_intSetNv12PlaneFromARGB888(pC, pC->pC1);
+#else
                 err = M4VSS3GPP_intSetYuv420PlaneFromARGB888(pC, pC->pC1);
+#endif
                 if( M4NO_ERROR != err ) {
                     M4OSA_TRACE1_1(
                         "M4VSS3GPP_intEditStepVideo: DECODE_ENCODE:\
@@ -554,8 +560,11 @@ M4OSA_ERR M4VSS3GPP_intEditStepVideo( M4VSS3GPP_InternalEditContext *pC )
                           M4VIDEOEDITING_kFileType_ARGB8888) &&
                         (M4OSA_FALSE ==
                          pC->pC1->pSettings->ClipProperties.bSetImageData)) {
-
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                        err = M4VSS3GPP_intSetNv12PlaneFromARGB888(pC, pC->pC1);
+#else
                         err = M4VSS3GPP_intSetYuv420PlaneFromARGB888(pC, pC->pC1);
+#endif
                         if( M4NO_ERROR != err ) {
                             M4OSA_TRACE1_1(
                                 "M4VSS3GPP_intEditStepVideo: TRANSITION:\
@@ -593,8 +602,11 @@ M4OSA_ERR M4VSS3GPP_intEditStepVideo( M4VSS3GPP_InternalEditContext *pC )
                           M4VIDEOEDITING_kFileType_ARGB8888) &&
                         (M4OSA_FALSE ==
                           pC->pC2->pSettings->ClipProperties.bSetImageData)) {
-
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                        err = M4VSS3GPP_intSetNv12PlaneFromARGB888(pC, pC->pC2);
+#else
                         err = M4VSS3GPP_intSetYuv420PlaneFromARGB888(pC, pC->pC2);
+#endif
                         if( M4NO_ERROR != err ) {
                             M4OSA_TRACE1_1(
                                 "M4VSS3GPP_intEditStepVideo: TRANSITION:\
@@ -1097,9 +1109,10 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
             pPlaneOut[0].u_stride * pPlaneOut[0].u_height);
         memset((void *)pPlaneOut[1].pac_data,0,
             pPlaneOut[1].u_stride * pPlaneOut[1].u_height);
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
         memset((void *)pPlaneOut[2].pac_data,0,
             pPlaneOut[2].u_stride * pPlaneOut[2].u_height);
-
+#endif
         M4OSA_TRACE3_0("M4VSS3GPP_intVPP: returning M4NO_ERROR (abort)");
         return M4NO_ERROR;
     }
@@ -1206,9 +1219,11 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
                 memcpy((void *)pTmp[1].pac_data,
                     (void *)pC->pC1->lastDecodedPlane[1].pac_data,
                     (pTmp[1].u_height * pTmp[1].u_width));
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
                 memcpy((void *)pTmp[2].pac_data,
                     (void *)pC->pC1->lastDecodedPlane[2].pac_data,
                     (pTmp[2].u_height * pTmp[2].u_width));
+#endif
             } else {
                 err = M4VSS3GPP_ERR_NO_VALID_VID_FRAME;
                 M4OSA_TRACE1_3("Can not find an input frame. Set error 0x%x in %s (%d)",
@@ -1252,9 +1267,11 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
                 memcpy((void *)pTmp[1].pac_data,
                     (void *)pC->pC2->lastDecodedPlane[1].pac_data,
                     (pTmp[1].u_height * pTmp[1].u_width));
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
                 memcpy((void *)pTmp[2].pac_data,
                     (void *)pC->pC2->lastDecodedPlane[2].pac_data,
                     (pTmp[2].u_height * pTmp[2].u_width));
+#endif
             } else {
                 err = M4VSS3GPP_ERR_NO_VALID_VID_FRAME;
                 M4OSA_TRACE1_3("Can not find an input frame. Set error 0x%x in %s (%d)",
@@ -1279,7 +1296,11 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
             return  M4NO_ERROR; /**< Return no error to the encoder core
                                 (else it may leak in some situations...) */
         }
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+        for (i=0; i < 2; i++)
+#else
         for (i=0; i < 3; i++)
+#endif
         {
             if(pTempPlaneClip2[i].pac_data != M4OSA_NULL) {
                 free(pTempPlaneClip2[i].pac_data);
@@ -1357,8 +1378,13 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
                         // Save width and height of un-rotated frame
                         yuvFrameWidth = pC->pC1->m_pPreResizeFrame[0].u_width;
                         yuvFrameHeight = pC->pC1->m_pPreResizeFrame[0].u_height;
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                        err = M4VSS3GPP_intRotateVideo_NV12(pC->pC1->m_pPreResizeFrame,
+                                pC->pC1->pSettings->ClipProperties.videoRotationDegrees);
+#else
                         err = M4VSS3GPP_intRotateVideo(pC->pC1->m_pPreResizeFrame,
                                 pC->pC1->pSettings->ClipProperties.videoRotationDegrees);
+#endif
                         if (M4NO_ERROR != err) {
                             M4OSA_TRACE1_1("M4VSS3GPP_intVPP: \
                                 rotateVideo() returns error 0x%x", err);
@@ -1418,10 +1444,15 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
                 if ((pC->pC1->bGetYuvDataFromDecoder == M4OSA_TRUE) ||
                     (pC->pC1->pSettings->FileType !=
                         M4VIDEOEDITING_kFileType_ARGB8888)) {
-
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                    err = M4VSS3GPP_intApplyRenderingMode_NV12(pC,
+                              pC->pC1->pSettings->xVSS.MediaRendering,
+                              pDecoderRenderFrame, pTmp);
+#else
                     err = M4VSS3GPP_intApplyRenderingMode(pC,
                               pC->pC1->pSettings->xVSS.MediaRendering,
                               pDecoderRenderFrame, pTmp);
+#endif
                     if (M4NO_ERROR != err) {
                         M4OSA_TRACE1_1("M4VSS3GPP_intVPP: \
                             M4VSS3GPP_intApplyRenderingMode) error 0x%x ", err);
@@ -1529,10 +1560,12 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
                         (pC->pC1->m_pPreResizeFrame[1].u_height * \
                          pC->pC1->m_pPreResizeFrame[1].u_width));
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
                     memcpy((void *)pC->pC1->m_pPreResizeFrame[2].pac_data,
                         (void *)pC->pC1->lastDecodedPlane[2].pac_data,
                         (pC->pC1->m_pPreResizeFrame[2].u_height * \
                          pC->pC1->m_pPreResizeFrame[2].u_width));
+#endif
                 } else {
                     err = M4VSS3GPP_ERR_NO_VALID_VID_FRAME;
                     M4OSA_TRACE1_3("Can not find an input frame. Set error 0x%x in %s (%d)",
@@ -1581,9 +1614,15 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
                     pTmp = pPlaneOut;
                 }
                 /* Do rendering mode */
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                err = M4VSS3GPP_intApplyRenderingMode_NV12(pC,
+                          pC->pC1->pSettings->xVSS.MediaRendering,
+                          pDecoderRenderFrame, pTmp);
+#else
                 err = M4VSS3GPP_intApplyRenderingMode(pC,
                           pC->pC1->pSettings->xVSS.MediaRendering,
                           pDecoderRenderFrame, pTmp);
+#endif
                 if (M4NO_ERROR != err) {
                     pC->ewc.VppError = err;
                     return M4NO_ERROR;
@@ -1621,9 +1660,11 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
                         (void *)pC->pC1->lastDecodedPlane[1].pac_data,
                         (pLastDecodedFrame[1].u_height * pLastDecodedFrame[1].u_width));
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
                     memcpy((void *)pLastDecodedFrame[2].pac_data,
                         (void *)pC->pC1->lastDecodedPlane[2].pac_data,
                         (pLastDecodedFrame[2].u_height * pLastDecodedFrame[2].u_width));
+#endif
                 } else {
                     err = M4VSS3GPP_ERR_NO_VALID_VID_FRAME;
                     M4OSA_TRACE1_3("Can not find an input frame. Set error 0x%x in %s (%d)",
@@ -1652,13 +1693,18 @@ M4OSA_ERR M4VSS3GPP_intVPP( M4VPP_Context pContext, M4VIFI_ImagePlane *pPlaneIn,
 
         M4OSA_TRACE3_1("M4VSS3GPP_intVPP: Rendered at CTS %.3f", ts);
 
-        for (i=0; i<3; i++) {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+        M4OSA_UInt32 planenum = 2;
+#else
+        M4OSA_UInt32 planenum = 3;
+#endif
+        for (i=0; i<planenum; i++) {
             if (pTemp1[i].pac_data != M4OSA_NULL) {
                 free(pTemp1[i].pac_data);
                 pTemp1[i].pac_data = M4OSA_NULL;
             }
         }
-        for (i=0; i<3; i++) {
+        for (i=0; i<planenum; i++) {
             if (pTemp2[i].pac_data != M4OSA_NULL) {
                 free(pTemp2[i].pac_data);
                 pTemp2[i].pac_data = M4OSA_NULL;
@@ -1886,9 +1932,15 @@ M4VSS3GPP_intApplyVideoEffect (M4VSS3GPP_InternalEditContext *pC,
 
                 /**
                 * Apply the darkening effect */
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                err =
+                    M4VFL_modifyLumaWithScale_NV12((M4ViComImagePlane *)pPlaneTempIn,
+                    (M4ViComImagePlane *)pPlaneTempOut, tmp, M4OSA_NULL);
+#else
                 err =
                     M4VFL_modifyLumaWithScale((M4ViComImagePlane *)pPlaneTempIn,
                     (M4ViComImagePlane *)pPlaneTempOut, tmp, M4OSA_NULL);
+#endif
 
                 if( M4NO_ERROR != err )
                 {
@@ -1908,9 +1960,15 @@ M4VSS3GPP_intApplyVideoEffect (M4VSS3GPP_InternalEditContext *pC,
 
                 /**
                 * Apply the darkening effect */
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                err =
+                    M4VFL_modifyLumaWithScale_NV12((M4ViComImagePlane *)pPlaneTempIn,
+                    (M4ViComImagePlane *)pPlaneTempOut, tmp, M4OSA_NULL);
+#else
                 err =
                     M4VFL_modifyLumaWithScale((M4ViComImagePlane *)pPlaneTempIn,
                     (M4ViComImagePlane *)pPlaneTempOut, tmp, M4OSA_NULL);
+#endif
 
                 if( M4NO_ERROR != err )
                 {
@@ -1956,9 +2014,10 @@ M4VSS3GPP_intApplyVideoEffect (M4VSS3GPP_InternalEditContext *pC,
                             pPlaneTempIn[0].u_height * pPlaneTempIn[0].u_width);
                         memcpy(pPlaneTempOut[1].pac_data, pPlaneTempIn[1].pac_data,
                             pPlaneTempIn[1].u_height * pPlaneTempIn[1].u_width);
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
                         memcpy(pPlaneTempOut[2].pac_data, pPlaneTempIn[2].pac_data,
                             pPlaneTempIn[2].u_height * pPlaneTempIn[2].u_width);
-
+#endif
                     } else {
                         err = pFx->ExtVideoEffectFct(pFx->pExtVideoEffectFctCtxt,
                             pPlaneTempIn, pPlaneTempOut, &extProgress,
@@ -1998,8 +2057,12 @@ M4VSS3GPP_intApplyVideoEffect (M4VSS3GPP_InternalEditContext *pC,
             pPlaneTempOut = pTempYuvPlane;
         }
     }
-
-    for(i=0; i<3; i++) {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    M4OSA_UInt8 planenum = 2;
+#else
+    M4OSA_UInt8 planenum = 3;
+#endif
+    for(i=0; i<planenum; i++) {
         if(pTempYuvPlane[i].pac_data != M4OSA_NULL) {
             free(pTempYuvPlane[i].pac_data);
             pTempYuvPlane[i].pac_data = M4OSA_NULL;
@@ -2112,10 +2175,17 @@ M4VSS3GPP_intVideoTransition( M4VSS3GPP_InternalEditContext *pC,
         case M4VSS3GPP_kVideoTransitionType_CrossFade:
             /**
             * Apply the transition effect */
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            err = M4VIFI_ImageBlendingonNV12(M4OSA_NULL,
+                (M4ViComImagePlane *)pC->yuv1,
+                (M4ViComImagePlane *)pC->yuv2,
+                (M4ViComImagePlane *)pPlaneOut, iProgress);
+#else
             err = M4VIFI_ImageBlendingonYUV420(M4OSA_NULL,
                 (M4ViComImagePlane *)pC->yuv1,
                 (M4ViComImagePlane *)pC->yuv2,
                 (M4ViComImagePlane *)pPlaneOut, iProgress);
+#endif
 
             if( M4NO_ERROR != err )
             {
@@ -2142,8 +2212,11 @@ M4VSS3GPP_intVideoTransition( M4VSS3GPP_InternalEditContext *pC,
             }
             /**
             * Copy the input YUV frames */
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            i = 2;
+#else
             i = 3;
-
+#endif
             while( i-- > 0 )
             {
                 memcpy((void *)pPlaneOut[i].pac_data,
@@ -2918,8 +2991,11 @@ static M4OSA_ERR M4VSS3GPP_intAllocateYUV420( M4VIFI_ImagePlane *pPlanes,
             returning M4ERR_ALLOC");
         return M4ERR_ALLOC;
     }
-
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    pPlanes[1].u_width = pPlanes[0].u_width;
+#else
     pPlanes[1].u_width = pPlanes[0].u_width >> 1;
+#endif
     pPlanes[1].u_height = pPlanes[0].u_height >> 1;
     pPlanes[1].u_stride = pPlanes[1].u_width;
     pPlanes[1].u_topleft = 0;
@@ -2940,6 +3016,7 @@ static M4OSA_ERR M4VSS3GPP_intAllocateYUV420( M4VIFI_ImagePlane *pPlanes,
         return M4ERR_ALLOC;
     }
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
     pPlanes[2].u_width = pPlanes[1].u_width;
     pPlanes[2].u_height = pPlanes[1].u_height;
     pPlanes[2].u_stride = pPlanes[2].u_width;
@@ -2962,10 +3039,13 @@ static M4OSA_ERR M4VSS3GPP_intAllocateYUV420( M4VIFI_ImagePlane *pPlanes,
         pPlanes[1].pac_data = M4OSA_NULL;
         return M4ERR_ALLOC;
     }
+#endif
 
     memset((void *)pPlanes[0].pac_data, 0, pPlanes[0].u_stride*pPlanes[0].u_height);
     memset((void *)pPlanes[1].pac_data, 0, pPlanes[1].u_stride*pPlanes[1].u_height);
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
     memset((void *)pPlanes[2].pac_data, 0, pPlanes[2].u_stride*pPlanes[2].u_height);
+#endif
     /**
     *    Return */
     M4OSA_TRACE3_0("M4VSS3GPP_intAllocateYUV420: returning M4NO_ERROR");
@@ -3554,6 +3634,12 @@ M4OSA_ERR M4VSS3GPP_intRenderFrameWithEffect(M4VSS3GPP_InternalEditContext *pC,
     M4OSA_UInt8 i = 0;
     M4OSA_Bool bSkipFramingEffect = M4OSA_FALSE;
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    M4OSA_UInt8 planenum = 2;
+#else
+    M4OSA_UInt8 planenum = 3;
+#endif
+
     memset((void *)pTemp, 0, 3*sizeof(M4VIFI_ImagePlane));
     /* Resize or rotate case */
     if (M4OSA_NULL != pClipCtxt->m_pPreResizeFrame) {
@@ -3610,8 +3696,13 @@ M4OSA_ERR M4VSS3GPP_intRenderFrameWithEffect(M4VSS3GPP_InternalEditContext *pC,
                 // Save width and height of un-rotated frame
                 yuvFrameWidth = pClipCtxt->m_pPreResizeFrame[0].u_width;
                 yuvFrameHeight = pClipCtxt->m_pPreResizeFrame[0].u_height;
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                err = M4VSS3GPP_intRotateVideo_NV12(pClipCtxt->m_pPreResizeFrame,
+                    pClipCtxt->pSettings->ClipProperties.videoRotationDegrees);
+#else
                 err = M4VSS3GPP_intRotateVideo(pClipCtxt->m_pPreResizeFrame,
                     pClipCtxt->pSettings->ClipProperties.videoRotationDegrees);
+#endif
                 if (M4NO_ERROR != err) {
                     M4OSA_TRACE1_1("M4VSS3GPP_intRenderFrameWithEffect: \
                         rotateVideo() returns error 0x%x", err);
@@ -3667,9 +3758,15 @@ M4OSA_ERR M4VSS3GPP_intRenderFrameWithEffect(M4VSS3GPP_InternalEditContext *pC,
                 } else {
                     pTmp = pC->yuv1;
                 }
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                err = M4VSS3GPP_intApplyRenderingMode_NV12 (pC,
+                        pClipCtxt->pSettings->xVSS.MediaRendering,
+                        pDecoderRenderFrame,pTmp);
+#else
                 err = M4VSS3GPP_intApplyRenderingMode (pC,
                         pClipCtxt->pSettings->xVSS.MediaRendering,
                         pDecoderRenderFrame,pTmp);
+#endif
             } else {
                 if (pC->bClip2ActiveFramingEffect == M4OSA_TRUE) {
                     err = M4VSS3GPP_intAllocateYUV420(pTemp,
@@ -3684,14 +3781,20 @@ M4OSA_ERR M4VSS3GPP_intRenderFrameWithEffect(M4VSS3GPP_InternalEditContext *pC,
                 } else {
                     pTmp = pC->yuv2;
                 }
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                err = M4VSS3GPP_intApplyRenderingMode_NV12 (pC,
+                        pClipCtxt->pSettings->xVSS.MediaRendering,
+                        pDecoderRenderFrame,pTmp);
+#else
                 err = M4VSS3GPP_intApplyRenderingMode (pC,
                         pClipCtxt->pSettings->xVSS.MediaRendering,
                         pDecoderRenderFrame,pTmp);
+#endif
             }
             if (M4NO_ERROR != err) {
                 M4OSA_TRACE1_1("M4VSS3GPP_intRenderFrameWithEffect: \
                     M4VSS3GPP_intApplyRenderingMode error 0x%x ", err);
-                for (i=0; i<3; i++) {
+                for (i=0; i<planenum; i++) {
                     if (pTemp[i].pac_data != M4OSA_NULL) {
                         free(pTemp[i].pac_data);
                         pTemp[i].pac_data = M4OSA_NULL;
@@ -3717,7 +3820,7 @@ M4OSA_ERR M4VSS3GPP_intRenderFrameWithEffect(M4VSS3GPP_InternalEditContext *pC,
                 M4OSA_TRACE1_1("M4VSS3GPP_intVPP: \
                     M4VSS3GPP_intApplyVideoOverlay) error 0x%x ", err);
                 pC->ewc.VppError = err;
-                for (i=0; i<3; i++) {
+                for (i=0; i<planenum; i++) {
                     if (pTemp[i].pac_data != M4OSA_NULL) {
                         free(pTemp[i].pac_data);
                         pTemp[i].pac_data = M4OSA_NULL;
@@ -3729,7 +3832,7 @@ M4OSA_ERR M4VSS3GPP_intRenderFrameWithEffect(M4VSS3GPP_InternalEditContext *pC,
             pClipCtxt->lastDecodedPlane = pClipCtxt->pPlaneYuvWithEffect;
         }
         // free the temp buffer
-        for (i=0; i<3; i++) {
+        for (i=0; i<planenum; i++) {
             if (pTemp[i].pac_data != M4OSA_NULL) {
                 free(pTemp[i].pac_data);
                 pTemp[i].pac_data = M4OSA_NULL;
@@ -3943,13 +4046,19 @@ M4OSA_ERR M4VSS3GPP_intSetYUV420Plane(M4VIFI_ImagePlane* planeIn,
     planeIn[0].u_height = height;
     planeIn[0].u_stride = planeIn[0].u_width;
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    planeIn[1].u_width = width;
+#else
     planeIn[1].u_width = width/2;
+#endif
     planeIn[1].u_height = height/2;
     planeIn[1].u_stride = planeIn[1].u_width;
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
     planeIn[2].u_width = width/2;
     planeIn[2].u_height = height/2;
     planeIn[2].u_stride = planeIn[1].u_width;
+#endif
 
     return err;
 }

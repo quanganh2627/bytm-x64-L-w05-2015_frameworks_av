@@ -54,5 +54,16 @@ LOCAL_LDLIBS := \
 LOCAL_CFLAGS += -Wno-multichar \
     -DM4MCS_WITH_FAST_OPEN
 
+ifeq ($(USE_VIDEOEDITOR_INTEL_NV12_VERSION),true)
+LOCAL_STATIC_LIBRARIES += \
+    liblvpp_intel \
+    libvss_intel \
+
+LOCAL_CFLAGS += -DVIDEOEDITOR_INTEL_NV12_VERSION
+
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/videoeditornv12
+endif
+
+
 include $(BUILD_STATIC_LIBRARY)
 

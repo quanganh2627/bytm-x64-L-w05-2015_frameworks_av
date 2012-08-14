@@ -1602,13 +1602,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv1[1].pac_data);
         pC->yuv1[1].pac_data = M4OSA_NULL;
     }
-
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
     if( M4OSA_NULL != pC->yuv1[2].pac_data )
     {
         free(pC->yuv1[2].pac_data);
         pC->yuv1[2].pac_data = M4OSA_NULL;
     }
-
+#endif
     if( M4OSA_NULL != pC->yuv2[0].pac_data )
     {
         free(pC->yuv2[0].pac_data);
@@ -1620,13 +1620,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv2[1].pac_data);
         pC->yuv2[1].pac_data = M4OSA_NULL;
     }
-
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
     if( M4OSA_NULL != pC->yuv2[2].pac_data )
     {
         free(pC->yuv2[2].pac_data);
         pC->yuv2[2].pac_data = M4OSA_NULL;
     }
-
+#endif
     /* RC */
     if( M4OSA_NULL != pC->yuv3[0].pac_data )
     {
@@ -1639,13 +1639,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv3[1].pac_data);
         pC->yuv3[1].pac_data = M4OSA_NULL;
     }
-
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
     if( M4OSA_NULL != pC->yuv3[2].pac_data )
     {
         free(pC->yuv3[2].pac_data);
         pC->yuv3[2].pac_data = M4OSA_NULL;
     }
-
+#endif
     /* RC */
     if( M4OSA_NULL != pC->yuv4[0].pac_data )
     {
@@ -1658,13 +1658,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv4[1].pac_data);
         pC->yuv4[1].pac_data = M4OSA_NULL;
     }
-
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
     if( M4OSA_NULL != pC->yuv4[2].pac_data )
     {
         free(pC->yuv4[2].pac_data);
         pC->yuv4[2].pac_data = M4OSA_NULL;
     }
-
+#endif
     /**
     * RC Free effects list */
     if( pC->pEffectsList != M4OSA_NULL )
@@ -2860,10 +2860,12 @@ static M4OSA_ERR M4VSS3GPP_intSwitchToNextClip(
                 free(pC->pC1->m_pPreResizeFrame[1].pac_data);
                 pC->pC1->m_pPreResizeFrame[1].pac_data = M4OSA_NULL;
             }
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
             if (M4OSA_NULL != pC->pC1->m_pPreResizeFrame[2].pac_data) {
                 free(pC->pC1->m_pPreResizeFrame[2].pac_data);
                 pC->pC1->m_pPreResizeFrame[2].pac_data = M4OSA_NULL;
             }
+#endif
             free(pC->pC1->m_pPreResizeFrame);
             pC->pC1->m_pPreResizeFrame = M4OSA_NULL;
         }
@@ -3304,8 +3306,13 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                 /**
                 * Allocate the U plane */
                 pClip->m_pPreResizeFrame[1].u_topleft = 0;
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                pClip->m_pPreResizeFrame[1].u_width  =
+                    pClip->m_pPreResizeFrame[0].u_width;
+#else
                 pClip->m_pPreResizeFrame[1].u_width  =
                     pClip->m_pPreResizeFrame[0].u_width >> 1;
+#endif
                 pClip->m_pPreResizeFrame[1].u_height =
                     pClip->m_pPreResizeFrame[0].u_height >> 1;
                 pClip->m_pPreResizeFrame[1].u_stride =
@@ -3322,7 +3329,7 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                     free(pClip->m_pPreResizeFrame);
                     return M4ERR_ALLOC;
                 }
-
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
                 /**
                 * Allocate the V plane */
                 pClip->m_pPreResizeFrame[2].u_topleft = 0;
@@ -3345,6 +3352,7 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                     free(pClip->m_pPreResizeFrame);
                     return M4ERR_ALLOC;
                 }
+#endif
             }
         }
 
