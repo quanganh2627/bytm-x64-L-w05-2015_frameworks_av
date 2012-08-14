@@ -78,6 +78,11 @@ FILE *file_pcm_encoder = NULL;
 #define M4MCS_VERSION_MINOR 4
 #define M4MCS_VERSION_REVISION  3
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+#include "VideoEditorToolsNV12.h"
+#include "M4MCS_NV12.h"
+#endif
+
 /**
  ********************************************************************
  * Static local functions
@@ -3368,11 +3373,13 @@ M4OSA_ERR M4MCS_cleanUp( M4MCS_Context pContext )
             pC->pPreResizeFrame[1].pac_data = M4OSA_NULL;
         }
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
         if( M4OSA_NULL != pC->pPreResizeFrame[2].pac_data )
         {
             free(pC->pPreResizeFrame[2].pac_data);
             pC->pPreResizeFrame[2].pac_data = M4OSA_NULL;
         }
+#endif
         free(pC->pPreResizeFrame);
         pC->pPreResizeFrame = M4OSA_NULL;
     }
@@ -5667,8 +5674,13 @@ static M4OSA_ERR M4MCS_intPrepareVideoDecoder( M4MCS_InternalContext *pC )
 
         if( M4VIDEOEDITING_kH264 == pC->InputFileProperties.VideoStreamType )
         {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            FilterOption.m_pFilterFunction =
+                (M4OSA_Void *) &M4VIFI_ResizeBilinearNV12toNV12;
+#else
             FilterOption.m_pFilterFunction =
                 (M4OSA_Void *) &M4VIFI_ResizeBilinearYUV420toYUV420;
+#endif
             FilterOption.m_pFilterUserData = M4OSA_NULL;
             err = pC->m_pVideoDecoder->m_pFctSetOption(pC->pViDecCtxt,
                 M4DECODER_kOptionID_OutputFilter,
@@ -5886,10 +5898,17 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
 
     /**
     * Create video encoder */
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    err = pC->pVideoEncoderGlobalFcts->pFctInit(&pC->pViEncCtxt,
+        pC->pWriterDataFcts, \
+        M4MCS_intApplyVPP_NV12, pC, pC->pCurrentVideoEncoderExternalAPI, \
+        pC->pCurrentVideoEncoderUserData);
+#else
     err = pC->pVideoEncoderGlobalFcts->pFctInit(&pC->pViEncCtxt,
         pC->pWriterDataFcts, \
         M4MCS_intApplyVPP, pC, pC->pCurrentVideoEncoderExternalAPI, \
         pC->pCurrentVideoEncoderUserData);
+#endif
 
     /**< We put the MCS context in place of the VPP context */
     if( M4NO_ERROR != err )
@@ -6008,8 +6027,12 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
         /**
         * Allocate the U plane */
         pC->pPreResizeFrame[1].u_topleft = 0;
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+        pC->pPreResizeFrame[1].u_width = pC->pPreResizeFrame[0].u_width;
+#else
         pC->pPreResizeFrame[1].u_width = pC->pPreResizeFrame[0].u_width
             >> 1; /**< U width is half the Y width */
+#endif
         pC->pPreResizeFrame[1].u_height = pC->pPreResizeFrame[0].u_height
             >> 1; /**< U height is half the Y height */
         pC->pPreResizeFrame[1].u_stride = pC->
@@ -6028,6 +6051,7 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
             return M4ERR_ALLOC;
         }
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
         /**
         * Allocate the V plane */
         pC->pPreResizeFrame[2].u_topleft = 0;
@@ -6050,6 +6074,7 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
                  unable to allocate m_pPreResizeFrame[2].pac_data, returning M4ERR_ALLOC");
             return M4ERR_ALLOC;
         }
+#endif
     }
 
     /**
