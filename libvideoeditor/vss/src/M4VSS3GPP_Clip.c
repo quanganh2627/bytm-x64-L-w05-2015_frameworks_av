@@ -52,6 +52,10 @@
 /* Osal header fileno */
 #include "M4OSA_CharStar.h"
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+#include "VideoEditorToolsNV12.h"
+#endif
+
 /**
  ******************************************************************************
  * define    Static function prototypes
@@ -649,8 +653,13 @@ M4OSA_ERR M4VSS3GPP_intClipOpen( M4VSS3GPP_ClipContext *pClipCtxt,
             if( M4DA_StreamTypeVideoMpeg4Avc
                 == pClipCtxt->pVideoStream->m_basicProperties.m_streamType )
             {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                FilterOption.m_pFilterFunction =
+                    (M4OSA_Void *) &M4VIFI_ResizeBilinearNV12toNV12;
+#else
                 FilterOption.m_pFilterFunction =
                     (M4OSA_Void *) &M4VIFI_ResizeBilinearYUV420toYUV420;
+#endif
                 FilterOption.m_pFilterUserData = M4OSA_NULL;
                 err = pClipCtxt->ShellAPI.m_pVideoDecoder->m_pFctSetOption(
                     pClipCtxt->pViDecCtxt, M4DECODER_kOptionID_OutputFilter,
