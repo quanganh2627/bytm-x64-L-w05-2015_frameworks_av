@@ -174,6 +174,8 @@ LOCAL_STATIC_LIBRARIES += \
         libmc_vorbis_dec \
         libmc_codec_common \
         libmc_core \
+        lib_stagefright_mdp_wmadec \
+        libmc_wma_dec \
 
 
 LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
