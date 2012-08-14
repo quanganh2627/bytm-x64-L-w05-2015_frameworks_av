@@ -115,15 +115,11 @@ MtpServer::~MtpServer() {
 }
 
 void MtpServer::addStorage(MtpStorage* storage) {
-    Mutex::Autolock autoLock(mMutex);
-
     mStorages.push(storage);
     sendStoreAdded(storage->getStorageID());
 }
 
 void MtpServer::removeStorage(MtpStorage* storage) {
-    Mutex::Autolock autoLock(mMutex);
-
     for (int i = 0; i < mStorages.size(); i++) {
         if (mStorages[i] == storage) {
             mStorages.removeAt(i);
