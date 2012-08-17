@@ -3105,7 +3105,7 @@ bool OMXCodec::drainInputBuffer(BufferInfo *info) {
 
     size_t offset = 0;
     int32_t n = 0;
-
+    int32_t isSync = 0, isFakeSync = 0;
 
     for (;;) {
         MediaBuffer *srcBuffer;
@@ -3210,6 +3210,8 @@ bool OMXCodec::drainInputBuffer(BufferInfo *info) {
         }
 
         offset += srcBuffer->range_length();
+        srcBuffer->meta_data()->findInt32(kKeyIsSyncFrame, &isSync);
+        srcBuffer->meta_data()->findInt32(kKeyIsFakeSync, &isFakeSync);
 
         if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_VORBIS, mMIME)) {
             CHECK(!(mQuirks & kSupportsMultipleFramesPerInputBuffer));
@@ -3257,6 +3259,10 @@ bool OMXCodec::drainInputBuffer(BufferInfo *info) {
         flags |= OMX_BUFFERFLAG_EOS;
     } else {
         mNoMoreOutputData = false;
+    }
+
+    if (isSync == 1 && !isFakeSync) {
+        flags |= OMX_BUFFERFLAG_SYNCFRAME;
     }
 
     if (info == NULL) {
