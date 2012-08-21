@@ -317,6 +317,11 @@ NativeWindowRenderer::~NativeWindowRenderer() {
 void NativeWindowRenderer::render(RenderInput* input) {
     sp<GLConsumer> ST = input->mST;
     sp<Surface> STC = input->mSTC;
+    int err;
+    err = native_window_set_buffers_transform(STC.get(), input->mTransform);
+    if (err != 0) {
+        LOGE("native_window_set_buffers_transform failed!");
+    }
 
     if (input->mIsExternalBuffer) {
         queueExternalBuffer(STC.get(), input->mBuffer,
@@ -602,6 +607,14 @@ void RenderInput::updateVideoSize(sp<MetaData> meta) {
         int tmp = mWidth;
         mWidth = mHeight;
         mHeight = tmp;
+    }
+
+    switch (rotationDegrees) {
+        case 0: mTransform= 0; break;
+        case 90: mTransform = HAL_TRANSFORM_ROT_90; break;
+        case 180: mTransform = HAL_TRANSFORM_ROT_180; break;
+        case 270: mTransform = HAL_TRANSFORM_ROT_270; break;
+        default: mTransform = 0; break;
     }
 }
 
