@@ -274,6 +274,7 @@ private:
             int32_t aacProfile, bool isADTS);
 
     void setG711Format(int32_t numChannels);
+    status_t setALACFormat( void *pConfig );
 
     status_t setVideoPortFormatType(
             OMX_U32 portIndex,
