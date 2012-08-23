@@ -19,6 +19,7 @@
 #include <utils/Log.h>
 
 #include "include/MPEG4Extractor.h"
+#include "include/ALACDecoder.h"
 #include "include/SampleTable.h"
 #include "include/ESDS.h"
 
@@ -302,6 +303,9 @@ static const char *FourCC2MIME(uint32_t fourcc) {
 
         case FOURCC('s', 'a', 'w', 'b'):
             return MEDIA_MIMETYPE_AUDIO_AMR_WB;
+
+        case FOURCC('a', 'l', 'a', 'c'):
+            return MEDIA_MIMETYPE_AUDIO_ALAC;
 
         case FOURCC('m', 'p', '4', 'v'):
             return MEDIA_MIMETYPE_VIDEO_MPEG4;
@@ -1178,6 +1182,108 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
                     kKeyMediaLanguage, lang_code);
 
             *offset += chunk_size;
+            break;
+        }
+
+        case FOURCC('c', 'h', 'a', 'n'):
+        {
+            ALOGV("Found optional Channel Layout Info for ALAC magic cookie");
+
+            if (chunk_size == sizeof(ALACChannelLayoutInfo))
+            {
+                ALACChannelLayoutInfo cli;
+
+                if (mDataSource->readAt(data_offset, &cli, sizeof(ALACChannelLayoutInfo)) != sizeof(ALACChannelLayoutInfo))
+                {
+                    ALOGE("Error reading ALAC Channel Layout Info chunk.");
+                    return ERROR_MALFORMED;
+                }
+
+                ALOGV("ALAC channel layout info: size(%u), id(%u), vflags(%u), tag(%u)",
+                    ntohl(cli.channelLayoutInfoSize),
+                    ntohl(cli.channelLayoutInfoID),
+                    ntohl(cli.versionFlags),
+                    ntohl(cli.channelLayoutTag));
+
+                // Not used yet. TODO: pass to decoder.
+            }
+            else
+            {
+                ALOGV("Ignoring potentially malformed alac channel layout info: size=0x%llx", chunk_size);
+            }
+
+            *offset += chunk_size;
+            break;
+        }
+        case FOURCC('a', 'l', 'a', 'c'):
+        {
+            // Note: parseChunk() routine handles "big box" where size is stored differently.
+            // For purpose of ALAC support the size should be deterministic, and stored in 32 bit.
+            // alac chunk could be for AudioSampleEntry which encapsulate entire magic cookie
+            // ALACSpecificConfig has a 12-byte FullBox header
+            if (chunk_size == (sizeof(FullBox) + sizeof(ALACSpecificConfig))) {
+                // ALACSpecificConfig
+                uint8_t buffer[sizeof(ALACSpecificConfig)];
+                ALACSpecificConfig *pasc = (ALACSpecificConfig *)&buffer[0];
+                data_offset = *offset + sizeof(FullBox);
+                if (mDataSource->readAt(data_offset, &buffer[0], sizeof(ALACSpecificConfig)) != sizeof(ALACSpecificConfig)) {
+                    ALOGE("Cannot retrieved required ALAC magic cookie!");
+                    return ERROR_MALFORMED;
+                }
+
+                // set the sample rate and channel count with values in magic cookie
+                mLastTrack->meta->setInt32(kKeyChannelCount, (0x000000ff & pasc->numChannels));
+                mLastTrack->meta->setInt32(kKeySampleRate, ntohl(pasc->sampleRate));
+
+                // Convert magic cookie to little endian
+                ALACSpecificConfig *pMC;
+                pMC = (ALACSpecificConfig *)&(buffer[0]);
+                pMC->frameLength = U32_AT((uint8_t *)&(pMC->frameLength));
+                pMC->maxRun = U16_AT((uint8_t *)&(pMC->maxRun));
+                pMC->maxFrameBytes = U32_AT((uint8_t *)&(pMC->maxFrameBytes));
+                pMC->avgBitRate = U32_AT((uint8_t *)&(pMC->avgBitRate));
+                pMC->sampleRate = U32_AT((uint8_t *)&(pMC->sampleRate));
+                mLastTrack->meta->setData(kKeyAlacMagicCookie, 0, (void *)&buffer[0], sizeof(ALACSpecificConfig));
+                *offset += chunk_size;
+            }
+            else if (chunk_size > sizeof(AudioSampleEntry)) {
+                // Treat as Audio Sample Entry and parse recursively.
+                AudioSampleEntry ase;
+                if (mDataSource->readAt(*offset, &ase, sizeof(AudioSampleEntry)) != sizeof(AudioSampleEntry)) {
+                    ALOGE("Cannot retrieved required ALAC magic cookie!");
+                    return ERROR_MALFORMED;
+                }
+
+                ase.channel_count = ntohs(ase.channel_count);
+                ase.sample_rate = ntohl(ase.sample_rate);
+                mLastTrack->meta->setCString(kKeyMIMEType, FourCC2MIME(chunk_type));
+                mLastTrack->meta->setInt32(kKeyChannelCount, ase.channel_count);
+                mLastTrack->meta->setInt32(kKeySampleRate, ase.sample_rate);
+
+                ALOGV("ase.size=%u", ntohl(ase.size));
+                ALOGV("ase.type='%c' '%c' '%c' '%c'", ase.type & 0xff, (ase.type & 0xff00) >> 8, (ase.type &0xff0000) >> 16,  (ase.type & 0xff000000) >> 24);
+                ALOGV("ase.data_reference_index=%u", ntohs(ase.data_reference_index));
+                ALOGV("ase.channel_count=%u", ase.channel_count);
+                ALOGV("ase.sample_size=%u", ntohs(ase.sample_size));
+                ALOGV("ase.sample_rate=%u", ase.sample_rate);
+
+                off_t stop_offset = *offset + chunk_size;
+                *offset = *offset + sizeof(AudioSampleEntry);
+                while (*offset < stop_offset) {
+                    status_t err = parseChunk(offset, depth + 1);
+                    if (err != OK) {
+                        return err;
+                    }
+                }
+
+                if (*offset != stop_offset) {
+                    return ERROR_MALFORMED;
+                }
+            }
+            else
+            {
+                *offset += chunk_size;
+            }
             break;
         }
 
