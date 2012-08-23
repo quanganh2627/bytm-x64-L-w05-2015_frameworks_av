@@ -52,6 +52,7 @@ static const struct {
     { "OMX.google.vorbis.decoder", "vorbisdec", "audio_decoder.vorbis" },
     { "OMX.google.vpx.decoder", "vpxdec", "video_decoder.vpx" },
     { "OMX.google.vpx.encoder", "vpxenc", "video_encoder.vpx" },
+    { "OMX.Intel.alac.decoder", "alacdec", "audio_decoder.alac" },
     { "OMX.google.raw.decoder", "rawdec", "audio_decoder.raw" },
     { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" },
     { "OMX.google.gsm.decoder", "gsmdec", "audio_decoder.gsm" },
