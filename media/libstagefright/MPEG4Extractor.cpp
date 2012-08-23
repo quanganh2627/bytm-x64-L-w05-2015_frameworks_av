@@ -2310,7 +2310,11 @@ status_t MPEG4Extractor::updateAudioTrackInfoFromESDS_MPEG4Audio(
 
     if (objectType == 31) {  // AAC-ELD => additional 6 bits
         objectType = 32 + br.getBits(6);
+#ifdef USE_INTEL_MDP
+        mLastTrack->meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED);
+#endif
     }
+    mLastTrack->meta->setInt32(kKeyAACProfile, objectType);
 
     //keep AOT type
     mLastTrack->meta->setInt32(kKeyAACAOT, objectType);
