@@ -55,5 +55,7 @@ const char *MEDIA_MIMETYPE_CONTAINER_WVM = "video/wvm";
 
 const char *MEDIA_MIMETYPE_TEXT_3GPP = "text/3gpp-tt";
 const char *MEDIA_MIMETYPE_TEXT_SUBRIP = "application/x-subrip";
-
+#ifdef USE_INTEL_MDP
+const char *MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED = "audio/mp4a-aacextended"; //For Audio Object Type > 31
+#endif
 }  // namespace android
