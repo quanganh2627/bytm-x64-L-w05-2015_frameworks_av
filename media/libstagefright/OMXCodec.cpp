@@ -19,6 +19,7 @@
 #include <utils/Log.h>
 
 #include "include/AACEncoder.h"
+#include "include/ALACDecoder.h"
 
 #include "include/ESDS.h"
 
@@ -41,6 +42,7 @@
 
 #include <OMX_Audio.h>
 #include <OMX_Component.h>
+#include <OMX_Ext_Intel.h>
 
 #include "include/avc_utils.h"
 
@@ -48,6 +50,7 @@
 #include "UMCMacro.h"
 #include "include/ThreadedSource.h"
 #endif
+
 
 #ifdef USE_INTEL_ASF_EXTRACTOR
 #include "MetaDataExt.h"
@@ -647,6 +650,13 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
         CHECK(meta->findInt32(kKeyChannelCount, &numChannels));
 
         setG711Format(numChannels);
+    } else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_ALAC, mMIME)) {
+        ALOGV("configureCodec: case ALAC\n");
+        uint32_t type;
+        const void *data;
+        size_t size;
+        CHECK(meta->findData(kKeyAlacMagicCookie, &type, &data, &size));
+        setALACFormat( (void *) data );
     } else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_RAW, mMIME)) {
         CHECK(!mIsEncoder);
 
@@ -1578,6 +1588,10 @@ void OMXCodec::setComponentRole(
 #ifdef USE_INTEL_ASF_EXTRACTOR
         { MEDIA_MIMETYPE_VIDEO_WMV,
             "video_decoder.wmv", NULL },
+#endif
+#ifdef USE_FEATURE_ALAC
+        { MEDIA_MIMETYPE_AUDIO_ALAC,
+            "audio_decoder.alac", "audio_encoder.alac" },
 #endif
         { MEDIA_MIMETYPE_AUDIO_RAW,
             "audio_decoder.raw", "audio_encoder.raw" },
@@ -3796,7 +3810,35 @@ status_t OMXCodec::setAACFormat(
 
     return OK;
 }
+status_t OMXCodec::setALACFormat( void *pConfig ) {
+    ALOGV("ENTER setALACFormat\n");
+    ALACSpecificConfig *pConfigALAC = (ALACSpecificConfig *)pConfig;
 
+    // Set format parameters on input port
+    OMX_AUDIO_PARAM_ALACTYPE_EXT_INTEL alacParams;
+    InitOMXParams(&alacParams);
+    alacParams.nPortIndex = kPortIndexInput;
+    status_t err = mOMX->getParameter( mNode, (OMX_INDEXTYPE)OMX_IndexParamAudioAlac, &alacParams, sizeof(alacParams) );
+    CHECK_EQ( err, (status_t)OK );
+    alacParams.nFrameLength = pConfigALAC->frameLength;
+    alacParams.nCompatibleVersion = pConfigALAC->compatibleVersion;
+    alacParams.nBitDepth = pConfigALAC->bitDepth;
+    alacParams.nPb = pConfigALAC->pb;
+    alacParams.nMb = pConfigALAC->mb;
+    alacParams.nKb = pConfigALAC->kb;
+    alacParams.nChannels = pConfigALAC->numChannels;
+    alacParams.nMaxRun = pConfigALAC->maxRun;
+    alacParams.nMaxFrameBytes = pConfigALAC->maxFrameBytes;
+    alacParams.nAvgBitRate = pConfigALAC->avgBitRate;
+    alacParams.nSampleRate = pConfigALAC->sampleRate;
+    err = mOMX->setParameter( mNode, (OMX_INDEXTYPE)OMX_IndexParamAudioAlac, &alacParams, sizeof(alacParams) );
+    if (err != OK) {
+            CODEC_LOGE("setParameter('OMX_IndexParamAudioAlac') failed (err = %d)", err);
+            return err;
+    }
+    ALOGV("EXIT setALACFormat\n");
+    return OK;
+}
 void OMXCodec::setG711Format(int32_t numChannels) {
     CHECK(!mIsEncoder);
     setRawAudioFormat(kPortIndexInput, 8000, numChannels);
