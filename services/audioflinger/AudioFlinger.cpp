@@ -55,6 +55,10 @@
 #include "AudioFlinger.h"
 #include "ServiceUtilities.h"
 
+#ifdef USE_INTEL_SRC
+#include "AudioResamplerIA.h"
+#endif
+
 #include <media/EffectsFactoryApi.h>
 #include <audio_effects/effect_visualizer.h>
 #include <audio_effects/effect_ns.h>
@@ -1912,11 +1916,16 @@ sp<AudioFlinger::PlaybackThread::Track> AudioFlinger::PlaybackThread::createTrac
             }
         }
     } else {
+#ifdef USE_INTEL_SRC
+        //check if Intel SRC support this conversion
+        if (!AudioResamplerIA::sampleRateSupported(sampleRate, mSampleRate)) {
+#else
         // Resampler implementation limits input sampling rate to 2 x output sampling rate.
         if (sampleRate > mSampleRate*2) {
-            ALOGE("Sample rate out of range: %d mSampleRate %d", sampleRate, mSampleRate);
-            lStatus = BAD_VALUE;
-            goto Exit;
+#endif
+                ALOGE("Sample rate out of range: %d mSampleRate %d", sampleRate, mSampleRate);
+                lStatus = BAD_VALUE;
+                goto Exit;
         }
     }
 
@@ -3764,7 +3773,13 @@ bool AudioFlinger::MixerThread::checkForNewParameters_l()
                     mTracks[i]->mName = name;
                     // limit track sample rate to 2 x new output sample rate
                     if (mTracks[i]->mCblk->sampleRate > 2 * sampleRate()) {
-                        mTracks[i]->mCblk->sampleRate = 2 * sampleRate();
+#ifdef USE_INTEL_SRC
+                        if (!AudioResamplerIA::sampleRateSupported(mTracks[i]->mCblk->sampleRate, sampleRate())) {
+#endif
+                            mTracks[i]->mCblk->sampleRate = 2 * sampleRate();
+#ifdef USE_INTEL_SRC
+                        }
+#endif
                     }
                 }
                 sendIoConfigEvent_l(AudioSystem::OUTPUT_CONFIG_CHANGED);
@@ -7024,11 +7039,18 @@ bool AudioFlinger::RecordThread::checkForNewParameters_l()
                 if (status == BAD_VALUE &&
                     reqFormat == mInput->stream->common.get_format(&mInput->stream->common) &&
                     reqFormat == AUDIO_FORMAT_PCM_16_BIT &&
+#ifdef USE_INTEL_SRC
+                    (AudioResamplerIA::sampleRateSupported(mSampleRate, mReqSampleRate)) &&
+                    (popcount(mInput->stream->common.get_channels(&mInput->stream->common)) < 3) &&
+                    (reqChannelCount < 3)) {
+#else
                     ((int)mInput->stream->common.get_sample_rate(&mInput->stream->common) <= (2 * reqSamplingRate)) &&
-                    popcount(mInput->stream->common.get_channels(&mInput->stream->common)) <= FCC_2 &&
+                    (popcount(mInput->stream->common.get_channels(&mInput->stream->common)) <= FCC_2) &&
                     (reqChannelCount <= FCC_2)) {
+#endif
                     status = NO_ERROR;
                 }
+
                 if (status == NO_ERROR) {
                     readInputParameters();
                     sendIoConfigEvent_l(AudioSystem::INPUT_CONFIG_CHANGED);
@@ -7114,7 +7136,16 @@ void AudioFlinger::RecordThread::readInputParameters()
         } else {
             channelCount = 2;
         }
+#ifdef USE_INTEL_SRC
+        if (AudioResamplerIA::sampleRateSupported(mSampleRate, mReqSampleRate)) {
+            mResampler = AudioResampler::create(16, channelCount,
+                             mReqSampleRate, AudioResampler::INTEL_HIGH_QUALITY);
+        } else {
+            mResampler = AudioResampler::create(16, channelCount, mReqSampleRate);
+        }
+#else
         mResampler = AudioResampler::create(16, channelCount, mReqSampleRate);
+#endif
         mResampler->setSampleRate(mSampleRate);
         mResampler->setVolume(AudioMixer::UNITY_GAIN, AudioMixer::UNITY_GAIN);
         mRsmpOutBuffer = new int32_t[mFrameCount * 2];
@@ -7559,8 +7590,11 @@ audio_io_handle_t AudioFlinger::openInput(audio_module_handle_t module,
     // try to open again with the proposed parameters. The AudioFlinger can resample the input and do mono to stereo
     // or stereo to mono conversions on 16 bit PCM inputs.
     if (status == BAD_VALUE &&
-        reqFormat == config.format && config.format == AUDIO_FORMAT_PCM_16_BIT &&
-        (config.sample_rate <= 2 * reqSamplingRate) &&
+        reqFormat == config.format && config.format == AUDIO_FORMAT_PCM_16_BIT && (
+#ifdef USE_INTEL_SRC
+        AudioResamplerIA::sampleRateSupported(config.sample_rate, reqSamplingRate) ||
+#endif
+        (config.sample_rate <= 2 * reqSamplingRate) ) &&
         (popcount(config.channel_mask) <= FCC_2) && (popcount(reqChannels) <= FCC_2)) {
         ALOGV("openInput() reopening with proposed sampling rate and channel mask");
         inStream = NULL;
