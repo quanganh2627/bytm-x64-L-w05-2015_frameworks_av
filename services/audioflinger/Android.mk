@@ -120,6 +120,14 @@ LOCAL_CFLAGS += -UFAST_TRACKS_AT_NON_NATIVE_SAMPLE_RATE
 # LOCAL_SRC_FILES += AudioWatchdog.cpp
 # LOCAL_CFLAGS += -DAUDIO_WATCHDOG
 
+ifeq ($(USE_INTEL_SRC),true)
+  LOCAL_CFLAGS += -DUSE_INTEL_SRC
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
+  LOCAL_SRC_FILES += AudioResamplerIA.cpp
+  LOCAL_SHARED_LIBRARIES += libaudioresample
+endif
+
+
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))

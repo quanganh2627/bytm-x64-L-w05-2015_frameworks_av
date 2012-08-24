@@ -40,6 +40,10 @@
 
 #include "AudioMixer.h"
 
+#ifdef USE_INTEL_SRC
+#include "AudioResamplerIA.h"
+#endif
+
 namespace android {
 
 // ----------------------------------------------------------------------------
@@ -539,6 +543,14 @@ bool AudioMixer::track_t::setResampler(uint32_t value, uint32_t devSampleRate)
         if (sampleRate != value) {
             sampleRate = value;
             if (resampler == NULL) {
+#ifdef USE_INTEL_SRC
+                if (AudioResamplerIA::sampleRateSupported(sampleRate, devSampleRate)) {
+                    resampler = AudioResampler::create(format, channelCount,
+                                devSampleRate, AudioResampler::INTEL_HIGH_QUALITY);
+                } else {
+                    resampler = AudioResampler::create(format, channelCount, devSampleRate);
+                }
+#else
                 ALOGV("creating resampler from track %d Hz to device %d Hz", value, devSampleRate);
                 AudioResampler::src_quality quality;
                 // force lowest quality level resampler if use case isn't music or video
@@ -557,7 +569,18 @@ bool AudioMixer::track_t::setResampler(uint32_t value, uint32_t devSampleRate)
                         downmixerBufferProvider != NULL ? MAX_NUM_CHANNELS : channelCount,
                         devSampleRate, quality);
                 resampler->setLocalTimeFreq(localTimeFreq);
+#endif
             }
+#ifdef USE_INTEL_SRC
+            else {
+                if (resampler->mResType == AudioResampler::INTEL_SRC &&
+                    !AudioResamplerIA::sampleRateSupported(sampleRate, devSampleRate)) {
+                    delete resampler;
+                    resampler = AudioResampler::create(format, channelCount, devSampleRate);
+                }
+            }
+#endif
+
             return true;
         }
     }
