@@ -1295,6 +1295,9 @@ public:
 
                     AudioMixer* mAudioMixer;    // normal mixer
     private:
+#ifdef SOAKER
+                    sp<Thread>     mSoaker;
+#endif
                     // one-time initialization, no locks required
                     sp<FastMixer>  mFastMixer;         // non-NULL if there is also a fast mixer
                     sp<AudioWatchdog> mAudioWatchdog; // non-0 if there is an audio watchdog thread
