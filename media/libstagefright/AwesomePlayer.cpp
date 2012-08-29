@@ -1501,6 +1501,9 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer->release();
         mVideoBuffer = NULL;
     }
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setDisplaySource_l(false);
+#endif
 
     mVideoSource->stop();
 
@@ -1514,9 +1517,6 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
     }
     IPCThreadState::self()->flushCommands();
     ALOGV("video decoder shutdown completed");
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setDisplaySource_l(false);
-#endif
 }
 
 status_t AwesomePlayer::setNativeWindow_l(const sp<ANativeWindow> &native) {
