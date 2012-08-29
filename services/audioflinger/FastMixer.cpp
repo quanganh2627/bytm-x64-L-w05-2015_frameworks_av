@@ -55,7 +55,7 @@ bool FastMixer::threadLoop()
         fastTrackNames[i] = -1;
         generations[i] = 0;
     }
-    NBAIO_Sink *outputSink = NULL;
+    sp<NBAIO_Sink> outputSink = NULL;
     int outputSinkGen = 0;
     AudioMixer* mixer = NULL;
     short *mixBuffer = NULL;

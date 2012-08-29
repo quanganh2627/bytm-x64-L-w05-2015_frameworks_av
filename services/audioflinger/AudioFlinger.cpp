@@ -2639,8 +2639,8 @@ AudioFlinger::MixerThread::~MixerThread()
 #ifdef SOAKER
         if (mSoaker != NULL) {
             mSoaker->requestExitAndWait();
+            mSoaker.clear();
         }
-        delete mSoaker;
 #endif
         if (mAudioWatchdog != 0) {
             mAudioWatchdog->requestExit();
