@@ -191,12 +191,20 @@ public:
 
     virtual audio_module_handle_t loadHwModule(const char *name) = 0;
 
+    virtual bool isAudioEffectEnabled(int sessionId) const = 0;
+
+    virtual size_t getOffloadBufferSize(
+            uint32_t bitRate,
+            uint32_t sampleRate,
+            uint32_t channel,
+            int output) = 0;
+
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     // FIXME move these APIs to AudioPolicy to permit a more accurate implementation
     // that looks on primary device for a stream with fast flag, primary flag, or first one.
     virtual int32_t getPrimaryOutputSamplingRate() = 0;
     virtual int32_t getPrimaryOutputFrameCount() = 0;
-
+    
 };
 
 

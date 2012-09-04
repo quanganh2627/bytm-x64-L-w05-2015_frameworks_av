@@ -22,6 +22,8 @@
 
 #include <utils/threads.h>
 
+#include <system/audio.h>
+
 namespace android {
 
 // ----------------------------------------------------------------------------
@@ -54,6 +56,13 @@ namespace android {
 #define CBLK_RESTORED_ON        0x0040  // track has been restored after invalidation
 #define CBLK_RESTORED_OFF       0x0040  // by AudioFlinger
 #define CBLK_FAST               0x0080  // AudioFlinger successfully created a fast track
+
+#define CBLK_OFFLOAD_TEAR_DOWN_MSK         0x0100
+#define CBLK_OFFLOAD_TEAR_DOWN_ON          0x0100  // track invalidated by AudioFlinger. Track to recreate
+#define CBLK_OFFLOAD_USES_DEEP_BUFFER      0x0200  // indicates that the track is deep buffered in the AudioFlinger
+#define CBLK_OFFLOAD_STREAM_END_DONE       0x0400  // Indicates stream end event has been generated
+#define MAX_OFFLOAD_DEEP_BUFFER_TIMEOUT_MS 20000 //assuming upto a maximum of 20 seconds of deep buffering
+#define WAIT_PERIOD_MUSIC_OFFLOAD_MS       6000
 
 // Important: do not add any virtual methods, including ~
 struct audio_track_cblk_t
@@ -110,6 +119,9 @@ public:
     volatile    int32_t     flags;
 
                 // Cache line boundary (32 bytes)
+                // Cache the io handle for this audiotrack.
+                // Needed incase this is an offloaded track
+                audio_io_handle_t         mIoHandle;
 
                 // Since the control block is always located in shared memory, this constructor
                 // is only used for placement new().  It is never used for regular new() or stack.

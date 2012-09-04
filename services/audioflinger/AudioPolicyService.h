@@ -136,6 +136,13 @@ public:
     virtual status_t stopTone();
     virtual status_t setVoiceVolume(float volume, int delayMs = 0);
     virtual status_t setFmRxVolume(float volume, int delayMs = 0);
+    virtual bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    bool isVideo = false,
+                                    bool isStreaming = false) const;
 
 private:
                         AudioPolicyService();

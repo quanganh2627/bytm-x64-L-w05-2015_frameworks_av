@@ -87,6 +87,8 @@ public:
        or Tungsten time. The values for target are defined in AudioTrack.h */
     virtual status_t    setMediaTimeTransform(const LinearTransform& xform,
                                               int target) = 0;
+    // For Offload
+    virtual void setVolume(float left, float right) = 0;
 };
 
 // ----------------------------------------------------------------------------

@@ -100,6 +100,10 @@
 #define ALOGVV(a...) do { } while(0)
 #endif
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+#define CODEC_OFFLOAD_MODULE_NAME "codec_offload"
+#endif
+
 namespace android {
 
 static const char kDeadlockedString[] = "AudioFlinger may be deadlocked\n";
@@ -114,8 +118,13 @@ static const int8_t kMaxTrackRetries = 50;
 static const int8_t kMaxTrackStartupRetries = 50;
 // allow less retry attempts on direct output thread.
 // direct outputs can be a scarce resource in audio hardware and should
-// be released as quickly as possible.
+// be released as quickly as possible. However if the stream is deep buffered
+// we need to make sure that AudioTrack client has enough time to send large buffers
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+static const int8_t kMaxTrackRetriesDirect = 20;
+#else
 static const int8_t kMaxTrackRetriesDirect = 2;
+#endif
 
 static const int kDumpLockRetries = 50;
 static const int kDumpLockSleepUs = 20000;
@@ -229,6 +238,9 @@ AudioFlinger::AudioFlinger()
       mNextUniqueId(1),
       mMode(AUDIO_MODE_INVALID),
       mBtNrecIsOff(false)
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+      ,mOffloadDev(NULL)
+#endif
 {
 }
 
@@ -276,7 +288,10 @@ AudioFlinger::~AudioFlinger()
 static const char * const audio_interfaces[] = {
     AUDIO_HARDWARE_MODULE_ID_PRIMARY,
     AUDIO_HARDWARE_MODULE_ID_A2DP,
-    AUDIO_HARDWARE_MODULE_ID_USB,
+    AUDIO_HARDWARE_MODULE_ID_USB
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ,AUDIO_HARDWARE_MODULE_ID_CODEC_OFFLOAD
+#endif
 };
 #define ARRAY_SIZE(x) (sizeof((x))/sizeof(((x)[0])))
 
@@ -883,7 +898,31 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
     if (!settingsAllowed()) {
         return PERMISSION_DENIED;
     }
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // Check if Music offload specific information to be routed to the direct thread
+    AudioParameter param = AudioParameter(keyValuePairs);
+    int value = 0;
+    if (param.getInt(String8(AUDIO_OFFLOAD_CODEC_ID), value) == NO_ERROR) {
+        ALOGV("setParameters: AUDIO_OFFLOAD_CODEC_ID and other AAC params");
+        Mutex::Autolock _l(mLock);
+        if (mOffloadDev == NULL) {
+            for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
+                if (strncmp(mAudioHwDevs.valueAt(i)->moduleName(),
+                    CODEC_OFFLOAD_MODULE_NAME,
+                    strlen(CODEC_OFFLOAD_MODULE_NAME)) == 0) {
+                    ALOGW("getOffloadBufferSize: offload module %s matches",
+                           CODEC_OFFLOAD_MODULE_NAME);
+                    mOffloadDev = mAudioHwDevs.valueAt(i)->hwDevice();
+               }
+            }
+            if (mOffloadDev == NULL) {
+                ALOGE("setParameters: No offload device");
+                return INVALID_OPERATION;
+            }
+        }
+        return mOffloadDev->set_parameters(mOffloadDev, keyValuePairs.string());
+    }
+#endif
     // ioHandle == 0 means the parameters are global to the audio hardware interface
     if (ioHandle == 0) {
         Mutex::Autolock _l(mLock);
@@ -1172,6 +1211,39 @@ sp<AudioFlinger::PlaybackThread> AudioFlinger::getEffectThread_l(int sessionId, 
     return thread;
 }
 
+// Function to get the offload buffer size for a offload device using
+// sample rate, bit rate and channel
+size_t AudioFlinger::getOffloadBufferSize(
+        uint32_t bitRate,
+        uint32_t sampleRate,
+        uint32_t channel,
+        int output)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("getOffloadBufferSize");
+    Mutex::Autolock _l(mLock);
+    if (mOffloadDev == NULL) {
+        for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
+                ALOGW("getOffloadBufferSize: mAudioHwDevs.valueAt(%d)->moduleName() %s ",
+                       i, mAudioHwDevs.valueAt(i)->moduleName());
+            if (strncmp(mAudioHwDevs.valueAt(i)->moduleName(),
+                         CODEC_OFFLOAD_MODULE_NAME,
+                         strlen(CODEC_OFFLOAD_MODULE_NAME)) == 0) {
+                ALOGW("getOffloadBufferSize: offload module %s matches",
+                          CODEC_OFFLOAD_MODULE_NAME);
+                mOffloadDev = mAudioHwDevs.valueAt(i)->hwDevice();
+            }
+        }
+        if (mOffloadDev == NULL)
+            return 0;
+    }
+
+    ALOGV("Calling Hardware Offload Buffer Size");
+    return mOffloadDev->get_offload_buffer_size(mOffloadDev,
+               bitRate, sampleRate, channel);
+#endif
+    return 0;
+}
 // ----------------------------------------------------------------------------
 
 AudioFlinger::ThreadBase::ThreadBase(const sp<AudioFlinger>& audioFlinger, audio_io_handle_t id,
@@ -1966,6 +2038,15 @@ void AudioFlinger::PlaybackThread::setMasterMute(bool muted)
 
 void AudioFlinger::PlaybackThread::setStreamVolume(audio_stream_type_t stream, float value)
 {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // Check if MusicOffload Track is running, if so, instanly apply volume
+    // AudioTrack.
+    ALOGV("setStreamVolume of thread");
+    if (stream == AUDIO_STREAM_MUSIC && mType == DIRECT && getOutput_l()) {
+        ALOGV("DIRECT thread calling set_volume");
+        getOutput_l()->stream->set_volume(getOutput_l()->stream, value, value);
+    }
+#endif
     Mutex::Autolock _l(mLock);
     mStreamTypes[stream].volume = value;
 }
@@ -2159,8 +2240,18 @@ void AudioFlinger::PlaybackThread::readOutputParameters()
     ALOGI("HAL output buffer size %u frames, normal mix buffer size %u frames", mFrameCount, mNormalFrameCount);
 
     delete[] mMixBuffer;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (audio_is_linear_pcm(mFormat)) {
+        mMixBuffer = new int16_t[mNormalFrameCount * mChannelCount];
+        memset(mMixBuffer, 0, mNormalFrameCount * mChannelCount * sizeof(int16_t));
+    } else {
+        mMixBuffer = (int16_t *) new int8_t[mFrameCount];
+        memset(mMixBuffer, 0, mFrameCount * sizeof (int8_t));
+    }
+#else
     mMixBuffer = new int16_t[mNormalFrameCount * mChannelCount];
     memset(mMixBuffer, 0, mNormalFrameCount * mChannelCount * sizeof(int16_t));
+#endif
 
     // force reconfiguration of effect chains and engines to take new buffer size and audio
     // parameters into account
@@ -2219,6 +2310,16 @@ uint32_t AudioFlinger::PlaybackThread::hasAudioSession(int sessionId) const
     return result;
 }
 
+void AudioFlinger::PlaybackThread::getEffectSessionIds(Vector<int> &sessionIds)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    size_t size = mEffectChains.size();
+    for (size_t i=0; i < size; i++) {
+        sessionIds.add(mEffectChains[i]->sessionId());
+    }
+#endif
+}
+
 uint32_t AudioFlinger::PlaybackThread::getStrategyForSession_l(int sessionId)
 {
     // session AUDIO_SESSION_OUTPUT_MIX is placed in same strategy as MUSIC stream so that
@@ -2241,6 +2342,15 @@ AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::getOutput() const
 {
     Mutex::Autolock _l(mLock);
     return mOutput;
+}
+
+AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::getOutput_l() const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("returns mOutput");
+    return mOutput;
+#endif
+    return NULL;
 }
 
 AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::clearOutput()
@@ -2309,6 +2419,24 @@ void AudioFlinger::PlaybackThread::threadLoop_removeTracks(const Vector< sp<Trac
 
 }
 
+status_t AudioFlinger::PlaybackThread::setParametersMusicOffload(const String8& keyValuePairs)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("setParametersMusicOffload: %s", keyValuePairs.string());
+    status_t status = NO_ERROR;
+
+    status = getOutput_l()->stream->common.set_parameters(
+                                           &getOutput_l()->stream->common,
+                                           keyValuePairs.string());
+
+    if (status != NO_ERROR) {
+        ALOGE("PBT: Error setting offload codec parameters");
+        return status;
+    }
+    return status;
+#endif
+    return NO_ERROR;
+}
 // ----------------------------------------------------------------------------
 
 AudioFlinger::MixerThread::MixerThread(const sp<AudioFlinger>& audioFlinger, AudioStreamOut* output,
@@ -3796,9 +3924,20 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
         } else {
             minFrames = 1;
         }
-        if ((track->framesReady() >= minFrames) && track->isReady() &&
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (track->isPausing()) {
+             track->setPaused();
+        }
+
+        if ((track->framesReady() >= minFrames) && track->isReady() &&  track->isActive())
+//                !track->isPaused() && !track->isTerminated())
+        {
+#else
+         if ((track->framesReady() >= minFrames) && track->isReady() &&
                 !track->isPaused() && !track->isTerminated())
         {
+#endif
             //ALOGV("track %d u=%08x, s=%08x [OK]", track->name(), cblk->user, cblk->server);
 
             if (track->mFillingUpStatus == Track::FS_FILLED) {
@@ -3828,8 +3967,11 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
                 if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
                 right = v_clamped/MAX_GAIN;
             }
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            if (left != mLeftVolFloat || right != mRightVolFloat || (left==0 && mLeftVolFloat==0)) {
+#else
             if (left != mLeftVolFloat || right != mRightVolFloat) {
+#endif
                 mLeftVolFloat = left;
                 mRightVolFloat = right;
 
@@ -3922,6 +4064,10 @@ void AudioFlinger::DirectOutputThread::threadLoop_mix()
         memcpy(curBuf, buffer.raw, buffer.frameCount * mFrameSize);
         frameCount -= buffer.frameCount;
         curBuf += buffer.frameCount * mFrameSize;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        //Used in writing offload data to avoid sending padded bytes.
+        mixBufferSize = buffer.frameCount * mFrameSize;
+#endif
         mActiveTrack->releaseBuffer(&buffer);
     }
     sleepTime = 0;
@@ -4044,6 +4190,29 @@ void AudioFlinger::DirectOutputThread::cacheParameters_l()
     // use shorter standby delay as on normal output to release
     // hardware resources as soon as possible
     standbyDelay = microseconds(activeSleepTime*2);
+}
+
+void AudioFlinger::DirectOutputThread::invalidateTracks(audio_stream_type_t streamType)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV ("DirectOutputThread::invalidateTracks mixer %p, streamType %d, mTracks.size %d",
+            this,  streamType, mTracks.size());
+    Mutex::Autolock _l(mLock);
+
+    size_t size = mTracks.size();
+    for (size_t i = 0; i < size; i++) {
+        sp<Track> t = mTracks[i];
+        if (t->streamType() == streamType) {
+            if(!t->isPaused() && (!(t->mCblk->flags & CBLK_OFFLOAD_TEAR_DOWN_ON))) {
+                t->mCblk->lock.lock();
+                t->mCblk->flags |= CBLK_INVALID_ON;
+                t->mCblk->flags |= CBLK_OFFLOAD_TEAR_DOWN_ON;
+                t->mCblk->cv.signal();
+                t->mCblk->lock.unlock();
+            }
+        }
+    }
+#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -4678,6 +4847,20 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
             mState = state;
             triggerEvents(AudioSystem::SYNC_EVENT_PRESENTATION_COMPLETE);
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        // In case of Music Offload write, it could be blocked on pause-event
+        // make sure we restart the output
+        PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
+        if (playbackThread->type() == DIRECT && (state==PAUSING || state==PAUSED)) {
+            ALOGV("calling resume directly");
+            status_t status = playbackThread->getOutput_l()->stream->resume(
+                                            playbackThread->getOutput_l()->stream);
+            if (NO_ERROR != status) {
+                ALOGE("AudioStreamOut::resume returns error = %d", status);
+            }
+            mState = TrackBase::RESUMING;
+        }
+#endif
     } else {
         status = BAD_VALUE;
     }
@@ -4704,7 +4887,8 @@ void AudioFlinger::PlaybackThread::Track::stop()
                 // and then to STOPPED and reset() when presentation is complete
                 mState = STOPPING_1;
             }
-            ALOGV("not stopping/stopped => stopping/stopped (%d) on thread %p", mName, playbackThread);
+            ALOGV("not stopping/stopped => stopping/stopped (%d) on thread %p",
+                                             mName, playbackThread);
         }
         if (!isOutputTrack() && (state == ACTIVE || state == RESUMING)) {
             thread->mLock.unlock();
@@ -4716,6 +4900,20 @@ void AudioFlinger::PlaybackThread::Track::stop()
             addBatteryData(IMediaPlayerService::kBatteryDataAudioFlingerStop);
 #endif
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
+        if ((playbackThread->type() == DIRECT) ) {
+            if (state!=ACTIVE && state!=RESUMING) {
+                ALOGV("Track:stop: state!=ACTIVE && state!=RESUMING");
+                status_t status = playbackThread->getOutput_l()->stream->flush(
+                                           playbackThread->getOutput_l()->stream);
+                if (NO_ERROR != status) {
+                    ALOGE("stop returns error = %d", status);
+                }
+            }
+        }
+#endif
+
     }
 }
 
@@ -4729,6 +4927,20 @@ void AudioFlinger::PlaybackThread::Track::pause()
             mState = PAUSING;
             ALOGV("ACTIVE/RESUMING => PAUSING (%d) on thread %p", mName, thread.get());
             if (!isOutputTrack()) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+                // Call direct pause for offload mechanism
+                PlaybackThread* pPBThread = static_cast<PlaybackThread*>(thread.get());
+                if (pPBThread->type() == DIRECT) {
+                    status_t status = pPBThread->getOutput_l()->stream->pause(
+                                               pPBThread->getOutput_l()->stream);
+                    if (NO_ERROR != status) {
+                        ALOGE("AudioStreamOut::stop returns error = %d", status);
+                    }
+                    // No need to wait for the direct output thread to run to do state
+                    // transition
+                    setPaused();
+                }
+#endif
                 thread->mLock.unlock();
                 AudioSystem::stopOutput(thread->id(), mStreamType, mSessionId);
                 thread->mLock.lock();
@@ -4748,7 +4960,25 @@ void AudioFlinger::PlaybackThread::Track::flush()
     sp<ThreadBase> thread = mThread.promote();
     if (thread != 0) {
         Mutex::Autolock _l(thread->mLock);
-        if (mState != STOPPING_1 && mState != STOPPING_2 && mState != STOPPED && mState != PAUSED &&
+        PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (playbackThread->type() == DIRECT) {
+            ALOGV("Calling flush directly");
+            mCblk->lock.lock();
+            reset();
+            mCblk->lock.unlock();
+            // If state needs to be set to STOPPED, do that here
+            if (mState == STOPPED || mState == PAUSED || mState == PAUSING) {
+                mState = STOPPED;
+            }
+
+            playbackThread->getOutput_l()->stream->flush(
+                                      playbackThread->getOutput_l()->stream);
+        }
+#endif
+
+        if (mState != STOPPING_1 && mState != STOPPING_2 &&
+                      mState != STOPPED && mState != PAUSED &&
                 mState != PAUSING) {
             return;
         }
@@ -4759,7 +4989,6 @@ void AudioFlinger::PlaybackThread::Track::flush()
         // this will be done by prepareTracks_l() when the track is stopped.
         // prepareTracks_l() will see mState == FLUSHED, then
         // remove from active track list, reset(), and trigger presentation complete
-        PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
         if (playbackThread->mActiveTracks.indexOf(this) < 0) {
             reset();
         }
@@ -4770,7 +4999,26 @@ void AudioFlinger::PlaybackThread::Track::reset()
 {
     // Do not reset twice to avoid discarding data written just after a flush and before
     // the audioflinger thread detects the track is stopped.
+    // For MusicOffload: Flush the data if requested anytime
+    // Check if Music Offload playback is running
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    bool offload = false;
+    sp<ThreadBase> baseThread = mThread.promote();
+    if (baseThread != 0) {
+        PlaybackThread *playbackThread = (PlaybackThread *)baseThread.get();
+
+        if (playbackThread->type() == DIRECT) {
+            offload = true;
+        }
+    }
+#endif
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (!mResetDone || offload) {
+#else
     if (!mResetDone) {
+#endif
+
         TrackBase::reset();
         // Force underrun condition to avoid false underrun callback until first data is
         // written to buffer
@@ -4787,6 +5035,13 @@ void AudioFlinger::PlaybackThread::Track::reset()
 void AudioFlinger::PlaybackThread::Track::mute(bool muted)
 {
     mMute = muted;
+}
+
+void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
+{
+   /* Call set volume of offload hal. This will be invoked by the
+    * volume control from application
+    */
 }
 
 status_t AudioFlinger::PlaybackThread::Track::attachAuxEffect(int EffectId)
@@ -5896,6 +6151,12 @@ void AudioFlinger::TrackHandle::mute(bool e) {
 
 void AudioFlinger::TrackHandle::pause() {
     mTrack->pause();
+}
+
+void AudioFlinger::TrackHandle::setVolume(float left, float right) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mTrack->setVolume(left, right);
+#endif
 }
 
 status_t AudioFlinger::TrackHandle::attachAuxEffect(int EffectId)
@@ -7104,6 +7365,11 @@ audio_io_handle_t AudioFlinger::openOutput(audio_module_handle_t module,
             hwDevHal->set_mode(hwDevHal, mMode);
             mHardwareStatus = AUDIO_HW_IDLE;
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+           mOffloadDev = outHwDev->hwDevice();
+        }
+#endif
         return id;
     }
 
@@ -7158,6 +7424,28 @@ status_t AudioFlinger::closeOutput_nonvirtual(audio_io_handle_t output)
                 }
             }
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (thread->type() == ThreadBase::DIRECT) {
+            Vector<int> sessionIds;
+
+            thread->getEffectSessionIds(sessionIds);
+            ALOGV("closeOutput: EffectSessionIds vector size: %d", sessionIds.size());
+            // save all audio effects created in the offload thread to the default thread
+            for (size_t i=0; i < sessionIds.size(); i++) {
+                int output=0;
+                if (mPlaybackThreads.size()) {
+                    output = mPlaybackThreads.keyAt(0);
+                    ALOGV("closeOutput: Target new output=%d", output);
+                    PlaybackThread *dstThread = checkPlaybackThread_l(output);
+                    PlaybackThread *srcThread = (PlaybackThread *) thread.get();
+
+                    Mutex::Autolock _dl(dstThread->mLock);
+                    Mutex::Autolock _sl(srcThread->mLock);
+                    moveEffectChain_l(sessionIds[i], srcThread, dstThread, true);
+                }
+            }
+        }
+#endif
         audioConfigChanged_l(AudioSystem::OUTPUT_CLOSED, output, NULL);
         mPlaybackThreads.removeItem(output);
     }
@@ -7749,6 +8037,27 @@ status_t AudioFlinger::moveEffects(int sessionId, audio_io_handle_t srcOutput,
     moveEffectChain_l(sessionId, srcThread, dstThread, false);
 
     return NO_ERROR;
+}
+
+bool AudioFlinger::isAudioEffectEnabled(int sessionId) const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    Mutex::Autolock _l(mLock);
+    sp<EffectChain> chain = NULL;
+    ALOGV("isAudioEffectEnabled(sessionId=%d)", sessionId);
+    size_t size = mPlaybackThreads.size();
+    for (size_t i = 0; i < size; i++) {
+        chain = mPlaybackThreads.valueAt(i)->getEffectChain_l(sessionId);
+        if (chain != 0) {
+            break;
+        }
+    }
+    if (chain != 0 && chain->isAudioEffectEnabled()) {
+        return true;
+    }
+    return false;
+#endif
+    return false;
 }
 
 // moveEffectChain_l must be called with both srcThread and dstThread mLocks held
@@ -8750,6 +9059,21 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
                 h->setEnabled(enabled);
             }
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        sp<ThreadBase> thread = mThread.promote();
+        if (thread == 0) {
+            return NO_ERROR;
+        }
+        PlaybackThread *p = (PlaybackThread *)thread.get();
+
+        if (enabled) {
+            if (p->type() == ThreadBase::DIRECT ) {
+                ALOGV("setEnabled: Offload, invalidate tracks");
+                DirectOutputThread *srcThread = (DirectOutputThread *)p;
+                srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+            }
+        }
+#endif
     }
     return NO_ERROR;
 }
@@ -9337,11 +9661,41 @@ void AudioFlinger::EffectChain::clearInputBuffer()
     clearInputBuffer_l(thread);
 }
 
+bool AudioFlinger::EffectChain::isAudioEffectEnabled() const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    size_t size = mEffects.size();
+
+    for (size_t i = 0; i < size; i++) {
+        if (mEffects[i]->isEnabled()) {
+            return true;
+        }
+    }
+    return false;
+#endif
+    return false;
+}
+
 // Must be called with EffectChain::mLock locked
 void AudioFlinger::EffectChain::clearInputBuffer_l(sp<ThreadBase> thread)
 {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // For offload the framecount is the one used for allocation the
+    // mInBuffer so modify the numSamples accordingly before memsetting
+    size_t numSamples;
+    PlaybackThread* pBThread = static_cast<PlaybackThread*>(thread.get());
+
+    if (pBThread->type() != ThreadBase::DIRECT) {
+        size_t numSamples = thread->frameCount() * thread->channelCount();
+        memset(mInBuffer, 0, numSamples * sizeof(int16_t));
+    } else {
+        size_t numSamples = thread->frameCount();
+        memset(mInBuffer, 0, numSamples * sizeof(int8_t));
+    }
+#else
     size_t numSamples = thread->frameCount() * thread->channelCount();
     memset(mInBuffer, 0, numSamples * sizeof(int16_t));
+#endif
 
 }
 

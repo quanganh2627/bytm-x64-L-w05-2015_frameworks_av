@@ -75,6 +75,8 @@ enum {
     LOAD_HW_MODULE,
     GET_PRIMARY_OUTPUT_SAMPLING_RATE,
     GET_PRIMARY_OUTPUT_FRAME_COUNT,
+    GET_OFFLOAD_BUFFER_SIZE,
+    IS_EFFECTS_ENABLED
 };
 
 class BpAudioFlinger : public BpInterface<IAudioFlinger>
@@ -726,6 +728,38 @@ public:
         return reply.readInt32();
     }
 
+    virtual size_t getOffloadBufferSize(
+        uint32_t bitRate,
+        uint32_t SR,
+        uint32_t channel,
+        int output)
+    {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
+        data.writeInt32(bitRate);
+        data.writeInt32(SR);
+        data.writeInt32(channel);
+        data.writeInt32(output);
+        remote()->transact(GET_OFFLOAD_BUFFER_SIZE, data, &reply);
+        return reply.readInt32();
+#else
+        return 0;
+#endif
+    }
+
+    virtual bool isAudioEffectEnabled(int sessionId) const
+    {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
+        data.writeInt32(sessionId);
+        remote()->transact(IS_EFFECTS_ENABLED, data, &reply);
+        return reply.readInt32();
+#else
+        return 0;
+#endif
+    }
 };
 
 IMPLEMENT_META_INTERFACE(AudioFlinger, "android.media.IAudioFlinger");
@@ -1098,6 +1132,26 @@ status_t BnAudioFlinger::onTransact(
         case GET_PRIMARY_OUTPUT_FRAME_COUNT: {
             CHECK_INTERFACE(IAudioFlinger, data, reply);
             reply->writeInt32(getPrimaryOutputFrameCount());
+            return NO_ERROR;
+        } break;
+        case GET_OFFLOAD_BUFFER_SIZE: {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            CHECK_INTERFACE(IAudioFlinger, data, reply);
+            uint32_t bitRate = data.readInt32();
+            uint32_t sampleRate = data.readInt32();
+            uint32_t channel = data.readInt32();
+            uint32_t output = data.readInt32();
+            reply->writeInt32(getOffloadBufferSize(bitRate,
+                                   sampleRate, channel, output));
+#endif
+            return NO_ERROR;
+        } break;
+        case IS_EFFECTS_ENABLED: {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            CHECK_INTERFACE(IAudioFlinger, data, reply);
+            int sessionId = data.readInt32();
+            reply->writeInt32(isAudioEffectEnabled(sessionId));
+#endif
             return NO_ERROR;
         } break;
         default:
