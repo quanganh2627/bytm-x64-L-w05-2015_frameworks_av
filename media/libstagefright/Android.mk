@@ -114,6 +114,11 @@ LOCAL_STATIC_LIBRARIES := \
         libstagefright_httplive \
         libstagefright_id3 \
         libFLAC \
+        libmedia_helper \
+
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
 
 ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
   LOCAL_CFLAGS += -DBGM_ENABLED

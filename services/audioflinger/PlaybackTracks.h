@@ -76,7 +76,8 @@ protected:
     // releaseBuffer() not overridden
 
     virtual size_t framesReady() const;
-
+//offload
+    bool isActive() { return (mState == ACTIVE || mState == RESUMING); }
     bool isPausing() const { return mState == PAUSING; }
     bool isPaused() const { return mState == PAUSED; }
     bool isResuming() const { return mState == RESUMING; }

@@ -128,6 +128,9 @@ public:
     // - BAD_VALUE: invalid parameter
     // NOTE: this feature is not supported on all hardware platforms and it is
     // necessary to check returned status before using the returned values.
+    static status_t getRenderPosition(audio_io_handle_t ioHandle,
+                                      size_t *halFrames, size_t *dspFrames,
+                                      audio_stream_type_t stream = AUDIO_STREAM_DEFAULT);
     static status_t getRenderPosition(size_t *halFrames, size_t *dspFrames,
             audio_stream_type_t stream = AUDIO_STREAM_DEFAULT);
 
@@ -246,7 +249,15 @@ public:
     static size_t getPrimaryOutputFrameCount();
 
     // ----------------------------------------------------------------------------
+    static bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    bool hasVideo = false,
+                                    bool hasStreaming = false);
 
+    // ----------------------------------------------------------------------------
 private:
 
     class AudioFlingerClient: public IBinder::DeathRecipient, public BnAudioFlingerClient

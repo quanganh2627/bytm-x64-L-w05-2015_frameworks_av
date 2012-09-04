@@ -56,6 +56,17 @@
 #include <media/stagefright/foundation/AMessage.h>
 
 #include <cutils/properties.h>
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+#include <hardware/audio.h>
+#include <hardware/audio_policy.h> // for AUDIO_POLICY_DEVICE_STATE_AVAILABLE
+
+#include <signal.h>
+#include <time.h>
+#include <errno.h>
+#include <string.h>
+
+#include "include/ESDS.h"
+#endif
 
 #ifdef USE_INTEL_ASF_EXTRACTOR
 #include "AsfExtractor.h"
@@ -64,6 +75,9 @@
 
 #define USE_SURFACE_ALLOC 1
 #define FRAME_DROP_FREQ 0
+#define AOT_SBR 5
+#define AOT_PS 29
+#define AOT_AAC_LC 2
 
 namespace android {
 
@@ -202,6 +216,16 @@ AwesomePlayer::AwesomePlayer()
       mDecryptHandle(NULL),
       mLastVideoTimeUs(-1),
       mTextDriver(NULL)
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+      ,mAudioFormat(AUDIO_FORMAT_INVALID),
+      mOffload(false),
+      mOffloadCalAudioEOS(false),
+      mOffloadPostAudioEOS(false),
+      mOffloadTearDown(false),
+      mOffloadTearDownForPause(false),
+      mOffloadPauseUs(0),
+      mOffloadSinkCreationError(false)
+#endif
 #ifdef BGM_ENABLED
       ,
       mRemoteBGMsuspend(false),
@@ -225,7 +249,11 @@ AwesomePlayer::AwesomePlayer()
             this, &AwesomePlayer::onCheckAudioStatus);
 
     mAudioStatusEventPending = false;
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mAudioOffloadTearDownEvent = new AwesomeEvent(this,
+                              &AwesomePlayer::onAudioOffloadTearDownEvent);
+    mAudioOffloadTearDownEventPending = false;
+#endif
     reset();
 }
 
@@ -244,7 +272,17 @@ void AwesomePlayer::cancelPlayerEvents(bool keepNotifications) {
     mVideoEventPending = false;
     mQueue.cancelEvent(mVideoLagEvent->eventID());
     mVideoLagEventPending = false;
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mOffload) {
+        /* Remove all the offload events that might be queued
+         * Teardown event and status event of EOS.
+         * Chances the EOS is posted with delay, user pauses.
+         * Then statusEvent has to be removed
+         */
+        mQueue.cancelEvent(mAudioOffloadTearDownEvent->eventID());
+        mAudioOffloadTearDownEventPending = false;
+    }
+#endif
     if (!keepNotifications) {
         mQueue.cancelEvent(mStreamDoneEvent->eventID());
         mStreamDoneEventPending = false;
@@ -574,7 +612,21 @@ void AwesomePlayer::reset_l() {
     }
 
     mDurationUs = -1;
-    modifyFlags(0, ASSIGN);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mOffload) {
+        timer_delete(mPausedTimerId);
+        /* If the reset is called in long pause case, don't change the mOffload and
+        * mFlags. Which will be used when resume, i.e Play is called
+        */
+        if (!mOffloadTearDownForPause) {
+            modifyFlags(0, ASSIGN);
+            mOffload = false;
+        }
+    } else  // Non offload case use the default one
+#endif
+    {
+        modifyFlags(0, ASSIGN);
+    }
     mExtractorFlags = 0;
     mTimeSourceDeltaUs = 0;
     mVideoTimeUs = 0;
@@ -589,6 +641,9 @@ void AwesomePlayer::reset_l() {
     mFileSource.clear();
 
     mBitrate = -1;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mOffloadTearDown = false;
+#endif
     mLastVideoTimeUs = -1;
 
     {
@@ -604,17 +659,28 @@ void AwesomePlayer::reset_l() {
         mStats.mVideoHeight = -1;
         mStats.mFlags = 0;
         mStats.mTracks.clear();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        mStats.mOffloadSinkCreationError = false;
+#endif
     }
 
     mWatchForAudioSeekComplete = false;
     mWatchForAudioEOS = false;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mOffloadCalAudioEOS = false;
+    mOffloadPostAudioEOS = false;
+    mOffloadSinkCreationError = false;
+#endif
 }
 
 void AwesomePlayer::notifyListener_l(int msg, int ext1, int ext2) {
     if (mListener != NULL) {
         sp<MediaPlayerBase> listener = mListener.promote();
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (listener != NULL && !mOffloadTearDown) {
+#else
         if (listener != NULL) {
+#endif
             listener->sendEvent(msg, ext1, ext2);
         }
     }
@@ -880,6 +946,35 @@ void AwesomePlayer::onStreamDone() {
 
 status_t AwesomePlayer::play() {
     ATRACE_CALL();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    status_t status = OK;
+
+    if ((mOffload == true) && ((mFlags & PLAYING) == 0)) {
+        ALOGV("Not playing");
+        /* Offload and the state is not playing stop the pause timer */
+        timer_delete(mPausedTimerId);
+        /* If the system is in supended mode because of long pause and
+         * then resume to continue playing
+         */
+        if(mOffloadTearDownForPause == true){
+            mOffloadTearDown = true;  // to avoid any events posting to upperlayer
+            offloadResume();
+            seekTo(mOffloadPauseUs);
+            mOffloadTearDown = false;
+            return OK;
+       }
+    }
+
+    //  Before play, we should query audio flinger to see if any effect is enabled.
+    //  if (effect is enabled) we should do another prepare w/ IA SW decoding
+    if (mOffload && (isAudioEffectEnabled() ||
+        AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "") == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
+        ALOGV("Offload and effects are enabled or HDMI");
+        mAudioOffloadTearDownEventPending = true;
+        modifyFlags(PLAYING, CLEAR);
+        onAudioOffloadTearDownEvent();
+    }
+
 #ifdef BGM_ENABLED
     status_t err = UNKNOWN_ERROR;
     // If BGM is enabled, then the output associated with the
@@ -893,12 +988,32 @@ status_t AwesomePlayer::play() {
        mRemoteBGMsuspend = false;
     }
 #endif //BGM_ENABLED
+    {
+        Mutex::Autolock autoLock(mLock);
 
+        modifyFlags(CACHE_UNDERRUN, CLEAR);
+
+        status = play_l();
+    }
+    if (mOffload && status != OK) {
+        ALOGV("Offload sink creation failed, create PCM sink");
+        mAudioOffloadTearDownEventPending = true;
+        mOffloadSinkCreationError = true;
+        modifyFlags(PLAYING, CLEAR);
+        onAudioOffloadTearDownEvent();
+        modifyFlags(CACHE_UNDERRUN, CLEAR);
+        mOffloadSinkCreationError = false;
+        return play_l();
+    }
+    ALOGV("returning from play_l()");
+    return status;
+
+#else
     Mutex::Autolock autoLock(mLock);
 
     modifyFlags(CACHE_UNDERRUN, CLEAR);
-
-    return play_l();
+	return play_l();
+#endif
 }
 
 status_t AwesomePlayer::play_l() {
@@ -940,8 +1055,16 @@ status_t AwesomePlayer::play_l() {
                 } else {
                     allowDeepBuffering = false;
                 }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+                if (!mOffload) {
+                    mAudioPlayer = new AudioPlayer(mAudioSink, allowDeepBuffering, this);
+                } else {
+                    mAudioPlayer = new AudioPlayer(mAudioFormat, mAudioSink, AudioPlayer::USE_OFFLOAD, this);
 
+                }
+#else
                 mAudioPlayer = new AudioPlayer(mAudioSink, allowDeepBuffering, this);
+#endif
                 mAudioPlayer->setSource(mAudioSource);
 
                 mTimeSource = mAudioPlayer;
@@ -957,6 +1080,26 @@ status_t AwesomePlayer::play_l() {
         CHECK(!(mFlags & AUDIO_RUNNING));
 
         if (mVideoSource == NULL) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            //Before resuming, check if offloadPauseStartTimer() was cancelled during
+            //last buffer playback due to pause request & calculate EOS delay time
+            if (mOffloadCalAudioEOS) {
+                ALOGV("play: mOffloadCalAudioEOS");
+                int64_t position;
+                getPosition(&position);
+                int64_t totalTimeUs = 0, postEOSDelayUs = 0;
+
+                CHECK(mAudioTrack->getFormat()->findInt64(kKeyDuration, &totalTimeUs));
+                postEOSDelayUs = totalTimeUs - position;
+
+                if (postEOSDelayUs < 0) {
+                    postEOSDelayUs = 0;
+                }
+                ALOGV("play: calc & posting new EOS delay with %.2f secs", postEOSDelayUs / 1E6);
+                offloadPauseStartTimer(postEOSDelayUs);
+                mOffloadCalAudioEOS = false;
+            }
+#endif
             // We don't want to post an error notification at this point,
             // the error returned from MediaPlayer::start() will suffice.
 
@@ -1170,6 +1313,12 @@ status_t AwesomePlayer::pause() {
     Mutex::Autolock autoLock(mLock);
 
     modifyFlags(CACHE_UNDERRUN, CLEAR);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mOffload) {
+        timer_delete(mPausedTimerId);
+        offloadPauseStartTimer(OFFLOAD_PAUSED_TIMEOUT_DURATION);
+    }
+#endif
 
     return pause_l();
 }
@@ -1363,7 +1512,14 @@ status_t AwesomePlayer::getPosition(int64_t *positionUs) {
     } else {
         *positionUs = 0;
     }
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // During long pause, we need to return the posion calculated
+    // when paused. So that user gets indication as  stream paused.
+    // We know that we have closed it to save power.
+    if (mOffload && mOffloadTearDownForPause) {
+        *positionUs = mOffloadPauseUs;
+    }
+#endif
     // set current position to duration when EOS.
     if (mFlags & AT_EOS) {
         *positionUs = mDurationUs;
@@ -1398,6 +1554,18 @@ status_t AwesomePlayer::seekTo_l(int64_t timeUs) {
 
         postVideoEvent_l();
     }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mOffload) {
+        ALOGV("AwesomePlayer::seekToi_l deleting offload time if any");
+        timer_delete(mPausedTimerId);
+        mOffloadCalAudioEOS = false;
+        if (mOffloadTearDownForPause) {
+            mOffloadPauseUs = timeUs;
+            mStats.mPositionUs = timeUs;
+        }
+
+    }
+#endif
 
     mSeeking = SEEK;
     mSeekNotificationSent = false;
@@ -1466,6 +1634,69 @@ status_t AwesomePlayer::initAudioDecoder() {
     const char *mime;
     CHECK(meta->findCString(kKeyMIMEType, &mime));
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    status_t mimemap;
+    int32_t sampleRate;
+    mimemap = mapMimeToAudioFormat(&mAudioFormat, mime);
+    if (!mAudioTrack->getFormat()->findInt32(kKeySampleRate, &sampleRate)) {
+        return NO_INIT;
+    }
+    int32_t channels;
+    if (!mAudioTrack->getFormat()->findInt32(kKeyChannelCount, &channels)) {
+        return NO_INIT;
+    }
+
+    int avgBitRate = -1;
+    mAudioTrack->getFormat()->findInt32(kKeyBitRate, &avgBitRate);
+    ALOGV("initAudioDecoder: the avgBitrate = %ld", avgBitRate);
+
+    if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
+        ALOGV("initAudioDecoder: MEDIA_MIMETYPE_AUDIO_AAC");
+        uint32_t bitRate = -1;
+        if (setAACParameters(meta, &mAudioFormat, &bitRate) != OK) {
+                ALOGV("Failed to set AAC parameters/ADTS format, use non-offload");
+                mAudioFormat = AUDIO_FORMAT_PCM_16_BIT;
+        } else {
+                avgBitRate = (int)bitRate;
+        }
+    }
+
+    ALOGV("initAudioDecoder: sampleRate %d, channels %d", sampleRate, channels);
+    int64_t durationUs;
+    if (mAudioTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
+        Mutex::Autolock autoLock(mMiscStateLock);
+        if (mDurationUs < 0 || durationUs > mDurationUs) {
+            mDurationUs = durationUs;
+        }
+    }
+
+    ALOGV("initAudioDecoder: Sink creation error value %d", mOffloadSinkCreationError);
+    status_t stat = OK;
+    if ( (!mOffloadSinkCreationError) && (AudioSystem::isOffloadSupported(
+                mAudioFormat,
+                AUDIO_STREAM_MUSIC,
+                sampleRate,
+                avgBitRate,
+                mDurationUs,
+                (mVideoTrack != NULL && mVideoSource != NULL),
+                isStreamingHTTP()) && !(isAudioEffectEnabled())) )
+    {
+        ALOGI("initAudioDecoder: Offload supported, creating AudioPlayer");
+        mOffload = true;
+        mAudioSource = mAudioTrack;
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
+        mAudioSource = mAudioTrack;
+    } else {
+        // For non PCM the out put format will be PCM 16 bit.
+        // Set it for player creation
+        ALOGI("initAudioDecoder: creating OMX decoder");
+        mAudioSource = OMXCodec::Create(
+                    mClient.interface(), mAudioTrack->getFormat(),
+                    false, // createEncoder
+                    mAudioTrack);
+        mAudioFormat = AUDIO_FORMAT_PCM_16_BIT;
+    }
+#else
     if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
         mAudioSource = mAudioTrack;
     } else {
@@ -1474,6 +1705,7 @@ status_t AwesomePlayer::initAudioDecoder() {
                 false, // createEncoder
                 mAudioTrack);
     }
+#endif
 
     if (mAudioSource != NULL) {
         int64_t durationUs;
@@ -2042,11 +2274,29 @@ void AwesomePlayer::onCheckAudioStatus() {
     }
 
     status_t finalStatus;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (!mOffload) {
+        if (mWatchForAudioEOS && mAudioPlayer->reachedEOS(&finalStatus)) {
+            mWatchForAudioEOS = false;
+            modifyFlags(AUDIO_AT_EOS, SET);
+            modifyFlags(FIRST_FRAME, SET);
+            postStreamDoneEvent_l(finalStatus);
+        }
+    } else {
+        if (mWatchForAudioEOS && mAudioPlayer->reachedEOS(&finalStatus) && mOffloadPostAudioEOS) {
+            mOffloadPostAudioEOS = false;
+            mWatchForAudioEOS = false;
+            modifyFlags(AUDIO_AT_EOS, SET);
+            modifyFlags(FIRST_FRAME, SET);
+            postStreamDoneEvent_l(finalStatus);
+        }
+#else
     if (mWatchForAudioEOS && mAudioPlayer->reachedEOS(&finalStatus)) {
         mWatchForAudioEOS = false;
         modifyFlags(AUDIO_AT_EOS, SET);
         modifyFlags(FIRST_FRAME, SET);
         postStreamDoneEvent_l(finalStatus);
+#endif
     }
 }
 
@@ -2803,6 +3053,39 @@ void AwesomePlayer::modifyFlags(unsigned value, FlagMode mode) {
     }
 }
 
+/* Store the current status and use it while starting for IA decoding
+ * Terminate the active stream by calling reset_l()
+ */
+status_t AwesomePlayer::offloadSuspend() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("offloadSuspend");
+    /* Store the current status and use it while starting for IA decoding
+     * Terminate the active stream by calling reset_l()
+     */
+    Stats stats;
+    uint32_t extractorFlags;
+    stats.mURI = mUri;
+    stats.mUriHeaders = mUriHeaders;
+    stats.mFileSource = mFileSource;
+    stats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
+    getPosition(&stats.mPositionUs);
+    mOffloadPauseUs = stats.mPositionUs;
+    extractorFlags = mExtractorFlags;
+    if (mOffload && ((mFlags & PLAYING) == 0)) {
+         ALOGV("offloadSuspend(): Deleting timer");
+         mOffloadTearDownForPause = true;
+         timer_delete(mPausedTimerId);
+    }
+
+    reset_l();
+
+    mExtractorFlags = extractorFlags;
+    mStats = stats;
+    return OK;
+#endif
+    return OK;
+}
+
 #ifdef BGM_ENABLED
 status_t AwesomePlayer::remoteBGMSuspend() {
 
@@ -2830,8 +3113,11 @@ status_t AwesomePlayer::remoteBGMSuspend() {
 
     return OK;
 }
-status_t AwesomePlayer::remoteBGMResume() {
+#endif
 
+status_t AwesomePlayer::offloadResume() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("offloadResume");
     Mutex::Autolock autoLock(mLock);
 
     Stats stats = mStats;
@@ -2853,13 +3139,369 @@ status_t AwesomePlayer::remoteBGMResume() {
 
     seekTo_l(stats.mPositionUs);
     mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
+    play_l();
+    mOffloadTearDownForPause = false;
+    // Update the flag
+    mStats.mFlags = mFlags;
+    return OK;
+#endif
+    return OK;
+}
+
+#ifdef BGM_ENABLED
+status_t AwesomePlayer::remoteBGMResume() {
+    Mutex::Autolock autoLock(mLock);
+    Stats stats = mStats;
+
+    status_t err;
+    if (stats.mFileSource != NULL) {
+       err = setDataSource_l(stats.mFileSource);
+
+        if (err == OK) {
+            mFileSource = stats.mFileSource;
+        }
+    } else {
+        err = setDataSource_l(stats.mURI, &stats.mUriHeaders);
+    }
+
+    if (err != OK) {
+        return err;
+    }
+
+    seekTo_l(stats.mPositionUs);
+    mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
 
     // Update the flag
     mStats.mFlags = mFlags;
-
     ALOGD("[BGMUSIC] audio track/sink recreated successfully");
     return OK;
 }
 #endif //BGM_ENABLED
+
+void AwesomePlayer::postAudioOffloadTearDown() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    postAudioOffloadTearDownEvent_l();
+#endif
+}
+
+void AwesomePlayer::postAudioOffloadTearDownEvent_l() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mAudioOffloadTearDownEventPending) {
+        return;
+    }
+    mAudioOffloadTearDownEventPending = true;
+    mQueue.postEvent(mAudioOffloadTearDownEvent);
+#endif
+}
+
+status_t AwesomePlayer::mapMimeToAudioFormat(audio_format_t *audioFormat, const char *mime) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    status_t val = OK;
+
+    if (mime != NULL && audioFormat != NULL) {
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG)) {
+            ALOGV("MP3 format");
+            *audioFormat = AUDIO_FORMAT_MP3;
+        }
+
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
+            ALOGV("RAW format");
+            *audioFormat = AUDIO_FORMAT_PCM_16_BIT;
+        }
+
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_NB)) {
+            *audioFormat = AUDIO_FORMAT_AMR_NB;
+        }
+
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_WB)) {
+            *audioFormat = AUDIO_FORMAT_AMR_WB;
+        }
+
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
+            ALOGV("AAC format");
+            *audioFormat = AUDIO_FORMAT_AAC;
+        }
+
+
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_VORBIS)) {
+            *audioFormat = AUDIO_FORMAT_VORBIS;
+        }
+        // Add other supported format as required
+    } else {
+        if(audioFormat != NULL) {
+            *audioFormat = AUDIO_FORMAT_INVALID;
+        }
+        val = BAD_VALUE;
+    }
+
+    return val;
+#endif
+    return OK;
+}
+
+status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFormat, uint32_t *avgBitRate) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // Get ESDS and check its validity
+    const void *ed;    // ESDS query data
+    size_t es;         // ESDS query size
+    uint32_t type;     // meta type info
+    if((!meta->findData(kKeyESDS, &type, &ed, &es)) ||
+       (type != kTypeESDS) || (es < 14) || (es > 256)){
+        ALOGW("setAACParameters: ESDS Info malformed or absent - No offload");
+        return BAD_VALUE;
+    }
+    ESDS esds((uint8_t *)ed, (off_t) es);
+    CHECK_EQ(esds.InitCheck(), (status_t)OK);
+
+    // Get the bit-rate information from ESDS
+    uint32_t maxBitRate;
+    if (esds.getBitRate(&maxBitRate, avgBitRate) == OK) {
+        ALOGV("setAACParameters: Before set maxBitRate %d, avgBitRate %d", maxBitRate, *avgBitRate);
+        if((*avgBitRate == 0) && maxBitRate)
+            *avgBitRate = maxBitRate;
+    }
+
+    ALOGV("setAACParameters: After set maxBitRate %d, avgBitRate %d", maxBitRate, *avgBitRate);
+    // Get Codec specific information
+    size_t csd_offset;
+    size_t csd_size;
+    if ((esds.getCodecSpecificOffset(&csd_offset, &csd_size) != OK) ||
+        (csd_size < 2) ) {
+        LOGW("setAACParameters: Codec specific info not found! - No offload");
+        return BAD_VALUE;
+    }
+
+    // Backup the ESD to local array for easy processing to get further AAC info
+    uint8_t esd[256]= {0};
+    memcpy(esd, ed, es);
+
+    uint8_t *data = esd+csd_offset;
+    off_t size = (off_t)es-csd_offset; // CSD data size
+
+    // Start Parsing the CSD info as per the ISO:14496-Part3 specifications
+    uint32_t AOT = (data[0]>>3);  // First 5 bits
+    uint32_t freqIndex = (data[0] & 7) << 1 | (data[1] >> 7); // Bits 6,7,8,9
+    uint32_t numChannels = 0;
+    uint32_t downSamplingSBR = 0;
+    int      skip=0;
+
+    ALOGV("setAACParameters: AOT %d", AOT);
+    // TODO: Remove when HEv1 & HEv2 is supported by FW or AAC gets stable
+    if (AOT == AOT_SBR || AOT == AOT_PS) {
+        LOGV("setAACParameters: HEAAC");
+    }
+
+    // Frequency range of 96kHz to 8kHz (MPEG4-Part3-Standard has definition) supported
+    if (freqIndex > 11) {
+        ALOGW("setAACParameters: Unsupported freqIndex1 %d, no offload", freqIndex);
+        return BAD_VALUE;
+    }
+
+    // If channel info found is not suitable, return unsupported format
+    numChannels = (data[1] >> 3) & 15;  // Bits 10 to 13
+    if ((numChannels != 1) && (numChannels !=2)) {
+        ALOGW("setAACParameters: Unsupported channel_cnt %d, no offload", numChannels);
+        return BAD_VALUE;
+    }
+
+    // For Explicit signalling HEv1 and HEv2, get Extended frequency index
+    if (AOT == AOT_SBR || AOT == AOT_PS) {
+        uint32_t extFreqIndex =  (data[1] & 7) << 1 | (data[2] >> 7);
+        if (extFreqIndex > 11) {
+            ALOGW("setAACParameters: Unsupported freqIndex2 %d, no offload", freqIndex);
+            return BAD_VALUE;
+        }
+        if (extFreqIndex == freqIndex) {
+            downSamplingSBR = 1;
+            //Current TEL LPE has limitation it cannot play these SBR files
+            // Use IA OMX S/w decoder. When LPE supports, remove the return
+            ALOGW("setAACParameters: Downsampling");
+        }
+        freqIndex = extFreqIndex;
+    }
+    // SBR Explicit signaling with extended AOT information
+    if (AOT != AOT_SBR) {
+        // Scan ESDS for next audioObjectType to be HEv1 (SBR=5:00101)
+        // If HEv1 found, again scan for looking    HEv2 (PS=29:11101)
+        // Now, look for 11 bits of sync info+SBR 0, 01010110, 111-00101
+        if ( (!(data[1]&0x1)) && (data[2]==0x56) && (data[3]==0xE5)){
+            if (data[4] & 0x80){ // SBR present flag is set
+                AOT = AOT_SBR;
+                uint32_t extFreqIndex = (data[4] >>3) & 0xF;
+                if (extFreqIndex > 11) {
+                    ALOGW("setAACParameters: Unsupported freqIndex3 %d, no offload", freqIndex);
+                    return BAD_VALUE;
+                }
+                if (extFreqIndex == freqIndex){
+                    downSamplingSBR = 1;
+                    ALOGW("setAACParameters: Downsampling");
+                }
+
+                // Get next 11 sync bits. If it matches 0x548 and next bit PS=1, then its HEv2
+                // Bit stream to look for is  ....101, 01001000, 1 (the last 1 represents PS)..
+                if (((data[4]&0x7)==0x5) && (data[5]==0x48) && (data[6]&0x80)){
+                    AOT = AOT_PS;
+                }
+                freqIndex = extFreqIndex;
+            }
+        }
+    }
+
+    static uint32_t kSamplingRate[] = {96000, 88200, 64000, 48000, 44100, 32000, 24000,
+                                       22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0};
+
+    AudioParameter param = AudioParameter();
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_AVG_BIT_RATE), *avgBitRate);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_SAMPLE_RATE), kSamplingRate[freqIndex]);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_ID), AOT);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_NUM_CHANNEL), numChannels);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_DOWN_SAMPLING), downSamplingSBR);
+
+    ALOGV("setAACParameters: avgBitRate %d, sampleRate %d, AOT %d,"
+          "numChannels %d, downSamplingSBR %d", *avgBitRate,
+           kSamplingRate[freqIndex], AOT, numChannels, downSamplingSBR);
+
+    status_t status = NO_ERROR;
+    status = AudioSystem::setParameters(0, param.toString());
+
+    if (status != NO_ERROR) {
+        ALOGE("error in setting offload AAC parameters");
+        return status;
+    }
+
+    *aFormat = AUDIO_FORMAT_AAC;
+    return OK;
+#endif
+    return OK;
+}
+/* Function will start a timer, which will expire if resume does not happen
+ * in the configured duration. On timer expiry the callback function will
+ * be invoked
+ */
+void AwesomePlayer::offloadPauseStartTimer(int64_t time) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    struct sigevent  pausedEvent;
+    struct itimerspec its;
+    ALOGV("offloadPauseStartTimer with time = %lld ", time);
+    timer_delete(mPausedTimerId);
+    memset(&pausedEvent,0, sizeof(sigevent));
+    pausedEvent.sigev_notify = SIGEV_THREAD;
+    if( time == OFFLOAD_PAUSED_TIMEOUT_DURATION) {
+        pausedEvent.sigev_notify_function = &timerCallback;
+    } else {
+
+        pausedEvent.sigev_notify_function = &timerCallbackEOS;
+        mOffloadCalAudioEOS= true;
+        mOffloadPostAudioEOS = false;
+    }
+
+    pausedEvent.sigev_value.sival_ptr = this;
+    if (timer_create(CLOCK_REALTIME,&pausedEvent, &mPausedTimerId ) != 0) {
+        return ;
+    }
+    its.it_interval.tv_sec  = time / 1000000;
+    its.it_interval.tv_nsec = (time - (its.it_interval.tv_sec * 1000000)) * 1000;
+    its.it_value.tv_sec     = time / 1000000;
+    its.it_value.tv_nsec    = (time - (its.it_interval.tv_sec * 1000000)) * 1000;
+   /* Start the timer */
+
+    if (timer_settime(mPausedTimerId, 0, &its, NULL) == -1) {
+        return;
+    }
+    ALOGV("Stated timer with ID = %x", mPausedTimerId);
+#endif
+}
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+extern "C" {
+
+    void  timerCallback(union sigval sig) {
+        AwesomePlayer  *awesomePlayer = ((AwesomePlayer*)sig.sival_ptr);
+        awesomePlayer->offloadSuspend();
+    }
+
+    void  timerCallbackEOS(union sigval sig) {
+        AwesomePlayer  *awesomePlayer = ((AwesomePlayer*)sig.sival_ptr);
+        awesomePlayer->mOffloadPostAudioEOS = true;
+        awesomePlayer->postAudioEOS(0);
+        awesomePlayer->mOffloadCalAudioEOS= false;
+    }
+}
+#endif
+
+/* Posted by the AudioPlayer whenever the offload stream needs to be terminated
+ * After tearing down the offload, use IA-s/w decoder.
+ * First store the stream state of offload and call the reset.
+ * Resume using the stored state on IA decoding.
+ */
+void AwesomePlayer::onAudioOffloadTearDownEvent() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    status_t err;
+    ALOGV(" AwesomePlayer::onAudioOffloadTearDownEvent");
+    if (!mAudioOffloadTearDownEventPending) {
+        return;
+    }
+    mAudioOffloadTearDownEventPending = false;
+    /* Store the current status and use it while starting for IA decoding
+     * Terminate the active stream by calling reset_l()
+     */
+    {
+        Mutex::Autolock autoLock(mStatsLock);
+        mStats.mURI = mUri;
+        mStats.mUriHeaders = mUriHeaders;
+        mStats.mFileSource = mFileSource;
+        mStats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
+        getPosition(&mStats.mPositionUs);
+        mStats.mOffloadSinkCreationError = mOffloadSinkCreationError;
+    }
+
+    Stats stats = mStats;
+    reset_l();
+
+    mOffloadSinkCreationError = stats.mOffloadSinkCreationError;
+    mOffloadTearDown = true;
+    /* Resume the IA decoding. */
+    if (stats.mFileSource != NULL) {
+        err = setDataSource_l(stats.mFileSource);
+        if (err == OK) {
+            mFileSource = stats.mFileSource;
+        }
+    } else {
+        err = setDataSource_l(stats.mURI, &stats.mUriHeaders);
+    }
+    mIsAsyncPrepare = true;
+    mFlags |= PREPARING;
+    /* Call parepare for the IA decoding */
+    onPrepareAsyncEvent();
+    /* Seek to the positionw where offload terminated */
+    seekTo(stats.mPositionUs);
+
+    if (stats.mFlags & PLAYING) {
+        play();
+    }
+    mOffloadTearDown = false;
+#endif
+}
+
+bool AwesomePlayer::isAudioEffectEnabled() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("isAudioEffectEnabled");
+    const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
+
+    if (audioFlinger != 0) {
+        if (audioFlinger->isAudioEffectEnabled(0)) {
+            ALOGV("Effects enabled");
+            return true;
+        }
+        int sessionId = mAudioSink->getSessionId();
+        if (audioFlinger->isAudioEffectEnabled(sessionId)) {
+            ALOGV("S:Effects enabled");
+            return true;
+        }
+     }
+    ALOGV("Effects not enabled");
+    return false;
+#endif
+    return false;
+}
 
 }  // namespace android

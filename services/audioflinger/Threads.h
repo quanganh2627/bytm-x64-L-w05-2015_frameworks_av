@@ -394,6 +394,7 @@ public:
                                 status_t *status);
 
                 AudioStreamOut* getOutput() const;
+                AudioStreamOut* getOutput_l() const;
                 AudioStreamOut* clearOutput();
                 virtual audio_stream_t* stream() const;
 
@@ -424,12 +425,15 @@ public:
                 virtual status_t addEffectChain_l(const sp<EffectChain>& chain);
                 virtual size_t removeEffectChain_l(const sp<EffectChain>& chain);
                 virtual uint32_t hasAudioSession(int sessionId) const;
+                void getEffectSessionIds(Vector<int> &sessionIds);
                 virtual uint32_t getStrategyForSession_l(int sessionId);
 
 
                 virtual status_t setSyncEvent(const sp<SyncEvent>& event);
                 virtual bool     isValidSyncEvent(const sp<SyncEvent>& event) const;
                         void     invalidateTracks(audio_stream_type_t streamType);
+                virtual status_t setParametersMusicOffload(
+                                 const String8& keyValuePairs);
 
 
 protected:
@@ -625,7 +629,7 @@ public:
     virtual                 ~DirectOutputThread();
 
     // Thread virtuals
-
+                void        invalidateTracks(audio_stream_type_t streamType);
     virtual     bool        checkForNewParameters_l();
 
 protected:

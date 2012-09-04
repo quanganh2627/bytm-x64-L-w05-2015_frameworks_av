@@ -95,6 +95,14 @@ public:
     virtual status_t queryDefaultPreProcessing(int audioSession,
                                               effect_descriptor_t *descriptors,
                                               uint32_t *count) = 0;
+
+    virtual bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    bool hasVideo = false,
+                                    bool hasStreaming = false) const = 0;
 };
 
 

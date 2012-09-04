@@ -40,7 +40,15 @@ uint32_t audio_track_cblk_t::stepUser(size_t stepCount, size_t frameCount, bool 
     if (isOut) {
         // If stepServer() has been called once, switch to normal obtainBuffer() timeout period
         if (bufferTimeoutMs == MAX_STARTUP_TIMEOUT_MS-1) {
-            bufferTimeoutMs = MAX_RUN_TIMEOUT_MS;
+        // if your using larger buffers for offloading change the wait time accordingly.
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            if (flags & CBLK_OFFLOAD_USES_DEEP_BUFFER) {
+                bufferTimeoutMs = MAX_OFFLOAD_DEEP_BUFFER_TIMEOUT_MS;
+            } else
+#endif
+            {
+                bufferTimeoutMs = MAX_RUN_TIMEOUT_MS;
+            }
         }
     } else if (u > server) {
         ALOGW("stepUser occurred after track reset");

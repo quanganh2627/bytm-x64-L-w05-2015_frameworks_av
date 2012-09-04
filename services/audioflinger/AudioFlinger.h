@@ -221,7 +221,14 @@ public:
                                 const Parcel& data,
                                 Parcel* reply,
                                 uint32_t flags);
+    //Get Offload buffer size
+    size_t getOffloadBufferSize(
+            uint32_t bitRate,
+            uint32_t sampleRate,
+            uint32_t channel,
+            int output);
 
+    virtual bool isAudioEffectEnabled(int sessionId) const;
     // end of IAudioFlinger interface
 
     sp<NBLog::Writer>   newWriter_l(size_t size, const char *name);
@@ -394,6 +401,7 @@ private:
         virtual void        stop();
         virtual void        flush();
         virtual void        pause();
+        virtual void        setVolume(float left, float right);
         virtual status_t    attachAuxEffect(int effectId);
         virtual status_t    allocateTimedBuffer(size_t size,
                                                 sp<IMemory>* buffer);
@@ -526,6 +534,7 @@ private:
 
                 // These two fields are immutable after onFirstRef(), so no lock needed to access
                 AudioHwDevice*                      mPrimaryHardwareDev; // mAudioHwDevs[0] or NULL
+                AudioHwDevice*                      mOffloadDev;
                 DefaultKeyedVector<audio_module_handle_t, AudioHwDevice*>  mAudioHwDevs;
 
     // for dump, indicates which hardware operation is currently in progress (but not stream ops)

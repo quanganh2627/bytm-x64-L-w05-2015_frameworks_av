@@ -43,6 +43,10 @@
 #define ALOGVV(a...) do { } while(0)
 #endif
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+#define CODEC_OFFLOAD_MODULE_NAME "codec_offload"
+#endif
+
 namespace android {
 
 // ----------------------------------------------------------------------------
@@ -602,6 +606,21 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
                 h->setEnabled(enabled);
             }
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        sp<ThreadBase> thread = mThread.promote();
+        if (thread == 0) {
+            return NO_ERROR;
+        }
+        PlaybackThread *p = (PlaybackThread *)thread.get();
+
+        if (enabled) {
+            if (p->type() == ThreadBase::DIRECT ) {
+                ALOGV("setEnabled: Offload, invalidate tracks");
+                DirectOutputThread *srcThread = (DirectOutputThread *)p;
+                srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+            }
+        }
+#endif
     }
     return NO_ERROR;
 }

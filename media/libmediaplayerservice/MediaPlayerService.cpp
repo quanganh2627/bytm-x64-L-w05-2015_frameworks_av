@@ -896,15 +896,9 @@ status_t MediaPlayerService::Client::isPlaying(bool* state)
 
 status_t MediaPlayerService::Client::getCurrentPosition(int *msec)
 {
-    ALOGV("getCurrentPosition");
     sp<MediaPlayerBase> p = getPlayer();
     if (p == 0) return UNKNOWN_ERROR;
     status_t ret = p->getCurrentPosition(msec);
-    if (ret == NO_ERROR) {
-        ALOGV("[%d] getCurrentPosition = %d", mConnId, *msec);
-    } else {
-        ALOGE("getCurrentPosition returned %d", ret);
-    }
     return ret;
 }
 
@@ -1295,7 +1289,8 @@ MediaPlayerService::AudioOutput::AudioOutput(int sessionId)
       mCallbackData(NULL),
       mBytesWritten(0),
       mSessionId(sessionId),
-      mFlags(AUDIO_OUTPUT_FLAG_NONE) {
+      mFlags(AUDIO_OUTPUT_FLAG_NONE)
+{
     ALOGV("AudioOutput(%d)", sessionId);
     mTrack = 0;
     mRecycledTrack = 0;
@@ -1308,6 +1303,9 @@ MediaPlayerService::AudioOutput::AudioOutput(int sessionId)
     mAuxEffectId = 0;
     mSendLevel = 0.0;
     setMinBufferCount();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mBitRate = 0;
+#endif
 }
 
 MediaPlayerService::AudioOutput::~AudioOutput()
@@ -1386,6 +1384,25 @@ status_t MediaPlayerService::AudioOutput::getFramesWritten(uint32_t *frameswritt
     return OK;
 }
 
+// Overloaded open
+status_t MediaPlayerService::AudioOutput::open(
+        uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
+        int bitRate,
+        audio_format_t format, int bufferCount,
+        AudioCallback cb, void *cookie,
+        audio_output_flags_t flags)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD){
+        mBitRate = bitRate;
+     }
+     return open(sampleRate, channelCount, channelMask, format,
+                 bufferCount, cb, cookie, flags);
+#else
+    return 0;
+#endif
+}
+
 status_t MediaPlayerService::AudioOutput::open(
         uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
         audio_format_t format, int bufferCount,
@@ -1424,11 +1441,46 @@ status_t MediaPlayerService::AudioOutput::open(
         }
     }
 
+    // check the flag and call the appropriate audio track constructor. use bit rate
     AudioTrack *t;
     CallbackData *newcbd = NULL;
-    if (mCallback != NULL) {
-        newcbd = new CallbackData(this);
-        t = new AudioTrack(
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+       if (mCallback != NULL) {
+            newcbd = new CallbackData(this);
+            t = new AudioTrack(
+                mStreamType,
+                mBitRate,
+                sampleRate,
+                format,
+                channelMask,
+                frameCount,
+                flags,
+                CallbackWrapper,
+                newcbd,
+                0,  // notification frames
+                mSessionId);
+        } else {
+            t = new AudioTrack(
+                mStreamType,
+                mBitRate,
+                sampleRate,
+                format,
+                channelMask,
+                frameCount,
+                flags,
+                NULL,
+                NULL,
+                0,
+                mSessionId);
+        }
+    }
+      else
+#endif
+      { //flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD
+        if (mCallback != NULL) {
+            newcbd = new CallbackData(this);
+            t = new AudioTrack(
                 mStreamType,
                 sampleRate,
                 format,
@@ -1439,8 +1491,8 @@ status_t MediaPlayerService::AudioOutput::open(
                 newcbd,
                 0,  // notification frames
                 mSessionId);
-    } else {
-        t = new AudioTrack(
+        } else {
+            t = new AudioTrack(
                 mStreamType,
                 sampleRate,
                 format,
@@ -1451,7 +1503,8 @@ status_t MediaPlayerService::AudioOutput::open(
                 NULL,
                 0,
                 mSessionId);
-    }
+        }
+    } //flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD
 
     if ((t == 0) || (t->initCheck() != NO_ERROR)) {
         ALOGE("Unable to create audio track");
@@ -1463,7 +1516,6 @@ status_t MediaPlayerService::AudioOutput::open(
 
     if (mRecycledTrack) {
         // check if the existing track can be reused as-is, or if a new track needs to be created.
-
         bool reuse = true;
         if ((mCallbackData == NULL && mCallback != NULL) ||
                 (mCallbackData != NULL && mCallback == NULL)) {
@@ -1653,6 +1705,50 @@ status_t MediaPlayerService::AudioOutput::attachAuxEffect(int effectId)
 void MediaPlayerService::AudioOutput::CallbackWrapper(
         int event, void *cookie, void *info) {
     //ALOGV("callbackwrapper");
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    CallbackData *data = (CallbackData*)cookie;
+    data->lock();
+    AudioOutput *me = data->getOutput();
+    AudioTrack::Buffer *buffer = (AudioTrack::Buffer *)info;
+
+    if (me == NULL) {
+        // no output set, likely because the track was scheduled to be reused
+        // by another player, but the format turned out to be incompatible.
+        data->unlock();
+        buffer->size = 0;
+        return;
+    }
+
+    switch(event) {
+    case AudioTrack::EVENT_TEAR_DOWN:
+    {
+        // For AudioTrack events of Tear down  just call
+        // registered call back function and pass the event
+        AudioTrack::Buffer buffer;
+        buffer.flags = event;
+        buffer.size  = 4;
+        (*me->mCallback)(me, &buffer, buffer.size, me->mCallbackCookie);
+    } break;
+    case AudioTrack::EVENT_MORE_DATA:
+    {
+        size_t actualSize = (*me->mCallback)(
+            me, buffer->raw, buffer->size, me->mCallbackCookie);
+        if (actualSize == 0 && buffer->size > 0 && me->mNextOutput == NULL) {
+            // We've reached EOS but the audio track is not stopped yet,
+            // keep playing silence.
+            memset(buffer->raw, 0, buffer->size);
+            actualSize = buffer->size;
+       }
+       buffer->size = actualSize;
+    } break;
+    default:
+    {
+        LOGE("received unknown event type: %d inside CallbackWrapper !", event);
+        break;
+    }
+    }
+    data->unlock();
+#else
     if (event != AudioTrack::EVENT_MORE_DATA) {
         return;
     }
@@ -1682,6 +1778,7 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
 
     buffer->size = actualSize;
     data->unlock();
+#endif
 }
 
 int MediaPlayerService::AudioOutput::getSessionId() const

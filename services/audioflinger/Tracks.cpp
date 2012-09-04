@@ -50,6 +50,10 @@
 #define ALOGVV(a...) do { } while(0)
 #endif
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+#define CODEC_OFFLOAD_MODULE_NAME "codec_offload"
+#endif
+
 namespace android {
 
 // ----------------------------------------------------------------------------
@@ -288,6 +292,12 @@ void AudioFlinger::TrackHandle::flush() {
 
 void AudioFlinger::TrackHandle::pause() {
     mTrack->pause();
+}
+
+void AudioFlinger::TrackHandle::setVolume(float left, float right) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mTrack->setVolume(left, right);
+#endif
 }
 
 status_t AudioFlinger::TrackHandle::attachAuxEffect(int EffectId)
@@ -634,6 +644,21 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
             mState = state;
             triggerEvents(AudioSystem::SYNC_EVENT_PRESENTATION_COMPLETE);
         }
+//To be checked - offload
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        // In case of Music Offload write, it could be blocked on pause-event
+        // make sure we restart the output
+        PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
+        if (playbackThread->type() == DIRECT && (state==PAUSING || state==PAUSED)) {
+            ALOGV("calling resume directly");
+            status_t status = playbackThread->getOutput_l()->stream->resume(
+                                            playbackThread->getOutput_l()->stream);
+            if (NO_ERROR != status) {
+                ALOGE("AudioStreamOut::resume returns error = %d", status);
+            }
+            mState = TrackBase::RESUMING;
+        }
+#endif
     } else if (thread == 0) {
       /*in case of direct output thread, on disconnect; the thread exits hence
        we need to make sure the tracks are restored */
@@ -677,6 +702,20 @@ void AudioFlinger::PlaybackThread::Track::stop()
             addBatteryData(IMediaPlayerService::kBatteryDataAudioFlingerStop);
 #endif
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
+        if ((playbackThread->type() == DIRECT) ) {
+            if (state!=ACTIVE && state!=RESUMING) {
+                ALOGV("Track:stop: state!=ACTIVE && state!=RESUMING");
+                status_t status = playbackThread->getOutput_l()->stream->flush(
+                                           playbackThread->getOutput_l()->stream);
+                if (NO_ERROR != status) {
+                    ALOGE("stop returns error = %d", status);
+                }
+            }
+        }
+#endif
+
     }
 }
 
@@ -690,6 +729,20 @@ void AudioFlinger::PlaybackThread::Track::pause()
             mState = PAUSING;
             ALOGV("ACTIVE/RESUMING => PAUSING (%d) on thread %p", mName, thread.get());
             if (!isOutputTrack()) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+                // Call direct pause for offload mechanism
+                PlaybackThread* pPBThread = static_cast<PlaybackThread*>(thread.get());
+                if (pPBThread->type() == DIRECT) {
+                    status_t status = pPBThread->getOutput_l()->stream->pause(
+                                               pPBThread->getOutput_l()->stream);
+                    if (NO_ERROR != status) {
+                        ALOGE("AudioStreamOut::stop returns error = %d", status);
+                    }
+                    // No need to wait for the direct output thread to run to do state
+                    // transition
+                    setPaused();
+                }
+#endif
                 thread->mLock.unlock();
                 AudioSystem::stopOutput(thread->id(), mStreamType, mSessionId);
                 thread->mLock.lock();
@@ -709,6 +762,23 @@ void AudioFlinger::PlaybackThread::Track::flush()
     sp<ThreadBase> thread = mThread.promote();
     if (thread != 0) {
         Mutex::Autolock _l(thread->mLock);
+    PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (playbackThread->type() == DIRECT) {
+            ALOGV("Calling flush directly");
+            mCblk->lock.lock();
+            reset();
+            mCblk->lock.unlock();
+            // If state needs to be set to STOPPED, do that here
+            if (mState == STOPPED || mState == PAUSED || mState == PAUSING) {
+                mState = STOPPED;
+            }
+
+            playbackThread->getOutput_l()->stream->flush(
+                                      playbackThread->getOutput_l()->stream);
+        }
+#endif
+
         if (mState != STOPPING_1 && mState != STOPPING_2 && mState != STOPPED && mState != PAUSED &&
                 mState != PAUSING && mState != IDLE && mState != FLUSHED) {
             return;
@@ -720,7 +790,7 @@ void AudioFlinger::PlaybackThread::Track::flush()
         // this will be done by prepareTracks_l() when the track is stopped.
         // prepareTracks_l() will see mState == FLUSHED, then
         // remove from active track list, reset(), and trigger presentation complete
-        PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
+//        PlaybackThread *playbackThread = (PlaybackThread *)thread.get(); To be checked 
         if (playbackThread->mActiveTracks.indexOf(this) < 0) {
             reset();
         }
@@ -731,7 +801,26 @@ void AudioFlinger::PlaybackThread::Track::reset()
 {
     // Do not reset twice to avoid discarding data written just after a flush and before
     // the audioflinger thread detects the track is stopped.
+    // For MusicOffload: Flush the data if requested anytime
+    // Check if Music Offload playback is running
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    bool offload = false;
+    sp<ThreadBase> baseThread = mThread.promote();
+    if (baseThread != 0) {
+        PlaybackThread *playbackThread = (PlaybackThread *)baseThread.get();
+
+        if (playbackThread->type() == DIRECT) {
+            offload = true;
+        }
+    }
+#endif
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (!mResetDone || offload) {
+#else
     if (!mResetDone) {
+#endif
+
         TrackBase::reset();
         // Force underrun condition to avoid false underrun callback until first data is
         // written to buffer
@@ -745,6 +834,13 @@ void AudioFlinger::PlaybackThread::Track::reset()
     }
 }
 
+void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
+{
+   /* Call set volume of offload hal. This will be invoked by the
+    * volume control from application
+    */
+}
+	
 status_t AudioFlinger::PlaybackThread::Track::attachAuxEffect(int EffectId)
 {
     status_t status = DEAD_OBJECT;

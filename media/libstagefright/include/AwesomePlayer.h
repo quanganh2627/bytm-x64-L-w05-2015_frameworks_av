@@ -32,8 +32,12 @@
 #include <utils/threads.h>
 #include <drm/DrmManagerClient.h>
 
-namespace android {
+#include <media/stagefright/MetaData.h> // for AAC aparams
+extern "C" void timerCallback(union sigval);
+extern "C" void timerCallbackEOS(union sigval);
 
+namespace android {
+#define OFFLOAD_PAUSED_TIMEOUT_DURATION  10000000  //in micro seconds
 struct AudioPlayer;
 struct DataSource;
 struct MediaBuffer;
@@ -106,7 +110,13 @@ struct AwesomePlayer {
     void postAudioSeekComplete();
 
     status_t dump(int fd, const Vector<String16> &args) const;
-
+    
+    void offloadPauseStartTimer(int64_t time);
+    status_t offloadSuspend();
+    status_t offloadResume();
+    bool mOffloadCalAudioEOS;
+    bool mOffloadPostAudioEOS;
+    void postAudioOffloadTearDown();
 #ifdef BGM_ENABLED
     status_t remoteBGMSuspend();
     status_t remoteBGMResume();
@@ -320,6 +330,10 @@ private:
         String8 mURI;
         int64_t mBitrate;
 
+        KeyedVector<String8, String8> mUriHeaders;
+        sp<DataSource> mFileSource;
+        int64_t mPositionUs;
+
         // FIXME:
         // These two indices are just 0 or 1 for now
         // They are not representing the actual track
@@ -333,6 +347,7 @@ private:
         int32_t mVideoHeight;
         uint32_t mFlags;
         Vector<TrackStat> mTracks;
+        bool mOffloadSinkCreationError;
     } mStats;
 
     status_t setVideoScalingMode(int32_t mode);
@@ -349,6 +364,27 @@ private:
 
     AwesomePlayer(const AwesomePlayer &);
     AwesomePlayer &operator=(const AwesomePlayer &);
+
+    void postAudioOffloadTearDownEvent_l();
+    void onAudioOffloadTearDownEvent();
+    bool isAudioEffectEnabled();
+    status_t createAudioPlayer(audio_format_t audioFormat,
+                               int sampleRate,
+                               int channelsCount,
+                               int bitRate);
+    status_t mapMimeToAudioFormat(audio_format_t *audioFormat, const char *mime);
+    status_t setAACParameters(sp<MetaData> meta, audio_format_t *aFormat,
+                              uint32_t *avgBitRate);
+
+    audio_format_t mAudioFormat;
+    bool mOffload;
+    timer_t mPausedTimerId;
+    bool mOffloadTearDown;
+    bool mOffloadTearDownForPause;
+    int64_t mOffloadPauseUs;
+    sp<TimedEventQueue::Event> mAudioOffloadTearDownEvent;
+    bool mAudioOffloadTearDownEventPending;
+    bool mOffloadSinkCreationError;
 #ifdef BGM_ENABLED
     bool mRemoteBGMsuspend;
     bool mBGMEnabled;
@@ -357,7 +393,6 @@ private:
 #ifdef LVSE
     sp<LVAudioSource> mLVAudioSource;
 #endif
-
 };
 
 }  // namespace android

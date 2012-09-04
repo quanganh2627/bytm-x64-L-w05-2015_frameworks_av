@@ -85,6 +85,10 @@
 #define ALOGVV(a...) do { } while(0)
 #endif
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+#define CODEC_OFFLOAD_MODULE_NAME "codec_offload"
+#endif
+
 namespace android {
 
 // retry counts for buffer fill timeout
@@ -93,9 +97,13 @@ static const int8_t kMaxTrackRetries = 50;
 static const int8_t kMaxTrackStartupRetries = 50;
 // allow less retry attempts on direct output thread.
 // direct outputs can be a scarce resource in audio hardware and should
-// be released as quickly as possible.
+// be released as quickly as possible. However if the stream is deep buffered
+// we need to make sure that AudioTrack client has enough time to send large buffers
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+static const int8_t kMaxTrackRetriesDirect = 20;
+#else.
 static const int8_t kMaxTrackRetriesDirect = 2;
-
+#endif
 // don't warn about blocked writes or record buffer overflows more often than this
 static const nsecs_t kWarningThrottleNs = seconds(5);
 
@@ -1308,6 +1316,15 @@ void AudioFlinger::PlaybackThread::setMasterMute(bool muted)
 
 void AudioFlinger::PlaybackThread::setStreamVolume(audio_stream_type_t stream, float value)
 {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // Check if MusicOffload Track is running, if so, instanly apply volume
+    // AudioTrack.
+    ALOGV("setStreamVolume of thread");
+    if (stream == AUDIO_STREAM_MUSIC && mType == DIRECT && getOutput_l()) {
+        ALOGV("DIRECT thread calling set_volume");
+        getOutput_l()->stream->set_volume(getOutput_l()->stream, value, value);
+    }
+#endif
     Mutex::Autolock _l(mLock);
     mStreamTypes[stream].volume = value;
 }
@@ -1544,6 +1561,16 @@ uint32_t AudioFlinger::PlaybackThread::hasAudioSession(int sessionId) const
     return result;
 }
 
+void AudioFlinger::PlaybackThread::getEffectSessionIds(Vector<int> &sessionIds)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    size_t size = mEffectChains.size();
+    for (size_t i=0; i < size; i++) {
+        sessionIds.add(mEffectChains[i]->sessionId());
+    }
+#endif
+}
+	
 uint32_t AudioFlinger::PlaybackThread::getStrategyForSession_l(int sessionId)
 {
     // session AUDIO_SESSION_OUTPUT_MIX is placed in same strategy as MUSIC stream so that
@@ -1565,6 +1592,15 @@ AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::getOutput() const
 {
     Mutex::Autolock _l(mLock);
     return mOutput;
+}
+
+AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::getOutput_l() const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("returns mOutput");
+    return mOutput;
+#endif
+    return NULL;
 }
 
 AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::clearOutput()
@@ -1633,6 +1669,26 @@ void AudioFlinger::PlaybackThread::threadLoop_removeTracks(
     }
 
 }
+
+status_t AudioFlinger::PlaybackThread::setParametersMusicOffload(const String8& keyValuePairs)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("setParametersMusicOffload: %s", keyValuePairs.string());
+    status_t status = NO_ERROR;
+
+    status = getOutput_l()->stream->common.set_parameters(
+                                           &getOutput_l()->stream->common,
+                                           keyValuePairs.string());
+
+    if (status != NO_ERROR) {
+        ALOGE("PBT: Error setting offload codec parameters");
+        return status;
+    }
+    return status;
+#endif
+    return NO_ERROR;
+}
+
 
 void AudioFlinger::PlaybackThread::checkSilentMode_l()
 {
@@ -3175,9 +3231,19 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
         } else {
             minFrames = 1;
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (track->isPausing()) {
+             track->setPaused();
+        }
+
+        if ((track->framesReady() >= minFrames) && track->isReady() &&  track->isActive())
+//                !track->isPaused() && !track->isTerminated())
+        {
+#else
         if ((track->framesReady() >= minFrames) && track->isReady() &&
                 !track->isPaused() && !track->isTerminated())
         {
+#endif
             ALOGVV("track %d u=%08x, s=%08x [OK]", track->name(), cblk->user, cblk->server);
 
             if (track->mFillingUpStatus == Track::FS_FILLED) {
@@ -3215,7 +3281,13 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
             // As we only care about the transition phase between two tracks on a
             // direct output, it is not a problem to ignore the underrun case.
             if (i == (count - 1)) {
-                if (left != mLeftVolFloat || right != mRightVolFloat) {
+//ToBeChecked - Prasanna offload
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            if (left != mLeftVolFloat || right != mRightVolFloat) {	
+            if (left != mLeftVolFloat || right != mRightVolFloat || (left==0 && mLeftVolFloat==0)) {
+#else
+            if (left != mLeftVolFloat || right != mRightVolFloat) {
+#endif
                     mLeftVolFloat = left;
                     mRightVolFloat = right;
 
@@ -3311,6 +3383,10 @@ void AudioFlinger::DirectOutputThread::threadLoop_mix()
         memcpy(curBuf, buffer.raw, buffer.frameCount * mFrameSize);
         frameCount -= buffer.frameCount;
         curBuf += buffer.frameCount * mFrameSize;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        //Used in writing offload data to avoid sending padded bytes.
+        mixBufferSize = buffer.frameCount * mFrameSize;
+#endif
         mActiveTrack->releaseBuffer(&buffer);
     }
     sleepTime = 0;
@@ -3433,6 +3509,29 @@ void AudioFlinger::DirectOutputThread::cacheParameters_l()
     // use shorter standby delay as on normal output to release
     // hardware resources as soon as possible
     standbyDelay = microseconds(activeSleepTime*2);
+}
+
+void AudioFlinger::DirectOutputThread::invalidateTracks(audio_stream_type_t streamType)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV ("DirectOutputThread::invalidateTracks mixer %p, streamType %d, mTracks.size %d",
+            this,  streamType, mTracks.size());
+    Mutex::Autolock _l(mLock);
+
+    size_t size = mTracks.size();
+    for (size_t i = 0; i < size; i++) {
+        sp<Track> t = mTracks[i];
+        if (t->streamType() == streamType) {
+            if(!t->isPaused() && (!(t->mCblk->flags & CBLK_OFFLOAD_TEAR_DOWN_ON))) {
+                t->mCblk->lock.lock();
+                t->mCblk->flags |= CBLK_INVALID_ON;
+                t->mCblk->flags |= CBLK_OFFLOAD_TEAR_DOWN_ON;
+                t->mCblk->cv.signal();
+                t->mCblk->lock.unlock();
+            }
+        }
+    }
+#endif
 }
 
 // ----------------------------------------------------------------------------

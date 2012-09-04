@@ -5,6 +5,10 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES:= \
     AudioParameter.cpp
 LOCAL_MODULE:= libmedia_helper
@@ -32,6 +36,10 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 ###########################
 
 include $(CLEAR_VARS)
+
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
 
 LOCAL_SRC_FILES:= \
     AudioTrack.cpp \

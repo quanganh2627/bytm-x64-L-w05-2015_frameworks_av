@@ -192,6 +192,13 @@ public:
     // that looks on primary device for a stream with fast flag, primary flag, or first one.
     virtual uint32_t getPrimaryOutputSamplingRate() = 0;
     virtual size_t getPrimaryOutputFrameCount() = 0;
+    virtual bool isAudioEffectEnabled(int sessionId) const = 0;
+
+    virtual size_t getOffloadBufferSize(
+            uint32_t bitRate,
+            uint32_t sampleRate,
+            uint32_t channel,
+            int output) = 0;
 
 };
 
