@@ -166,7 +166,6 @@ AACExtractor::AACExtractor(
     channel = (header[0] & 0x1) << 2 | (header[1] >> 6);
 
     mMeta = MakeAACCodecSpecificData(profile, sf_index, channel);
-
     off64_t streamSize, numFrames = 0;
     size_t frameSize = 0;
     int64_t duration = 0;

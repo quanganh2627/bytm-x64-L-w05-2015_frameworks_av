@@ -39,6 +39,7 @@ enum {
     ALLOCATE_TIMED_BUFFER,
     QUEUE_TIMED_BUFFER,
     SET_MEDIA_TIME_TRANSFORM,
+    SET_VOLUME
 };
 
 class BpAudioTrack : public BpInterface<IAudioTrack>
@@ -162,6 +163,16 @@ public:
         }
         return status;
     }
+    virtual void setVolume(float left,float right)
+    {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+       Parcel data, reply;
+       data.writeInterfaceToken(IAudioTrack::getInterfaceDescriptor());
+       data.writeFloat(left);
+       data.writeFloat(right);
+       remote()->transact(SET_VOLUME, data, &reply);
+#endif
+    }
 };
 
 IMPLEMENT_META_INTERFACE(AudioTrack, "android.media.IAudioTrack");
@@ -234,6 +245,15 @@ status_t BnAudioTrack::onTransact(
             xform.a_to_b_denom = data.readInt32();
             int target = data.readInt32();
             reply->writeInt32(setMediaTimeTransform(xform, target));
+            return NO_ERROR;
+        } break;
+        case SET_VOLUME:{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            CHECK_INTERFACE(IAudioTrack, data, reply);
+            float left = data.readFloat();
+            float right = data.readFloat();
+            setVolume(left, right) ;
+#endif
             return NO_ERROR;
         } break;
         default:

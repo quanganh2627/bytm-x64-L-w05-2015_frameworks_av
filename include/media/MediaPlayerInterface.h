@@ -101,6 +101,15 @@ public:
                 void *cookie = NULL,
                 audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE) = 0;
 
+        // Over-loaded function for offload playback
+        virtual status_t    open(
+                uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
+                int bitRate,
+                audio_format_t format=AUDIO_FORMAT_PCM_16_BIT,
+                int bufferCount=DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                AudioCallback cb = NULL,
+                void *cookie = NULL,
+                audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE) = 0;
         virtual void        start() = 0;
         virtual ssize_t     write(const void* buffer, size_t size) = 0;
         virtual void        stop() = 0;
