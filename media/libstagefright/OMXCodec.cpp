@@ -106,6 +106,13 @@ static sp<MediaSource> InstantiateSoftwareEncoder(
         const char *name;
         sp<MediaSource> (*CreateFunc)(const sp<MediaSource> &, const sp<MetaData> &);
     };
+    if (!strncmp(name, "CIPAACEncoder", 13)) {
+        int32_t aacProfile;
+        meta->findInt32(kKeyAACProfile, &aacProfile);
+        if(aacProfile != OMX_AUDIO_AACObjectLC) {
+           return NULL; //Use Google AAC encoder for all AAC profiles except AAC_LC.
+        }
+    }
 
     static const FactoryInfo kFactoryInfo[] = {
 #ifdef USE_INTEL_MDP
