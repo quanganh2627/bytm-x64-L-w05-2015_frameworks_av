@@ -450,6 +450,8 @@ status_t AwesomePlayer::setDataSource_l(const sp<MediaExtractor> &extractor) {
                     &mStats.mTracks.editItemAt(mStats.mVideoTrackIndex);
                 stat->mMIME = mime.string();
             }
+        } else if (!haveAudio && !strncasecmp(mime.string(), "audio/unknown-type",18 )) {
+            haveAudio = false;
         } else if (!haveAudio && !strncasecmp(mime.string(), "audio/", 6)) {
             setAudioSource(extractor->getTrack(i));
             haveAudio = true;
