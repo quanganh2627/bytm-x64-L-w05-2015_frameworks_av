@@ -49,6 +49,13 @@ static const char kCmdDeadlockedString[] = "AudioPolicyService command thread ma
 static const int kDumpLockRetries = 50;
 static const int kDumpLockSleepUs = 20000;
 
+ static bool checkPermission() {
+	if (getpid() == IPCThreadState::self()->getCallingPid()) return true;
+	bool ok = checkCallingPermission(String16("android.permission.MODIFY_AUDIO_SETTINGS"));
+	if (!ok) LOGE("Request requires android.permission.MODIFY_AUDIO_SETTINGS");
+	return ok;
+}
+
 namespace {
     extern struct audio_policy_service_ops aps_ops;
 };
@@ -181,6 +188,25 @@ status_t AudioPolicyService::setPhoneState(audio_mode_t state)
 
     Mutex::Autolock _l(mLock);
     mpAudioPolicy->set_phone_state(mpAudioPolicy, state);
+    return NO_ERROR;
+}
+
+status_t AudioPolicyService::setFmRxState(int state)
+{
+    if (mpAudioPolicy == NULL) {
+    	return NO_INIT;
+    }
+    if (!checkPermission()) {
+    	return PERMISSION_DENIED;
+    }
+    if (state < 0 || state > AUDIO_MODE_FM_MAX) {
+      	return BAD_VALUE;
+    }
+    
+    AudioSystem::setFmRxMode(state);
+    
+    Mutex::Autolock _l(mLock);
+    mpAudioPolicy->set_fm_mode(mpAudioPolicy, state);
     return NO_ERROR;
 }
 
