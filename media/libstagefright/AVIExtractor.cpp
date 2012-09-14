@@ -713,8 +713,25 @@ status_t AVIExtractor::parseStreamFormat(off64_t offset, size_t size) {
     } else {
         uint32_t format = U16LE_AT(data);
 
-        if ((format == 0x55) || (format == 0x50)) {
+        if ((format == WAVE_FORMAT_MPEGLAYER3) || (format == WAVE_FORMAT_MPEG)) {
             track->mMeta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG);
+        } else if (format == WAVE_FORMAT_AAC) {
+//          The WAVEFORMATEX structure in AVI container is as below:
+//          ____________________________________________________________________________
+//          |Format|channel|sample rate|nAvgBytesPerSec|nBlockAlign|wBitsPerSample|cbSize|
+//     Bytes 0    1  2   3   4 ----- 7   8   -----  11   12 --- 13    14 --- 15    16  17
+//          where Format = 0x00FF, for AAC Audio.
+//          After these 18 bytes the bitstream contains the following information:
+//          ______Byte[18]_____,___Byte[19]______
+//          |AACProfile+1 |sf_index |ChannelCount| .....
+//     Bits  7   -----  3, 2--0 | 7,  6 ----- 3 , .....
+
+            uint8_t profile, sf_index, channels;
+            profile = (data[18] >> 3) -1;
+            sf_index = (((data[18] & 0x7) << 1 ) | (data[19] >> 0x7));
+            channels = (data[19] & 0x7F) >> 3;
+            track->mMeta = MakeAACCodecSpecificData(profile, sf_index, channels);
+            return OK;
         } else {
             ALOGW("Unsupported audio format = 0x%04x", format);
         }
