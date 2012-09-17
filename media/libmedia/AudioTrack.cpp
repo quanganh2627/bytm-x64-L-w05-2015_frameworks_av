@@ -1123,7 +1123,12 @@ status_t AudioTrack::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
             }
             if (CC_UNLIKELY(result != NO_ERROR)) {
                 cblk->waitTimeMs += waitTimeMs;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+                if (!(mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) &&
+                      cblk->waitTimeMs >= cblk->bufferTimeoutMs) {
+#else
                 if (cblk->waitTimeMs >= cblk->bufferTimeoutMs) {
+#endif
                     // timing out when a loop has been set and we have already written upto loop end
                     // is a normal condition: no need to wake AudioFlinger up.
                     if (cblk->user < cblk->loopEnd) {
