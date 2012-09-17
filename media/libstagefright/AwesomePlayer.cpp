@@ -1681,7 +1681,7 @@ status_t AwesomePlayer::initAudioDecoder() {
         ALOGV("initAudioDecoder: MEDIA_MIMETYPE_AUDIO_AAC");
         uint32_t bitRate = -1;
         if (setAACParameters(meta, &mAudioFormat, &bitRate) != OK) {
-                ALOGV("Failed to set AAC parameters/ADTS format, use non-offload");
+                ALOGV("Failed to set AAC parameters/Unsupported AAC format, use non-offload");
                 mAudioFormat = AUDIO_FORMAT_PCM_16_BIT;
         } else {
                 avgBitRate = (int)bitRate;
@@ -3283,6 +3283,10 @@ status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFor
     if (status != NO_ERROR) {
         ALOGE("error in setting offload AAC parameters");
         return status;
+    }
+    if ((AOT != AOT_SBR) && (AOT != AOT_PS) && (AOT != AOT_AAC_LC)) {
+        ALOGV("Unsupported AAC format");
+        return BAD_VALUE;
     }
 
     *aFormat = AUDIO_FORMAT_AAC;

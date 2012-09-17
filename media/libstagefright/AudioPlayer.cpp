@@ -426,11 +426,9 @@ size_t AudioPlayer::AudioSinkCallback(
     AudioTrack::Buffer *buff = (AudioTrack::Buffer *)buffer;
 
     // Check for control events in this callback function
-    if((size == 4) && me->mObserver) {
-        if (buff->flags == AudioTrack::EVENT_TEAR_DOWN) {
-            ALOGV("AudioSinkCallback: Tear down event received");
-            me->mObserver->postAudioOffloadTearDown();
-        }
+    if((size == 4) && me->mObserver && (buff->flags == AudioTrack::EVENT_TEAR_DOWN)) {
+        ALOGV("AudioSinkCallback: Tear down event received");
+        me->mObserver->postAudioOffloadTearDown();
         return 0;
     }
 #endif
