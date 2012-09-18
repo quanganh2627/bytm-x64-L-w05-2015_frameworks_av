@@ -393,16 +393,12 @@ void BlockIterator::seek(
         }
     }
 
-    // Always *search* based on the video track, but finalize based on mTrackNum
+    // Always *search* based on the video track, if video is present.
     const mkvparser::CuePoint::TrackPosition* pTP;
-    if (pTrack && pTrack->GetType() == 1) {
-        bool ret = pCues->Find(seekTimeNs, pTrack, pCP, pTP);
-        if (!ret) {
-            ALOGE("Could not find the matching cue point");
-            return;
-        }
+    if (pTrack) {
+        pCues->Find(seekTimeNs, pTrack, pCP, pTP);
     } else {
-        ALOGE("Did not locate the video track for seeking");
+        ALOGE("Did not locate the track for seeking");
         return;
     }
 
