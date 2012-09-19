@@ -726,6 +726,7 @@ struct MyHandler : public AHandler {
                 mSeekPending = false;
                 mFirstAccessUnit = true;
                 mAllTracksHaveTime = false;
+                mTryFakeRTCP = false;
                 mNTPAnchorUs = -1;
                 mMediaAnchorUs = -1;
                 mNumAccessUnitsReceived = 0;
@@ -829,7 +830,11 @@ struct MyHandler : public AHandler {
                     uint64_t ntpTime;
                     CHECK(msg->findInt32("rtp-time", (int32_t *)&rtpTime));
                     CHECK(msg->findInt64("ntp-time", (int64_t *)&ntpTime));
-
+                    if (mTryFakeRTCP) {
+                       // already use Fake RTCP to calculate time, so don't update track
+                       // mRTPAnchor or mNTPAnchorUs with the later arrived SR
+                       break;
+                    }
                     onTimeUpdate(trackIndex, rtpTime, ntpTime);
                     break;
                 }
@@ -952,6 +957,7 @@ struct MyHandler : public AHandler {
                 }
 
                 mAllTracksHaveTime = false;
+                mTryFakeRTCP = false;
                 mNTPAnchorUs = -1;
 
                 int64_t timeUs;
@@ -1063,6 +1069,7 @@ struct MyHandler : public AHandler {
                         ALOGW("We received some RTCP packets, but time "
                               "could not be established on all tracks, now "
                               "using fake timestamps");
+                        mTryFakeRTCP = true;
 
                         fakeTimestamps();
                     }
@@ -1211,6 +1218,7 @@ private:
         bool mNewSegment;
 
         uint32_t mRTPAnchor;
+        bool mFakeRTPAnchor;
         int64_t mNTPAnchorUs;
         int32_t mTimeScale;
 
@@ -1292,6 +1300,7 @@ private:
         info->mNTPAnchorUs = -1;
         info->mNormalPlayTimeRTP = 0;
         info->mNormalPlayTimeUs = 0ll;
+        info->mFakeRTPAnchor = false;
         info->mFirstAccessUnit = false;
 
         unsigned long PT;
@@ -1393,6 +1402,8 @@ private:
     void fakeTimestamps() {
         mNTPAnchorUs = -1ll;
         for (size_t i = 0; i < mTracks.size(); ++i) {
+            TrackInfo *track = &mTracks.editItemAt(i);
+            track->mFakeRTPAnchor = true;
             onTimeUpdate(i, 0, 0ll);
         }
     }
@@ -1479,6 +1490,15 @@ private:
             ALOGV("storing accessUnit, no time established yet");
             track->mPackets.push_back(accessUnit);
             return;
+        }
+
+        if (track->mFakeRTPAnchor && !track->mPackets.empty()) {
+            sp<ABuffer> accessUnit = *track->mPackets.begin();
+            uint32_t rtpTime;
+            CHECK(accessUnit->meta()->findInt32(
+                    "rtp-time", (int32_t *)&rtpTime));
+            track->mFakeRTPAnchor = false;
+            track->mRTPAnchor = rtpTime;
         }
 
         while (!track->mPackets.empty()) {
