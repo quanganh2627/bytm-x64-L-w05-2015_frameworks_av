@@ -968,8 +968,11 @@ status_t AwesomePlayer::play() {
     //  Before play, we should query audio flinger to see if any effect is enabled.
     //  if (effect is enabled) we should do another prepare w/ IA SW decoding
     if (mOffload && (isAudioEffectEnabled() ||
-        AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "") == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
-        ALOGV("Offload and effects are enabled or HDMI");
+        (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
+        (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_BLUETOOTH_A2DP, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE))) {
+        ALOGV("Offload and effects are enabled or HDMI or BT connected");
         mAudioOffloadTearDownEventPending = true;
         modifyFlags(PLAYING, CLEAR);
         onAudioOffloadTearDownEvent();
@@ -3148,6 +3151,15 @@ status_t AwesomePlayer::offloadResume() {
 
     seekTo_l(stats.mPositionUs);
     mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
+
+    if (mOffloadTearDownForPause && (isAudioEffectEnabled() ||
+        (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
+        (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_BLUETOOTH_A2DP, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE))) {
+        mOffload = false;
+    }
+
     play_l();
     mOffloadTearDownForPause = false;
     // Update the flag
