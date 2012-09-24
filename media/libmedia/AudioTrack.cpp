@@ -45,6 +45,10 @@
 
 #include <audio_utils/primitives.h>
 
+#ifdef USE_INTEL_SRC
+#include "iasrc_resampler.h"
+#endif
+
 #define OFFLOAD_MULTIPLIER 100
 #define DEFAULT_MULTIPLIER 1
 namespace android {
@@ -673,7 +677,11 @@ status_t AudioTrack::setSampleRate(int rate)
         return NO_INIT;
     }
     // Resampler implementation limits input sampling rate to 2 x output sampling rate.
-    if (rate <= 0 || rate > afSamplingRate*2 ) return BAD_VALUE;
+    if ((rate <= 0 || rate > afSamplingRate*2)
+#ifdef USE_INTEL_SRC
+    && !iaresamplib_supported_conversion(rate, afSamplingRate)
+#endif
+    ) return BAD_VALUE;
 
     AutoMutex lock(mLock);
     mCblk->sampleRate = rate;
