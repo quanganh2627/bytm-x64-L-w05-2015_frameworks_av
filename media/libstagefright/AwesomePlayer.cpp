@@ -3393,16 +3393,26 @@ status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFor
  */
 void AwesomePlayer::offloadPauseStartTimer(int64_t time, bool at_pause) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("offloadPauseStartTimer with time = %lld ", time);
+
+    timer_delete(mPausedTimerId);
+
+    if (time == 0) {
+        ALOGV("offloadPauseStartTimer: Posting EOS immediately");
+        mOffloadPostAudioEOS = true;
+        postAudioEOS(0);
+        mOffloadCalAudioEOS= false;
+        return;
+    }
+
     struct sigevent  pausedEvent;
     struct itimerspec its;
-    ALOGV("offloadPauseStartTimer with time = %lld ", time);
-    timer_delete(mPausedTimerId);
     memset(&pausedEvent,0, sizeof(sigevent));
     pausedEvent.sigev_notify = SIGEV_THREAD;
+
     if (at_pause) {
         pausedEvent.sigev_notify_function = &timerCallback;
     } else {
-
         pausedEvent.sigev_notify_function = &timerCallbackEOS;
         mOffloadCalAudioEOS= true;
         mOffloadPostAudioEOS = false;
