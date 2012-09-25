@@ -157,6 +157,7 @@ public:
     virtual status_t setStreamOutput(audio_stream_type_t stream, audio_io_handle_t output) = 0;
 
     virtual status_t setVoiceVolume(float volume) = 0;
+    virtual status_t setFmRxVolume(float volume) = 0;
 
     virtual status_t getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames,
                                     audio_io_handle_t output) const = 0;

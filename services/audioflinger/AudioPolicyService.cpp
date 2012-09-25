@@ -723,6 +723,17 @@ bool AudioPolicyService::AudioCommandThread::threadLoop()
                     }
                     delete data;
                     }break;
+                case SET_FM_RX_VOLUME: {
+                    FmRxVolumeData *data = (FmRxVolumeData *)command->mParam;
+                    ALOGV("AudioCommandThread() processing set fm rx volume: value %f",
+                            data->mVolume);
+                    command->mStatus = AudioSystem::setFmRxVolume(data->mVolume);
+                    if (command->mWaitStatus) {
+                        command->mCond.signal();
+                        mWaitWorkCV.wait(mLock);
+                    }
+                    delete data;
+                    }break;
                 default:
                     ALOGW("AudioCommandThread() unknown command %d", command->mCommand);
                 }
@@ -869,6 +880,32 @@ status_t AudioPolicyService::AudioCommandThread::voiceVolumeCommand(float volume
     Mutex::Autolock _l(mLock);
     insertCommand_l(command, delayMs);
     ALOGV("AudioCommandThread() adding set voice volume volume %f", volume);
+    mWaitWorkCV.signal();
+    if (command->mWaitStatus) {
+        command->mCond.wait(mLock);
+        status =  command->mStatus;
+        mWaitWorkCV.signal();
+    }
+    return status;
+}
+
+status_t AudioPolicyService::AudioCommandThread::fmRxVolumeCommand(float volume, int delayMs)
+{
+    status_t status = NO_ERROR;
+
+    AudioCommand *command = new AudioCommand();
+    command->mCommand = SET_FM_RX_VOLUME;
+    FmRxVolumeData *data = new FmRxVolumeData();
+    data->mVolume = volume;
+    command->mParam = data;
+    if (delayMs == 0) {
+        command->mWaitStatus = true;
+    } else {
+        command->mWaitStatus = false;
+    }
+    Mutex::Autolock _l(mLock);
+    insertCommand_l(command, delayMs);
+    ALOGV("AudioCommandThread() adding set fm rx volume volume %f", volume);
     mWaitWorkCV.signal();
     if (command->mWaitStatus) {
         command->mCond.wait(mLock);
@@ -1041,6 +1078,11 @@ int AudioPolicyService::stopTone()
 int AudioPolicyService::setVoiceVolume(float volume, int delayMs)
 {
     return (int)mAudioCommandThread->voiceVolumeCommand(volume, delayMs);
+}
+
+int AudioPolicyService::setFmRxVolume(float volume, int delayMs)
+{
+    return (int)mAudioCommandThread->fmRxVolumeCommand(volume, delayMs);
 }
 
 // ----------------------------------------------------------------------------
@@ -1539,6 +1581,13 @@ static int aps_set_voice_volume(void *service, float volume, int delay_ms)
     return audioPolicyService->setVoiceVolume(volume, delay_ms);
 }
 
+static int aps_set_fm_rx_volume(void *service, float volume, int delay_ms)
+{
+    AudioPolicyService *audioPolicyService = (AudioPolicyService *)service;
+
+    return audioPolicyService->setFmRxVolume(volume, delay_ms);
+}
+
 }; // extern "C"
 
 namespace {
@@ -1557,6 +1606,7 @@ namespace {
         start_tone            : aps_start_tone,
         stop_tone             : aps_stop_tone,
         set_voice_volume      : aps_set_voice_volume,
+        set_fm_rx_volume      : aps_set_fm_rx_volume,
         move_effects          : aps_move_effects,
         load_hw_module        : aps_load_hw_module,
         open_output_on_module : aps_open_output_on_module,
