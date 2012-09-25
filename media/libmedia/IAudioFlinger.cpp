@@ -61,6 +61,7 @@ enum {
     CLOSE_INPUT,
     SET_STREAM_OUTPUT,
     SET_VOICE_VOLUME,
+    SET_FM_RX_VOLUME,
     GET_RENDER_POSITION,
     GET_INPUT_FRAMES_LOST,
     NEW_AUDIO_SESSION_ID,
@@ -508,6 +509,15 @@ public:
         data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
         data.writeFloat(volume);
         remote()->transact(SET_VOICE_VOLUME, data, &reply);
+        return reply.readInt32();
+    }
+
+    virtual status_t setFmRxVolume(float volume)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
+        data.writeFloat(volume);
+        remote()->transact(SET_FM_RX_VOLUME, data, &reply);
         return reply.readInt32();
     }
 
@@ -970,6 +980,12 @@ status_t BnAudioFlinger::onTransact(
             CHECK_INTERFACE(IAudioFlinger, data, reply);
             float volume = data.readFloat();
             reply->writeInt32( setVoiceVolume(volume) );
+            return NO_ERROR;
+        } break;
+        case SET_FM_RX_VOLUME: {
+            CHECK_INTERFACE(IAudioFlinger, data, reply);
+            float volume = data.readFloat();
+            reply->writeInt32( setFmRxVolume(volume) );
             return NO_ERROR;
         } break;
         case GET_RENDER_POSITION: {

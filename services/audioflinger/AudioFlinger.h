@@ -175,6 +175,8 @@ public:
 
     virtual status_t setVoiceVolume(float volume);
 
+    virtual status_t setFmRxVolume(float volume);
+
     virtual status_t getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames,
                                        audio_io_handle_t output) const;
 
@@ -2023,6 +2025,7 @@ mutable Mutex               mLock;      // mutex for process, commands and handl
         AUDIO_HW_GET_MIC_MUTE,          // get_mic_mute
         AUDIO_HW_SET_MIC_MUTE,          // set_mic_mute
         AUDIO_HW_SET_VOICE_VOLUME,      // set_voice_volume
+        AUDIO_HW_SET_FM_RX_VOLUME,      // set_fm_rx_volume
         AUDIO_HW_SET_PARAMETER,         // set_parameters
         AUDIO_HW_GET_INPUT_BUFFER_SIZE, // get_input_buffer_size
         AUDIO_HW_GET_MASTER_VOLUME,     // get_master_volume

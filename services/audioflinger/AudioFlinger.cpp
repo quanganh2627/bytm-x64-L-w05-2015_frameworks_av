@@ -1049,6 +1049,26 @@ status_t AudioFlinger::setVoiceVolume(float value)
     return ret;
 }
 
+status_t AudioFlinger::setFmRxVolume(float value)
+{
+    status_t ret = initCheck();
+    if (ret != NO_ERROR) {
+        return ret;
+    }
+
+    // check calling permissions
+    if (!settingsAllowed()) {
+        return PERMISSION_DENIED;
+    }
+
+    AutoMutex lock(mHardwareLock);
+    mHardwareStatus = AUDIO_HW_SET_FM_RX_VOLUME;
+    ret = mPrimaryHardwareDev->hwDevice()->set_fm_rx_volume(mPrimaryHardwareDev->hwDevice(), value);
+    mHardwareStatus = AUDIO_HW_IDLE;
+
+    return ret;
+}
+
 status_t AudioFlinger::getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames,
         audio_io_handle_t output) const
 {
