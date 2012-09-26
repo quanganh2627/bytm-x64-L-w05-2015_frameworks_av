@@ -6661,6 +6661,14 @@ bool AudioFlinger::RecordThread::checkForNewParameters_l()
                 reconfig = true;
             }
         }
+        if (param.getInt(String8(AudioParameter::keyInputSource), value) == NO_ERROR) {
+            if (value == AUDIO_SOURCE_VOICE_COMMUNICATION) {
+                //
+                // Might have different buffering model applied for VoIP input source
+                //
+                reconfig = true;
+            }
+        }
         if (param.getInt(String8(AudioParameter::keyRouting), value) == NO_ERROR) {
             // forward device change to effects that have requested to be
             // aware of attached audio device.
