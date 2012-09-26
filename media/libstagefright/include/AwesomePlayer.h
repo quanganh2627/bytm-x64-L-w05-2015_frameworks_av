@@ -38,6 +38,7 @@ extern "C" void timerCallbackEOS(union sigval);
 
 namespace android {
 #define OFFLOAD_PAUSED_TIMEOUT_DURATION  10000000  //in micro seconds
+#define OFFLOAD_STANDBY_TIMEOUT_DURATION  3000000  //in micro seconds
 struct AudioPlayer;
 struct DataSource;
 struct MediaBuffer;
@@ -110,8 +111,7 @@ struct AwesomePlayer {
     void postAudioSeekComplete();
 
     status_t dump(int fd, const Vector<String16> &args) const;
-    
-    void offloadPauseStartTimer(int64_t time);
+    void offloadPauseStartTimer(int64_t time, bool at_pause = false);
     status_t offloadSuspend();
     status_t offloadResume();
     bool mOffloadCalAudioEOS;
