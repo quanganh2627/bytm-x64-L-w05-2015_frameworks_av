@@ -1348,7 +1348,7 @@ status_t AwesomePlayer::pause() {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mOffload) {
         timer_delete(mPausedTimerId);
-        offloadPauseStartTimer(OFFLOAD_PAUSED_TIMEOUT_DURATION);
+        offloadPauseStartTimer(OFFLOAD_PAUSED_TIMEOUT_DURATION, true);
     }
 #endif
 
@@ -1368,6 +1368,14 @@ status_t AwesomePlayer::pause_l(bool at_eos) {
             // want to make sure that all samples remaining in the audio
             // track's queue are played out.
             mAudioPlayer->pause(true /* playPendingSamples */);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            // During offload, enter standby after 3 seconds
+            // if no playback activity.
+            if (mOffload) {
+                timer_delete(mPausedTimerId);
+                offloadPauseStartTimer(OFFLOAD_STANDBY_TIMEOUT_DURATION, true);
+            }
+#endif
         } else {
             mAudioPlayer->pause();
         }
@@ -1545,6 +1553,7 @@ status_t AwesomePlayer::getPosition(int64_t *positionUs) {
     // We know that we have closed it to save power.
     if (mOffload && mOffloadTearDownForPause) {
         *positionUs = mOffloadPauseUs;
+         return OK;
     }
 #endif
     // set current position to duration when EOS.
@@ -3298,7 +3307,7 @@ status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFor
  * in the configured duration. On timer expiry the callback function will
  * be invoked
  */
-void AwesomePlayer::offloadPauseStartTimer(int64_t time) {
+void AwesomePlayer::offloadPauseStartTimer(int64_t time, bool at_pause) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     struct sigevent  pausedEvent;
     struct itimerspec its;
@@ -3306,7 +3315,7 @@ void AwesomePlayer::offloadPauseStartTimer(int64_t time) {
     timer_delete(mPausedTimerId);
     memset(&pausedEvent,0, sizeof(sigevent));
     pausedEvent.sigev_notify = SIGEV_THREAD;
-    if( time == OFFLOAD_PAUSED_TIMEOUT_DURATION) {
+    if (at_pause) {
         pausedEvent.sigev_notify_function = &timerCallback;
     } else {
 
