@@ -946,7 +946,12 @@ M4OSA_ERR M4VSS3GPP_editOpen( M4VSS3GPP_EditContext pContext,
             break;
         case M4VIDEOEDITING_k1920_1080:
             pC->ewc.uiVideoWidth = 1920;
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            // Optimization for 1080p encode in Intel Platform
+            pC->ewc.uiVideoHeight = 1080;
+#else
             pC->ewc.uiVideoHeight = 1088; // need to be multiples of 16
+#endif
             break;
 
         default: /* If output video size is not given, we take QCIF size */

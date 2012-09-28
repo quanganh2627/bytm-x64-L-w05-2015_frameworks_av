@@ -3778,6 +3778,11 @@ M4OSA_ERR M4MCS_setOutputParams( M4MCS_Context pContext,
             // multiple of 16.
             // Ensure encoding width and height are multiple of 16
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            // Optimization for 1080p encode in Intel Platform
+            if (pC->EncodingWidth != M4ENCODER_1920_1080_Width &&
+                pC->EncodingHeight != M4ENCODER_1920_1080_Height) {
+#endif
             uint32_t remainder = pC->EncodingWidth % 16;
             if (remainder != 0) {
                 if (remainder >= 8) {
@@ -3806,6 +3811,9 @@ M4OSA_ERR M4MCS_setOutputParams( M4MCS_Context pContext,
                 uiFrameHeight = pC->EncodingHeight;
             }
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            }
+#endif
         }
         else
         {
