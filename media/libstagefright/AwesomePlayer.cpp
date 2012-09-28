@@ -74,6 +74,12 @@
 #define AOT_PS 29
 #define AOT_AAC_LC 2
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#define DEFAULT_SURFACE_WIDTH    320
+#define DEFAULT_SURFACE_HEIGHT   240
+#define DEFAULT_SURFACE_PIXEL_FORMAT PIXEL_FORMAT_TRANSPARENT
+#endif
+
 namespace android {
 
 static int64_t kLowWaterMarkUs = 2000000ll;  // 2secs
@@ -227,7 +233,7 @@ AwesomePlayer::AwesomePlayer()
       mOffloadPauseUs(0),
       mOffloadSinkCreationError(false)
 #endif
-	  {
+      {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
     DataSource::RegisterDefaultSniffers();
@@ -262,6 +268,10 @@ AwesomePlayer::~AwesomePlayer() {
 
     mClient.disconnect();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (mDefaultNativeWindow != NULL) {
+        mDefaultNativeWindow.clear();
+        mMDClient->destroyVideoSurface();
+    }
     setDisplaySource_l(false);
 #endif
 }
@@ -407,6 +417,19 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
         if (mVideoSource != NULL) {
             if (mMDClient == NULL) {
                 mMDClient = new MultiDisplayClient();
+            }
+            if (mNativeWindow == NULL) {
+                LOGV("create a new surface in AwesomePlayer");
+                // If no native window is set from app, create one in MDS.
+                // MDS will return a new surface only if play in background
+                // feature is enabled by Application.
+                // Else it returns Null
+                mDefaultNativeWindow =
+                    mMDClient->createNewVideoSurface(DEFAULT_SURFACE_WIDTH, DEFAULT_SURFACE_HEIGHT,
+                        DEFAULT_SURFACE_PIXEL_FORMAT, (int)this);
+                if (mDefaultNativeWindow != NULL) {
+                    setNativeWindow_l(mDefaultNativeWindow);
+                }
             }
             int wcom = 0;
             if (mNativeWindow != NULL)
@@ -1062,7 +1085,7 @@ status_t AwesomePlayer::play() {
     Mutex::Autolock autoLock(mLock);
 
     modifyFlags(CACHE_UNDERRUN, CLEAR);
-	return play_l();
+    return play_l();
 #endif
 }
 
@@ -1488,7 +1511,11 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer = NULL;
     }
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setDisplaySource_l(false);
+    // Destroy MDS client only if default native window is not created by MDS.
+    // MDS client will be destroyed in AwesomePlayer destructor.
+    if (mDefaultNativeWindow == NULL) {
+        setDisplaySource_l(false);
+    }
 #endif
 
     mVideoSource->stop();
@@ -2600,6 +2627,22 @@ status_t AwesomePlayer::prepareAsync() {
     }
 
     mIsAsyncPrepare = true;
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    // Send instance of AwesomePlayer object as an id to Java application.
+    // This id is used by Multitasking application which sends it to MDS DisplayObserver.
+    // MDS compares id passed by Application and one passed by AwesomePlayer when requesting
+    // creation of native surface to ensure native surface creation request is sent from
+    // same instance of AwesomePlayer which was created by Multitasking App.
+    // This prevents unauthorized or rogue apps from hijacking the native surface creation
+    // in MDS. Presently MDS can create only one native surface at a time.
+    // For other Apps, this is just a media info which will get ignored and hence harmless.
+    notifyListener_l(
+                MEDIA_INFO,
+                MEDIA_INFO_UNKNOWN,
+                (int)this);
+#endif
+
     return prepareAsync_l();
 }
 

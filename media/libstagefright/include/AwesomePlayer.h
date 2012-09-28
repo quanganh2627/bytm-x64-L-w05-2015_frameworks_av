@@ -224,6 +224,7 @@ private:
     bool mWatchForAudioEOS;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
+    sp<ANativeWindow> mDefaultNativeWindow;
 #endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
