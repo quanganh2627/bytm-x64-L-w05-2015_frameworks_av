@@ -865,7 +865,7 @@ private:
             void triggerEvents(AudioSystem::sync_event_t type);
             virtual bool isTimedTrack() const { return false; }
             bool isFastTrack() const { return (mFlags & IAudioFlinger::TRACK_FAST) != 0; }
-
+            bool isOffloadTrack() const { return (mFlags & IAudioFlinger::TRACK_OFFLOAD) != 0; }
         protected:
 
             // written by Track::mute() called by binder thread(s), without a mutex or barrier.
@@ -1259,6 +1259,7 @@ public:
     protected:
                     // accessed by both binder threads and within threadLoop(), lock on mutex needed
                     unsigned    mFastTrackAvailMask;    // bit i set if fast track [i] is available
+                    bool        isOffloadTrack() const;
 
     };
 
