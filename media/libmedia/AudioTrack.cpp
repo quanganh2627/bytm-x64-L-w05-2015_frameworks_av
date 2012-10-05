@@ -995,6 +995,12 @@ status_t AudioTrack::createTrack_l(
         }
     }
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+        trackFlags |= IAudioFlinger::TRACK_OFFLOAD;
+    }
+#endif
+
     sp<IAudioTrack> track = audioFlinger->createTrack(getpid(),
                                                       streamType,
                                                       sampleRate,

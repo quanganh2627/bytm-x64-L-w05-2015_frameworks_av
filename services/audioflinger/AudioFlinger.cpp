@@ -1984,6 +1984,22 @@ Exit:
     return track;
 }
 
+bool AudioFlinger::PlaybackThread::isOffloadTrack() const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    bool offloadTrack = false;
+    for (size_t i = 0; i < mTracks.size(); ++i) {
+        sp<Track> t = mTracks[i];
+        if (t != 0 && t->isOffloadTrack()) {
+            offloadTrack = true;
+        }
+    }
+    return offloadTrack;
+#else
+    return false;
+#endif
+}
+
 uint32_t AudioFlinger::MixerThread::correctLatency(uint32_t latency) const
 {
     if (mFastMixer != NULL) {
@@ -2042,7 +2058,8 @@ void AudioFlinger::PlaybackThread::setStreamVolume(audio_stream_type_t stream, f
     // Check if MusicOffload Track is running, if so, instanly apply volume
     // AudioTrack.
     ALOGV("setStreamVolume of thread");
-    if (stream == AUDIO_STREAM_MUSIC && mType == DIRECT && getOutput_l()) {
+    if ( (stream == AUDIO_STREAM_MUSIC) && (isOffloadTrack()) &&
+         (getOutput_l()) ) {
         ALOGV("DIRECT thread calling set_volume");
         getOutput_l()->stream->set_volume(getOutput_l()->stream, value, value);
     }
@@ -3926,15 +3943,19 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
         }
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (track->isPausing()) {
-             track->setPaused();
+        bool offloadTrack = track->isOffloadTrack();
+        if (offloadTrack) {
+            if (track->isPausing()) {
+                track->setPaused();
+            }
         }
 
-        if ((track->framesReady() >= minFrames) && track->isReady() &&  track->isActive())
-//                !track->isPaused() && !track->isTerminated())
+        if ((track->framesReady() >= minFrames) && track->isReady() &&
+                (offloadTrack ? (track->isActive()) :
+                               (!track->isPaused() && !track->isTerminated())))
         {
 #else
-         if ((track->framesReady() >= minFrames) && track->isReady() &&
+        if ((track->framesReady() >= minFrames) && track->isReady() &&
                 !track->isPaused() && !track->isTerminated())
         {
 #endif
@@ -4851,8 +4872,8 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
         // In case of Music Offload write, it could be blocked on pause-event
         // make sure we restart the output
         PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
-        if (playbackThread->type() == DIRECT && (state==PAUSING || state==PAUSED)) {
-            ALOGV("calling resume directly");
+        if ( (isOffloadTrack()) && (state==PAUSING || state==PAUSED) ) {
+            ALOGV("start: offload resume");
             status_t status = playbackThread->getOutput_l()->stream->resume(
                                             playbackThread->getOutput_l()->stream);
             if (NO_ERROR != status) {
@@ -4902,9 +4923,9 @@ void AudioFlinger::PlaybackThread::Track::stop()
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
-        if ((playbackThread->type() == DIRECT) ) {
+        if (isOffloadTrack()) {
             if (state!=ACTIVE && state!=RESUMING) {
-                ALOGV("Track:stop: state!=ACTIVE && state!=RESUMING");
+                ALOGV("Track:stop: offload state!=ACTIVE && state!=RESUMING");
                 status_t status = playbackThread->getOutput_l()->stream->flush(
                                            playbackThread->getOutput_l()->stream);
                 if (NO_ERROR != status) {
@@ -4930,7 +4951,8 @@ void AudioFlinger::PlaybackThread::Track::pause()
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
                 // Call direct pause for offload mechanism
                 PlaybackThread* pPBThread = static_cast<PlaybackThread*>(thread.get());
-                if (pPBThread->type() == DIRECT) {
+                if (isOffloadTrack()) {
+                    ALOGV("pause: offload pause");
                     status_t status = pPBThread->getOutput_l()->stream->pause(
                                                pPBThread->getOutput_l()->stream);
                     if (NO_ERROR != status) {
@@ -4962,8 +4984,8 @@ void AudioFlinger::PlaybackThread::Track::flush()
         Mutex::Autolock _l(thread->mLock);
         PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (playbackThread->type() == DIRECT) {
-            ALOGV("Calling flush directly");
+        if (isOffloadTrack()) {
+            ALOGV("flush: offload flush");
             mCblk->lock.lock();
             reset();
             mCblk->lock.unlock();
@@ -5002,19 +5024,7 @@ void AudioFlinger::PlaybackThread::Track::reset()
     // For MusicOffload: Flush the data if requested anytime
     // Check if Music Offload playback is running
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    bool offload = false;
-    sp<ThreadBase> baseThread = mThread.promote();
-    if (baseThread != 0) {
-        PlaybackThread *playbackThread = (PlaybackThread *)baseThread.get();
-
-        if (playbackThread->type() == DIRECT) {
-            offload = true;
-        }
-    }
-#endif
-
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (!mResetDone || offload) {
+    if ( (!mResetDone) || (isOffloadTrack()) ) {
 #else
     if (!mResetDone) {
 #endif
@@ -7425,7 +7435,7 @@ status_t AudioFlinger::closeOutput_nonvirtual(audio_io_handle_t output)
             }
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (thread->type() == ThreadBase::DIRECT) {
+        if (thread->isOffloadTrack()) {
             Vector<int> sessionIds;
 
             thread->getEffectSessionIds(sessionIds);
@@ -9067,7 +9077,7 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
         PlaybackThread *p = (PlaybackThread *)thread.get();
 
         if (enabled) {
-            if (p->type() == ThreadBase::DIRECT ) {
+            if (p->isOffloadTrack()) {
                 ALOGV("setEnabled: Offload, invalidate tracks");
                 DirectOutputThread *srcThread = (DirectOutputThread *)p;
                 srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
