@@ -537,15 +537,17 @@ void MediaPlayerService::Client::disconnect()
         Mutex::Autolock l(mLock);
         p = mPlayer;
     }
+    // clear the notification to prevent callbacks to dead client
+    // and reset the player. We assume the player will serialize
+    // access to itself if necessary.
+    if (p != 0)
+        p->setNotifyCallback(0, 0);
+
     mClient.clear();
 
     mPlayer.clear();
 
-    // clear the notification to prevent callbacks to dead client
-    // and reset the player. We assume the player will serialize
-    // access to itself if necessary.
     if (p != 0) {
-        p->setNotifyCallback(0, 0);
 #if CALLBACK_ANTAGONIZER
         ALOGD("kill Antagonizer");
         mAntagonizer->kill();
