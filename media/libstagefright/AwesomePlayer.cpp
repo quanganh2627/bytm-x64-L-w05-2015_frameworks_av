@@ -570,6 +570,9 @@ status_t AwesomePlayer::setDataSource_l(const sp<MediaExtractor> &extractor) {
 }
 
 void AwesomePlayer::reset() {
+    if (mCachedSource != NULL) {
+        mCachedSource->stop();
+    }
     if (mConnectingDataSource != NULL) {
         ALOGI("interrupting the connection process in reset");
         mConnectingDataSource->disconnect();
