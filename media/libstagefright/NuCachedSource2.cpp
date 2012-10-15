@@ -190,6 +190,7 @@ NuCachedSource2::NuCachedSource2(
       mLastAccessPos(0),
       mFetching(true),
       mLastFetchTimeUs(-1),
+      mForceStop(false),
       mNumRetriesLeft(kMaxNumRetries),
       mHighwaterThresholdBytes(kDefaultHighWaterThreshold),
       mLowwaterThresholdBytes(kDefaultLowWaterThreshold),
@@ -290,6 +291,13 @@ void NuCachedSource2::fetchInternal() {
 
             reconnect = true;
         }
+    }
+
+    if (mForceStop && mFinalStatus != OK) {
+        reconnect = false;
+        mNumRetriesLeft = 0;
+        ALOGV("do not reconnect in stop state");
+        return;
     }
 
     if (reconnect) {
@@ -558,7 +566,7 @@ ssize_t NuCachedSource2::readInternal(off64_t offset, void *data, size_t size) {
 
     size_t delta = offset - mCacheOffset;
 
-    if (mFinalStatus != OK && mNumRetriesLeft == 0) {
+    if (mFinalStatus != OK && (mNumRetriesLeft == 0 || mForceStop)) {
         if (delta >= mCache->totalSize()) {
             return mFinalStatus;
         }
@@ -706,6 +714,11 @@ void NuCachedSource2::RemoveCacheSpecificHeaders(
 
         ALOGV("Client requested disconnection at highwater mark");
     }
+}
+
+void NuCachedSource2::stop() {
+    Mutex::Autolock autolock(mLock);
+    mForceStop = true;
 }
 
 }  // namespace android
