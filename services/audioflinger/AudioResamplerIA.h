@@ -28,38 +28,43 @@ namespace android {
 #define AUDRESAMPLEIA_SAMPLINGRATE_DEFAULT 44100
 /* -------------------------------------------------------------------------*/
 
-        class AudioResamplerIA : public AudioResampler {
-public:
-                AudioResamplerIA(int bitDepth, int inChannelCount,
-                                 int32_t sampleRate);
-                ~AudioResamplerIA();
-                virtual void resample(int32_t *out, size_t outFrameCount,
-                                      AudioBufferProvider *provider);
-                virtual void setSampleRate(int32_t inSampleRate);
-                static int sampleRateSupported(int inputRate, int outputRate);
+    class AudioResamplerIA : public AudioResampler {
+ public:
+        AudioResamplerIA(int bitDepth, int inChannelCount,
+                 int32_t sampleRate);
+        ~AudioResamplerIA();
 
-private:
-                void init();
-                template < int CHANNELS >
-                    void resample(int32_t *out, size_t outFrameCount,
-                                  AudioBufferProvider *provider);
-                void *mContext;
+        virtual void resample(int32_t *out, size_t outFrameCount,
+                      AudioBufferProvider *provider);
+        virtual void setSampleRate(int32_t inSampleRate);
+        static int sampleRateSupported(int inputRate, int outputRate);
 
-                static const int16_t mMaxInputBufferSize = 2048;
-                float *mFloatInpUnaligned;
-                float *mFloatInp;
-                float *mFloatOut;
+ private:
+        void init();
+        template < int CHANNELS >
+            void resample(int32_t *out, size_t outFrameCount,
+                  AudioBufferProvider *provider);
+        void *mContext;
 
-                /* remaining number of output frames that cannot
-                 * fit in the current output buffer
-                 */
-                int mRemainingOutFrames;
-                float mOutFrameBuffer[40] __attribute__ ((aligned(16)));
-                int32_t mReinitNeeded;/* Flag for reiniting the SRC. */
-        };
+        static const int16_t mMaxInputBufferSize = 2048;
+        float *mFloatInpUnaligned;
+        float *mFloatInp;
+        float *mFloatOut;
+
+        /* remaining number of output frames that cannot
+         * fit in the current output buffer
+         */
+        int mRemainingOutFrames;
+        float mOutFrameBuffer[40] __attribute__ ((aligned(16)));
+        int32_t mReinitNeeded;  /* Flag for reiniting the SRC. */
+
+        // prevent copying
+        AudioResamplerIA(const AudioResamplerIA&);
+        AudioResamplerIA& operator=(const AudioResamplerIA&);
+    };
 
 /* --------------------------------------------------------------------------*/
 
-};/* namespace android */
+};                  /* namespace android */
 
-#endif /*ANDROID_AUDIO_RESAMPLER_IA_H */
+#endif              /*ANDROID_AUDIO_RESAMPLER_IA_H */
