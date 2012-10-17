@@ -2499,9 +2499,6 @@ status_t MPEG4Extractor::updateAudioTrackInfoFromESDS_MPEG4Audio(
         //      mLastTrack->meta->setInt32(kKeyExtSampleRate, extSampleRate);
     }
 
-    if (numChannels == 0) {
-        return ERROR_UNSUPPORTED;
-    }
 
     int32_t prevSampleRate;
     CHECK(mLastTrack->meta->findInt32(kKeySampleRate, &prevSampleRate));
