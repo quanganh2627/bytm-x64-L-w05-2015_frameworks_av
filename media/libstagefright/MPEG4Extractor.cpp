@@ -1987,9 +1987,6 @@ status_t MPEG4Extractor::updateAudioTrackInfoFromESDS_MPEG4Audio(
         numChannels = br.getBits(4);
     }
 
-    if (numChannels == 0) {
-        return ERROR_UNSUPPORTED;
-    }
 
     int32_t prevSampleRate;
     CHECK(mLastTrack->meta->findInt32(kKeySampleRate, &prevSampleRate));
