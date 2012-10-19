@@ -66,7 +66,7 @@ AudioFlinger::EffectModule::EffectModule(ThreadBase *thread,
       mStatus(NO_INIT), mState(IDLE),
       // mMaxDisableWaitCnt is set by configure() and not used before then
       // mDisableWaitCnt is set by process() and updateState() and not used before then
-      mSuspended(false)
+      mSuspended(false), mStopped(false)
 {
     ALOGV("Constructor %p", this);
     int lStatus;
@@ -93,9 +93,12 @@ Error:
 
 AudioFlinger::EffectModule::~EffectModule()
 {
+    Mutex::Autolock _l(mLock);
+
     ALOGV("Destructor %p", this);
     if (mEffectInterface != NULL) {
-        remove_effect_from_hal_l();
+        //stop effect if it has not already stopped
+        stop_effect_l();
         // release effect engine
         EffectRelease(mEffectInterface);
     }
@@ -459,6 +462,7 @@ status_t AudioFlinger::EffectModule::start_l()
             audio_stream_t *stream = thread->stream();
             if (stream != NULL) {
                 stream->add_audio_effect(stream, mEffectInterface);
+                mStopped = false;
             }
         }
     }
@@ -479,7 +483,7 @@ status_t AudioFlinger::EffectModule::stop_l()
     if (mStatus != NO_ERROR) {
         return mStatus;
     }
-    status_t cmdStatus = NO_ERROR;
+    status_t cmdStatus = 0;
     uint32_t size = sizeof(status_t);
     status_t status = (*mEffectInterface)->command(mEffectInterface,
                                                    EFFECT_CMD_DISABLE,
@@ -490,25 +494,31 @@ status_t AudioFlinger::EffectModule::stop_l()
     if (status == NO_ERROR) {
         status = cmdStatus;
     }
-    if (status == NO_ERROR) {
-        status = remove_effect_from_hal_l();
+    if (status == 0) {
+        stop_effect_l();
     }
     return status;
 }
 
-status_t AudioFlinger::EffectModule::remove_effect_from_hal_l()
+status_t AudioFlinger::EffectModule::stop_effect_l()
 {
-    if ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC ||
-             (mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_POST_PROC) {
+    if (mEffectInterface == NULL) {
+        return NO_INIT;
+    }
+
+    if (mStopped == false &&
+            ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC ||
+             (mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_POST_PROC)) {
         sp<ThreadBase> thread = mThread.promote();
         if (thread != 0) {
             audio_stream_t *stream = thread->stream();
             if (stream != NULL) {
                 stream->remove_audio_effect(stream, mEffectInterface);
+                mStopped = true;
             }
         }
     }
-    return NO_ERROR;
+    return 0;
 }
 
 status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
