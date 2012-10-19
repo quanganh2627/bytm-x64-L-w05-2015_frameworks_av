@@ -134,7 +134,8 @@ protected:
 
     status_t start_l();
     status_t stop_l();
-    status_t remove_effect_from_hal_l();
+    status_t stop_effect_l();
+
 
 mutable Mutex               mLock;      // mutex for process, commands and handles list protection
     wp<ThreadBase>      mThread;    // parent thread
@@ -153,6 +154,7 @@ mutable Mutex               mLock;      // mutex for process, commands and handl
     uint32_t mDisableWaitCnt;       // current process() calls count during disable period.
     bool     mSuspended;            // effect is suspended: temporarily disabled by framework
     bool     mOffloaded;            // effect is currently offloaded to the audio DSP
+    bool     mStopped;              // effect has been stopped. permamently disabled by framework
 };
 
 // The EffectHandle class implements the IEffect interface. It provides resources
