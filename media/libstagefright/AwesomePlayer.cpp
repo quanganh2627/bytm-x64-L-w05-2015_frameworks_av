@@ -208,6 +208,9 @@ AwesomePlayer::AwesomePlayer()
       mExtractorFlags(0),
       mVideoBuffer(NULL),
       mDecryptHandle(NULL),
+#ifdef TARGET_HAS_VPP
+      mVPPProcessor(NULL),
+#endif
       mLastVideoTimeUs(-1),
       mTextDriver(NULL),
       mOffloadAudio(false),
@@ -1329,6 +1332,13 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer = NULL;
     }
 
+#ifdef TARGET_HAS_VPP
+    if (mVPPProcessor != NULL) {
+        delete mVPPProcessor;
+        mVPPProcessor = NULL;
+    }
+#endif
+
     mVideoSource->stop();
 
     // The following hack is necessary to ensure that the OMX
@@ -1598,6 +1608,42 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
     mVideoTrack = source;
 }
 
+#ifdef TARGET_HAS_VPP
+VPPProcessor* AwesomePlayer::createVppProcessor_l() {
+    VPPProcessor* processor = NULL;
+
+    if (mNativeWindow == NULL)
+        return processor;
+
+    if (VPPProcessor::isVppOn()) {
+        VPPVideoInfo info;
+        sp<MetaData> meta = NULL;
+        int32_t width, height, fps;
+        width = height = fps = 0;
+        memset(&info, 0, sizeof(VPPVideoInfo));
+        if (mVideoTrack != NULL)
+            meta = mVideoTrack->getFormat();
+        if (meta != NULL && !meta->findInt32(kKeyFrameRate, &fps)) {
+            ALOGW("No frame rate info found");
+            fps = 0;
+        }
+        if (mVideoSource != NULL) {
+            meta = mVideoSource->getFormat();
+            if (meta != NULL) {
+                CHECK(meta->findInt32(kKeyWidth, &width));
+                CHECK(meta->findInt32(kKeyHeight, &height));
+            }
+        }
+        info.fps = fps;
+        info.width = width;
+        info.height = height;
+        OMXCodec* omxCodec = (OMXCodec*) (mVideoSource.get());
+        processor = new VPPProcessor(mNativeWindow, omxCodec, &info);
+    }
+    return processor;
+}
+#endif
+
 status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
     ATRACE_CALL();
 
@@ -1682,6 +1728,29 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
             }
         }
 
+#ifdef TARGET_HAS_VPP
+        if (mVPPProcessor != NULL) {
+            delete mVPPProcessor;
+            mVPPProcessor = NULL;
+        }
+        mVPPProcessor = createVppProcessor_l();
+        OMXCodec* omxCodec;
+        if (mCachedSource != NULL) {
+#if 1
+            // FIXME: Disable VPP/FRC for http streaming so far
+            if (mVPPProcessor != NULL) {
+                delete mVPPProcessor;
+                mVPPProcessor = NULL;
+            }
+#else
+            AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
+            omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
+#endif
+        } else
+            omxCodec = (OMXCodec*) (mVideoSource.get());
+        if (mVPPProcessor != NULL)
+            omxCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+#endif
         status_t err = mVideoSource->start();
 
         if (err != OK) {
@@ -1689,6 +1758,20 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
             mVideoSource.clear();
             return err;
         }
+#ifdef TARGET_HAS_VPP
+        if (mVPPProcessor != NULL) {
+            bool success = omxCodec->isVppBufferAvail();
+            if (success) {
+                if(err != VPP_OK) {
+                    delete mVPPProcessor;
+                    mVPPProcessor = NULL;
+                }
+            } else {
+                delete mVPPProcessor;
+                mVPPProcessor = NULL;
+            }
+        }
+#endif
     }
 
     if (mVideoSource != NULL) {
@@ -1779,6 +1862,9 @@ void AwesomePlayer::onVideoEvent() {
     }
     mVideoEventPending = false;
 
+#ifdef TARGET_HAS_VPP
+    if (mVPPProcessor == NULL) {
+#endif
     if (mSeeking != NO_SEEK) {
         if (mVideoBuffer) {
             mVideoBuffer->release();
@@ -1803,7 +1889,6 @@ void AwesomePlayer::onVideoEvent() {
             mAudioSource->pause();
         }
     }
-
     if (!mVideoBuffer) {
         MediaSource::ReadOptions options;
         if (mSeeking != NO_SEEK) {
@@ -1877,6 +1962,142 @@ void AwesomePlayer::onVideoEvent() {
             ++mStats.mNumVideoFramesDecoded;
         }
     }
+#ifdef TARGET_HAS_VPP
+    } else {
+    if (mSeeking != NO_SEEK) {
+        if (mVideoBuffer) {
+            mVideoBuffer->release();
+            mVideoBuffer = NULL;
+        }
+
+        mVPPProcessor->seek();
+
+        if (mSeeking == SEEK && isStreamingHTTP() && mAudioSource != NULL
+                && !(mFlags & SEEK_PREVIEW)) {
+            // We're going to seek the video source first, followed by
+            // the audio source.
+            // In order to avoid jumps in the DataSource offset caused by
+            // the audio codec prefetching data from the old locations
+            // while the video codec is already reading data from the new
+            // locations, we'll "pause" the audio source, causing it to
+            // stop reading input data until a subsequent seek.
+
+            if (mAudioPlayer != NULL && (mFlags & AUDIO_RUNNING)) {
+                mAudioPlayer->pause();
+
+                modifyFlags(AUDIO_RUNNING, CLEAR);
+            }
+            mAudioSource->pause();
+        }
+    }
+
+    MediaBuffer *tmpVideoBuffer = mVideoBuffer;
+    mVideoBuffer = NULL;
+
+    if(mVPPProcessor->canSetDecoderBufferToVPP()) {
+    if (!mVideoBuffer) {
+        MediaSource::ReadOptions options;
+        if (mSeeking != NO_SEEK) {
+            ALOGV("seeking to %lld us (%.2f secs)", mSeekTimeUs, mSeekTimeUs / 1E6);
+
+            options.setSeekTo(
+                    mSeekTimeUs,
+                    mSeeking == SEEK_VIDEO_ONLY
+                        ? MediaSource::ReadOptions::SEEK_NEXT_SYNC
+                        : MediaSource::ReadOptions::SEEK_CLOSEST_SYNC);
+        }
+        for (;;) {
+            status_t err = mVideoSource->read(&mVideoBuffer, &options);
+            options.clearSeekTo();
+
+            if (err != OK) {
+                CHECK(mVideoBuffer == NULL);
+
+                if (err == INFO_FORMAT_CHANGED) {
+                    ALOGV("VideoSource signalled format change.");
+
+                    notifyVideoSize_l();
+
+                    if (mVideoRenderer != NULL) {
+                        mVideoRendererIsPreview = false;
+                        initRenderer_l();
+                    }
+                    continue;
+                }
+
+                // So video playback is complete, but we may still have
+                // a seek request pending that needs to be applied
+                // to the audio track.
+                SeekType seekTemp = mSeeking;
+                if (mSeeking != NO_SEEK) {
+                    ALOGV("video stream ended while seeking!");
+                }
+                finishSeekIfNecessary(-1);
+
+                if (mAudioPlayer != NULL
+                        && !(mFlags & (AUDIO_RUNNING | SEEK_PREVIEW))) {
+                    startAudioPlayer_l();
+                }
+
+                if (seekTemp != NO_SEEK) {
+                    modifyFlags(AUDIO_AT_EOS, SET); // video is eos, end the audio?
+                    mVideoTimeUs = mSeekTimeUs;
+                }
+                mVPPProcessor->setEOS();
+
+                //modifyFlags(VIDEO_AT_EOS, SET);
+                //postStreamDoneEvent_l(err);
+                //return;
+                break;
+            }
+
+            if (mVideoBuffer->range_length() == 0) {
+                // Some decoders, notably the PV AVC software decoder
+                // return spurious empty buffers that we just want to ignore.
+
+                mVideoBuffer->release();
+                mVideoBuffer = NULL;
+                continue;
+            }
+
+            break;
+        }
+
+        ALOGV("SET DATA %p\n", mVideoBuffer);
+        if (mVPPProcessor->setDecoderBufferToVPP(mVideoBuffer) == VPP_OK) {
+            mVideoBuffer = NULL;
+        }
+
+        {
+            Mutex::Autolock autoLock(mStatsLock);
+            ++mStats.mNumVideoFramesDecoded;
+        }
+    }
+    }
+
+    mVideoBuffer = tmpVideoBuffer;
+    if (!mVideoBuffer) {
+        status_t err = mVPPProcessor->read(&mVideoBuffer);
+        if (err == ERROR_END_OF_STREAM) {
+            ALOGV("VPP finished");
+            CHECK(mVideoBuffer == NULL);
+            modifyFlags(VIDEO_AT_EOS, SET);
+            postStreamDoneEvent_l(err);
+            return;
+        } else if (err == VPP_BUFFER_NOT_READY) {
+            ALOGV("no available buffer to rend, try later");
+            postVideoEvent_l(100);
+            return;
+        } else if (err == VPP_FAIL) {
+            ALOGE("error happens, delete VPPProcessor and continue playback");
+            delete mVPPProcessor;
+            mVPPProcessor = NULL;
+            postVideoEvent_l(100);
+        }
+        ALOGV("read mVideoBuffer = %p", mVideoBuffer);
+    }
+    }
+#endif
 
     int64_t timeUs;
     CHECK(mVideoBuffer->meta_data()->findInt64(kKeyTime, &timeUs));
