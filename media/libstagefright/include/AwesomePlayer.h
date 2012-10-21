@@ -21,6 +21,11 @@
 #include "HTTPBase.h"
 #include "TimedEventQueue.h"
 
+#ifdef TARGET_HAS_VPP
+#include "VPPProcessor.h"
+#include <media/stagefright/OMXCodec.h>
+#endif
+
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/DataSource.h>
 #include <media/stagefright/OMXClient.h>
@@ -248,6 +253,10 @@ private:
 
     DrmManagerClient *mDrmManagerClient;
     sp<DecryptHandle> mDecryptHandle;
+
+#ifdef TARGET_HAS_VPP
+    VPPProcessor *mVPPProcessor;
+#endif
 
     int64_t mLastVideoTimeUs;
     TimedTextDriver *mTextDriver;
