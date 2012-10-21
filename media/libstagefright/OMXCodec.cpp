@@ -57,6 +57,10 @@
 #include "VAVideoDecoder.h"
 #endif
 
+#ifdef TARGET_HAS_VPP
+#include "VPPProcessor.h"
+#endif
+
 namespace android {
 
 // Treat time out as an error if we have not received any output
@@ -1501,6 +1505,10 @@ OMXCodec::OMXCodec(
         const sp<MediaSource> &source,
         const sp<ANativeWindow> &nativeWindow)
     : mOMX(omx),
+#ifdef TARGET_HAS_VPP
+      mVppInBufNum(0),
+      mVppOutBufNum(0),
+#endif
       mOMXLivesLocally(omx->livesLocally(node, getpid())),
       mNode(node),
       mQuirks(quirks),
@@ -1889,6 +1897,18 @@ status_t OMXCodec::applyRotation() {
     return err;
 }
 
+#ifdef TARGET_HAS_VPP
+void OMXCodec::setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum) {
+    mVppInBufNum = inBufNum;
+    mVppOutBufNum = outBufNum;
+}
+
+bool OMXCodec::isVppBufferAvail() {
+    if (mVppInBufNum == 0) return false;
+    return true;
+}
+#endif
+
 status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
     // Get the number of buffers needed.
     OMX_PARAM_PORTDEFINITIONTYPE def;
@@ -1990,6 +2010,46 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         }
     }
 
+#ifdef TARGET_HAS_VPP
+    //add more buffers
+    bool isVppOn = VPPProcessor::isVppOn();
+    if (isVppOn) {
+        ALOGE("def.nBufferCountActual = %d",def.nBufferCountActual);
+        int totalBufferCount = def.nBufferCountActual + mVppInBufNum + mVppOutBufNum;
+
+        err = native_window_set_buffer_count(
+                mNativeWindow.get(), totalBufferCount);
+        if (err == 0) {
+            def.nBufferCountActual = totalBufferCount;
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            if (err != OK) {
+                CODEC_LOGE("setting nBufferCountActual to %lu failed: %d",
+                    def.nBufferCountActual, err);
+                return err;
+            }
+        } else {
+            err = native_window_set_buffer_count(
+                mNativeWindow.get(), def.nBufferCountActual);
+            if (err == 0) {
+                mVppInBufNum = 0;
+                mVppOutBufNum = 0;
+            } else {
+                ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err),
+                        -err);
+                return err;
+            }
+        }
+    } else {
+        err = native_window_set_buffer_count(
+                mNativeWindow.get(), def.nBufferCountActual);
+        if (err != 0) {
+            ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err),
+                    -err);
+            return err;
+        }
+    }
+#else
     err = native_window_set_buffer_count(
             mNativeWindow.get(), def.nBufferCountActual);
     if (err != 0) {
@@ -1997,6 +2057,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                 -err);
         return err;
     }
+#endif
 
     CODEC_LOGV("allocating %lu buffers from a native window of size %lu on "
             "output port", def.nBufferCountActual, def.nBufferSize);
@@ -2044,7 +2105,15 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         cancelEnd = mPortBuffers[kPortIndexOutput].size();
     } else {
         // Return the last two buffers to the native window.
+#ifdef TARGET_HAS_VPP
+        if (isVppOn) {
+            cancelStart = def.nBufferCountActual - minUndequeuedBufs - mVppOutBufNum;
+        } else {
+            cancelStart = def.nBufferCountActual - minUndequeuedBufs;
+        }
+#else
         cancelStart = def.nBufferCountActual - minUndequeuedBufs;
+#endif
         cancelEnd = def.nBufferCountActual;
     }
 
@@ -2068,6 +2137,9 @@ status_t OMXCodec::cancelBufferToNativeWindow(BufferInfo *info) {
       return err;
     }
     info->mStatus = OWNED_BY_NATIVE_WINDOW;
+#ifdef TARGET_HAS_VPP
+    info->mMediaBuffer->setObserver(NULL);
+#endif
     return OK;
 }
 
@@ -2075,6 +2147,9 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
     // Dequeue the next buffer from the native window.
     ANativeWindowBuffer* buf;
     int fenceFd = -1;
+#ifdef TARGET_HAS_VPP
+    while (1) {
+#endif
     int err = native_window_dequeue_buffer_and_wait(mNativeWindow.get(), &buf);
     if (err != 0) {
       CODEC_LOGE("dequeueBuffer failed w/ error 0x%08x", err);
@@ -2102,6 +2177,22 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
         return 0;
     }
 
+#ifdef TARGET_HAS_VPP
+    if (bufInfo->mStatus == OWNED_BY_CLIENT) {
+        // It's still been used by VPP, so clear kKeyRendered flag
+        // to make sure it will be cancelled by VPP later, and then
+        // continue to dequeue a valid one
+        MediaBuffer* mediaBuffer = bufInfo->mMediaBuffer;
+        CODEC_LOGV("dequeued a buffer used by VPP");
+        sp<MetaData> metaData = mediaBuffer->meta_data();
+        metaData->setInt32(kKeyRendered, 0);
+        continue;
+    }
+    else
+        break;
+    }// while end
+    bufInfo->mMediaBuffer->setObserver(this);
+#endif
     // The native window no longer owns the buffer.
     CHECK_EQ((int)bufInfo->mStatus, (int)OWNED_BY_NATIVE_WINDOW);
     bufInfo->mStatus = OWNED_BY_US;
@@ -2357,7 +2448,9 @@ void OMXCodec::on_message(const omx_message &msg) {
 
             CHECK(i < buffers->size());
             BufferInfo *info = &buffers->editItemAt(i);
-
+#ifdef TARGET_HAS_VPP
+            info->mFlags = flags;
+#endif
             if (info->mStatus != OWNED_BY_COMPONENT) {
                 ALOGW("We already own output buffer %p, yet received "
                      "a FILL_BUFFER_DONE.", buffer);
@@ -2954,7 +3047,11 @@ status_t OMXCodec::freeBuffersOnPort(
         }
 
         CHECK(info->mStatus == OWNED_BY_US
-                || info->mStatus == OWNED_BY_NATIVE_WINDOW);
+                || info->mStatus == OWNED_BY_NATIVE_WINDOW
+#ifdef TARGET_HAS_VPP
+                || info->mStatus == OWNED_BY_VPP
+#endif
+        );
 
         CODEC_LOGV("freeing buffer %p on port %ld", info->mBuffer, portIndex);
 
@@ -4169,6 +4266,9 @@ void OMXCodec::signalBufferReturned(MediaBuffer *buffer) {
                     }
                 }
 
+#ifdef TARGET_HAS_VPP
+                info->mMediaBuffer->setObserver(NULL);
+#endif
                 info->mStatus = OWNED_BY_NATIVE_WINDOW;
 
                 // Dequeue the next buffer from the native window.
