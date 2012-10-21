@@ -127,6 +127,14 @@ LOCAL_STATIC_LIBRARIES := \
         libFLAC \
         libmedia_helper \
 
+ifeq ($(TARGET_HAS_VPP),true)
+LOCAL_CFLAGS += -DTARGET_HAS_VPP
+LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libmedia_utils_vpp
+LOCAL_STATIC_LIBRARIES += \
+               libvpp
+endif
+
 ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
   LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
 endif

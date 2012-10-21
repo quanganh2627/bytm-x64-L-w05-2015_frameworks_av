@@ -64,6 +64,10 @@
 #include "AudioDumpUtils.h"
 #include <cutils/properties.h>
 #endif
+#ifdef TARGET_HAS_VPP
+#include "VPPProcessor.h"
+#endif
+
 namespace android {
 
 // Treat time out as an error if we have not received any output
@@ -1974,6 +1978,21 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         return err;
     }
 
+#ifdef TARGET_HAS_VPP
+    //add more buffers
+    bool isVppOn = VPPProcessor::getVppStatus();
+    if (isVppOn) {
+        def.nBufferCountActual += VPPProcessor::INPUT_BUFFER_COUNT + VPPProcessor::OUTPUT_BUFFER_COUNT;
+        err = mOMX->setParameter(
+                mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+        if (err != OK) {
+            CODEC_LOGE("setting nBufferCountActual to %lu failed: %d",
+                    def.nBufferCountActual, err);
+            return err;
+        }
+    }
+#endif
+
     // XXX: Is this the right logic to use?  It's not clear to me what the OMX
     // buffer counts refer to - how do they account for the renderer holding on
     // to buffers?
@@ -2043,7 +2062,15 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         cancelEnd = mPortBuffers[kPortIndexOutput].size();
     } else {
         // Return the last two buffers to the native window.
+#ifdef TARGET_HAS_VPP
+        if (isVppOn) {
+            cancelStart = def.nBufferCountActual - minUndequeuedBufs - VPPProcessor::OUTPUT_BUFFER_COUNT;
+        } else {
+            cancelStart = def.nBufferCountActual - minUndequeuedBufs;
+        }
+#else
         cancelStart = def.nBufferCountActual - minUndequeuedBufs;
+#endif
         cancelEnd = def.nBufferCountActual;
     }
 
@@ -2067,6 +2094,9 @@ status_t OMXCodec::cancelBufferToNativeWindow(BufferInfo *info) {
       return err;
     }
     info->mStatus = OWNED_BY_NATIVE_WINDOW;
+#ifdef TARGET_HAS_VPP
+    info->mMediaBuffer->setObserver(NULL);
+#endif
     return OK;
 }
 
@@ -2105,6 +2135,9 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
     CHECK_EQ((int)bufInfo->mStatus, (int)OWNED_BY_NATIVE_WINDOW);
     bufInfo->mStatus = OWNED_BY_US;
 
+#ifdef TARGET_HAS_VPP
+    bufInfo->mMediaBuffer->setObserver(this);
+#endif
     return bufInfo;
 }
 
@@ -2963,7 +2996,11 @@ status_t OMXCodec::freeBuffersOnPort(
         }
 
         CHECK(info->mStatus == OWNED_BY_US
-                || info->mStatus == OWNED_BY_NATIVE_WINDOW);
+                || info->mStatus == OWNED_BY_NATIVE_WINDOW
+#ifdef TARGET_HAS_VPP
+                || info->mStatus == OWNED_BY_VPP
+#endif
+        );
 
         CODEC_LOGV("freeing buffer %p on port %ld", info->mBuffer, portIndex);
 
@@ -4222,6 +4259,9 @@ void OMXCodec::signalBufferReturned(MediaBuffer *buffer) {
                     }
                 }
 
+#ifdef TARGET_HAS_VPP
+                info->mMediaBuffer->setObserver(NULL);
+#endif
                 info->mStatus = OWNED_BY_NATIVE_WINDOW;
 
                 // Dequeue the next buffer from the native window.
