@@ -33,6 +33,9 @@ class MemoryDealer;
 struct OMXCodecObserver;
 struct CodecProfileLevel;
 class SkipCutBuffer;
+#ifdef TARGET_HAS_VPP
+class VPPProcessor;
+#endif
 
 struct OMXCodec : public MediaSource,
                   public MediaBufferObserver {
@@ -120,6 +123,11 @@ struct OMXCodec : public MediaSource,
 
     static bool findCodecQuirks(const char *componentName, uint32_t *quirks);
 
+#ifdef TARGET_HAS_VPP
+    void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
+    bool isVppBufferAvail();
+#endif
+
 protected:
     virtual ~OMXCodec();
 
@@ -127,6 +135,13 @@ private:
 
     // Make sure mLock is accessible to OMXCodecObserver
     friend class OMXCodecObserver;
+
+#ifdef TARGET_HAS_VPP
+    // Make sure BufferInfo is accessible in VPPProcessor
+    friend class VPPProcessor;
+    uint32_t mVppInBufNum;
+    uint32_t mVppOutBufNum;
+#endif
 
     // Call this with mLock hold
     void on_message(const omx_message &msg);
@@ -161,6 +176,9 @@ private:
         OWNED_BY_COMPONENT,
         OWNED_BY_NATIVE_WINDOW,
         OWNED_BY_CLIENT,
+#ifdef TARGET_HAS_VPP
+        OWNED_BY_VPP,
+#endif
     };
 
     struct BufferInfo {
@@ -170,6 +188,9 @@ private:
         size_t mSize;
         void *mData;
         MediaBuffer *mMediaBuffer;
+#ifdef TARGET_HAS_VPP
+        uint32_t mFlags;
+#endif
     };
 
     struct CodecSpecificData {
