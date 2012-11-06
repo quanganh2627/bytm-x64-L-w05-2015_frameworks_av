@@ -4924,7 +4924,7 @@ void AudioFlinger::PlaybackThread::Track::stop()
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
         if (isOffloadTrack()) {
-            if (state!=ACTIVE && state!=RESUMING) {
+            if (state!=ACTIVE && state!=RESUMING && playbackThread->getOutput_l()) {
                 ALOGV("Track:stop: offload state!=ACTIVE && state!=RESUMING");
                 status_t status = playbackThread->getOutput_l()->stream->flush(
                                            playbackThread->getOutput_l()->stream);
