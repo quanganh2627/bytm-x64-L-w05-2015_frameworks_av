@@ -1997,6 +1997,24 @@ status_t AudioFlinger::PlaybackThread::addTrack_l(const sp<Track>& track)
         track->mResetDone = false;
         track->mPresentationCompleteFrames = 0;
         mActiveTracks.add(track);
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        // The check track->mainBuffer() != mMixBuffer to detect effect chain
+        // is connected to the track may not always work in case of offload
+        // track because track main buffer will be same as mMixBuffer.
+        // This will happen if effects are created before this new track is
+        // created and hence we need to get the effect chain.
+        if (isOffloadTrack()) {
+            sp<EffectChain> chain = getEffectChain_l(track->sessionId());
+            if ((track->mainBuffer() != mMixBuffer) || (chain != 0)) {
+                ALOGV("addTrack_l() starting track on chain %p for session %d", chain.get(), track->sessionId());
+                chain->incActiveTrackCnt();
+            }
+
+            mWaitWorkCV.broadcast();
+            return NO_ERROR;
+        }
+#endif
         if (track->mainBuffer() != mMixBuffer) {
             sp<EffectChain> chain = getEffectChain_l(track->sessionId());
             if (chain != 0) {
