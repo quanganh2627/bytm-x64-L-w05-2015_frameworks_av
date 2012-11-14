@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "FileSource"
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/FileSource.h>
 #include <sys/types.h>
@@ -21,6 +22,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
+#define MAX_READ_TIME_US 100000 // Arbitrary - to be able to detect long stalls of filesource
 
 namespace android {
 
@@ -193,7 +196,13 @@ ssize_t FileSource::readAt(off64_t offset, void *data, size_t size) {
             == mDecryptHandle->decryptApiType) {
         return readAtDRM(offset, data, size);
    } else {
+        nsecs_t now = systemTime();
         int ret = mBuffer.readFromBuffer(offset + mOffset, data, size, mFd);
+        unsigned int t = ns2us(systemTime() - now);
+        if ( t > MAX_READ_TIME_US ) {
+            ALOGE("Source file read took too long: %d us (%d bytes)\n", t, ret);
+        }
+
         // ret >= 0 is the number of bytes read
         if (ret >= 0) {
             return ret;
@@ -204,7 +213,13 @@ ssize_t FileSource::readAt(off64_t offset, void *data, size_t size) {
             return UNKNOWN_ERROR;
         }
 
-        return ::read(mFd, data, size);
+        now = systemTime();
+        int res = ::read(mFd, data, size);
+        t = ns2us(systemTime() - now);
+        if ( t > MAX_READ_TIME_US ) {
+            ALOGE("Direct source file read took too long: %d us (%d bytes)\n", t, res);
+        }
+        return res;
     }
 }
 
