@@ -1070,16 +1070,16 @@ void AudioMixer::process__nop(state_t* state, int64_t pts)
         while (e1) {
             i = 31 - __builtin_clz(e1);
             e1 &= ~(1<<i);
-            t1 = state->tracks[i];
+            track_t& t = state->tracks[i];
             size_t outFrames = state->frameCount;
             while (outFrames) {
-                t1.buffer.frameCount = outFrames;
+                t.buffer.frameCount = outFrames;
                 int64_t outputPTS = calculateOutputPTS(
-                    t1, pts, state->frameCount - outFrames);
-                t1.bufferProvider->getNextBuffer(&t1.buffer, outputPTS);
-                if (t1.buffer.raw == NULL) break;
-                outFrames -= t1.buffer.frameCount;
-                t1.bufferProvider->releaseBuffer(&t1.buffer);
+                    t, pts, state->frameCount - outFrames);
+                t.bufferProvider->getNextBuffer(&t.buffer, outputPTS);
+                if (t.buffer.raw == NULL) break;
+                outFrames -= t.buffer.frameCount;
+                t.bufferProvider->releaseBuffer(&t.buffer);
             }
         }
     }
