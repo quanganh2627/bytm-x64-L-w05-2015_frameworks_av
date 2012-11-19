@@ -141,7 +141,8 @@ struct MyHandler : public AHandler {
           mFirstAccessUnitMediaTime(0),
           mSeekable(false),
           mKeepAliveTimeoutUs(kDefaultKeepAliveTimeoutUs),
-          mKeepAliveGeneration(0) {
+          mKeepAliveGeneration(0),
+          mStartupGeneration(0) {
         mNetLooper->setName("rtsp net");
         mNetLooper->start(false /* runOnCallingThread */,
                           false /* canCallJava */,
@@ -651,6 +652,7 @@ struct MyHandler : public AHandler {
                         parsePlayResponse(response);
 
                         sp<AMessage> timeout = new AMessage('tiou', id());
+                        timeout->setInt32("generation", ++mStartupGeneration);
                         timeout->post(kStartupTimeoutUs);
                     }
                 }
@@ -1005,6 +1007,9 @@ struct MyHandler : public AHandler {
                         result = UNKNOWN_ERROR;
                     } else {
                         parsePlayResponse(response);
+                        sp<AMessage> timeout = new AMessage('tiou', id());
+                        timeout->setInt32("generation", ++mStartupGeneration);
+                        timeout->post(kStartupTimeoutUs);
 
                         ssize_t i = response->mHeaders.indexOfKey("rtp-info");
                         CHECK_GE(i, 0);
@@ -1042,6 +1047,13 @@ struct MyHandler : public AHandler {
 
             case 'tiou':
             {
+                int32_t generation;
+                if (msg->findInt32("generation", &generation)){
+                    if (generation != mStartupGeneration) {
+                        // This is an outdated message. Ignore.
+                        break;
+                    }
+                }
                 if (!mReceivedFirstRTCPPacket) {
                     if (mReceivedFirstRTPPacket && !mTryFakeRTCP) {
                         ALOGW("We received RTP packets but no RTCP packets, "
@@ -1266,6 +1278,7 @@ private:
     bool mSeekable;
     int64_t mKeepAliveTimeoutUs;
     int32_t mKeepAliveGeneration;
+    int32_t mStartupGeneration;
 
     Vector<TrackInfo> mTracks;
 
