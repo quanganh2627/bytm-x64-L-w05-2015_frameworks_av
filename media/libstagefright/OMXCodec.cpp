@@ -53,6 +53,10 @@
 #include "MetaDataExt.h"
 #endif
 
+#ifdef USE_INTEL_VA
+#include "VAVideoDecoder.h"
+#endif
+
 namespace android {
 
 // Treat time out as an error if we have not received any output
@@ -336,6 +340,13 @@ sp<MediaSource> OMXCodec::Create(
         if (!strncmp(componentName, "CIPVP8Decoder", 13)) {
             ALOGI("Loading CIPVP8Decoder");
             return new ThreadedSource(MakeCIPVP8Decoder(source));
+        }
+#endif
+
+#ifdef USE_INTEL_VA
+        if (!strncmp(componentName, "VAVideoDecoder", 14)) {
+            ALOGV("Loading VAVideoDecoder");
+            return new VAVideoDecoder(source);
         }
 #endif
 
