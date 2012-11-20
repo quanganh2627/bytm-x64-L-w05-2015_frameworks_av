@@ -116,6 +116,17 @@ LOCAL_STATIC_LIBRARIES += \
 LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
 endif
 
+ifeq ($(USE_INTEL_VA),true)
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libvavideodecoder
+LOCAL_STATIC_LIBRARIES += libvavideodecoder
+LOCAL_SHARED_LIBRARIES += libva \
+                          libva-android \
+                          libva-tpi \
+                          libva_videodecoder \
+                          libmixvbp
+LOCAL_CPPFLAGS += -DUSE_INTEL_VA
+endif
+
 LOCAL_SRC_FILES += \
         chromium_http_stub.cpp
 LOCAL_CPPFLAGS += -DCHROMIUM_AVAILABLE=1
