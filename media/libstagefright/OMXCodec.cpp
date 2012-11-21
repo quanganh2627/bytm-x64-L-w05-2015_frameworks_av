@@ -252,7 +252,10 @@ uint32_t OMXCodec::getComponentQuirks(
                 index, "requires-set-profile-level")) {
         quirks |= kRequiresSetProfileLevel;
     }
-
+    if (list->codecHasQuirk(
+                index, "requires-set-fps")) {
+        quirks |= kRequiresSetFPS;
+    }
     return quirks;
 }
 
@@ -558,6 +561,26 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
             status_t err = setVideoOutputFormat(
                     mMIME, meta);
 
+            if (err != OK) {
+                return err;
+            }
+        }
+    }
+    // Pass decoder fps information to OMX IL
+    if (mQuirks & kRequiresSetFPS) {
+        int32_t frameRate = 0;
+        if (meta->findInt32(kKeyFrameRate, &frameRate)) {
+            OMX_PARAM_PORTDEFINITIONTYPE def;
+            InitOMXParams(&def);
+            def.nPortIndex = kPortIndexInput;
+            OMX_VIDEO_PORTDEFINITIONTYPE *video_def = &def.format.video;
+            status_t err = mOMX->getParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            CHECK_EQ(err, (status_t)OK);
+            CHECK_EQ((int)def.eDomain, (int)OMX_PortDomainVideo);
+            video_def->xFramerate = frameRate << 16;
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
             if (err != OK) {
                 return err;
             }
