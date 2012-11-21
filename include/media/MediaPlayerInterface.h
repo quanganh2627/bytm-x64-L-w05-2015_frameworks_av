@@ -74,10 +74,20 @@ public:
     // AudioSink: abstraction layer for audio output
     class AudioSink : public RefBase {
     public:
+        enum cb_event_t {
+            CB_EVENT_FILL_BUFFER,
+            CB_EVENT_STREAM_END,
+            CB_EVENT_TEAR_DOWN
+        };
+
         // Callback returns the number of bytes actually written to the buffer.
         typedef size_t (*AudioCallback)(
                 AudioSink *audioSink, void *buffer, size_t size, void *cookie);
 
+        // Overloaded Callback function returns the number of bytes actually written to the buffer.
+        typedef size_t (*AudioCallback2)(
+                AudioSink *audioSink, void *buffer, size_t size, void *cookie,
+                        cb_event_t event);
         virtual             ~AudioSink() {}
         virtual bool        ready() const = 0; // audio output is open and ready
         virtual bool        realtime() const = 0; // audio output is real-time output
@@ -107,7 +117,7 @@ public:
                 int bitRate,
                 audio_format_t format=AUDIO_FORMAT_PCM_16_BIT,
                 int bufferCount=DEFAULT_AUDIOSINK_BUFFERCOUNT,
-                AudioCallback cb = NULL,
+                AudioCallback2 cb = NULL,
                 void *cookie = NULL,
                 audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE) = 0;
         virtual void        start() = 0;
