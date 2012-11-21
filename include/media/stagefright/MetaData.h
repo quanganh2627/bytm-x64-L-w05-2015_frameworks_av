@@ -157,6 +157,13 @@ enum {
     kKeyCryptoKey         = 'cryK',  // uint8_t[16]
     kKeyCryptoIV          = 'cryI',  // uint8_t[16]
     kKeyCryptoMode        = 'cryM',  // int32_t
+
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    kKeyWmaBlockAlign     = 'blka',
+    kKeyWmaFormatTag      = 'frmt',
+    kKeyBitPerSample      = 'btps',
+#endif //ifdef USE_INTEL_ASF_EXTRACTOR
+
 };
 
 enum {
