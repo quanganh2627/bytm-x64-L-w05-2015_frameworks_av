@@ -1305,6 +1305,7 @@ MediaPlayerService::AudioOutput::AudioOutput(int sessionId)
     setMinBufferCount();
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     mBitRate = 0;
+    mCallback2 = NULL;
 #endif
 }
 
@@ -1389,15 +1390,16 @@ status_t MediaPlayerService::AudioOutput::open(
         uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
         int bitRate,
         audio_format_t format, int bufferCount,
-        AudioCallback cb, void *cookie,
+        AudioCallback2 cb, void *cookie,
         audio_output_flags_t flags)
 {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD){
         mBitRate = bitRate;
+        mCallback2 = cb;
      }
      return open(sampleRate, channelCount, channelMask, format,
-                 bufferCount, cb, cookie, flags);
+                 bufferCount, NULL /*cb*/, cookie, flags);
 #else
     return 0;
 #endif
@@ -1446,7 +1448,7 @@ status_t MediaPlayerService::AudioOutput::open(
     CallbackData *newcbd = NULL;
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-       if (mCallback != NULL) {
+       if (mCallback2 != NULL) {
             newcbd = new CallbackData(this);
             t = new AudioTrack(
                 mStreamType,
@@ -1517,10 +1519,19 @@ status_t MediaPlayerService::AudioOutput::open(
     if (mRecycledTrack) {
         // check if the existing track can be reused as-is, or if a new track needs to be created.
         bool reuse = true;
-        if ((mCallbackData == NULL && mCallback != NULL) ||
-                (mCallbackData != NULL && mCallback == NULL)) {
+        if ( (!(flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
+                && (mCallbackData == NULL && mCallback != NULL)) ||
+                (!(flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
+                && (mCallbackData != NULL && mCallback == NULL)) ) {
             // recycled track uses callbacks but the caller wants to use writes, or vice versa
             ALOGV("can't chain callback and write");
+            reuse = false;
+        } else if ( ((flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
+                && (mCallbackData == NULL && mCallback2 != NULL)) ||
+                ((flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
+                && (mCallbackData != NULL && mCallback2 == NULL)) ) {
+            // recycled track uses callbacks but the caller wants to use writes, or vice versa
+            ALOGV("offload: can't chain callback and write");
             reuse = false;
         } else if ((mRecycledTrack->getSampleRate() != sampleRate) ||
                 (mRecycledTrack->channelCount() != channelCount) ||
@@ -1725,14 +1736,21 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
         // For AudioTrack events of Tear down  just call
         // registered call back function and pass the event
         AudioTrack::Buffer buffer;
-        buffer.flags = event;
-        buffer.size  = 4;
-        (*me->mCallback)(me, &buffer, buffer.size, me->mCallbackCookie);
+        if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+            (*me->mCallback2)(me, NULL, 0, me->mCallbackCookie, CB_EVENT_TEAR_DOWN);
+        }
     } break;
     case AudioTrack::EVENT_MORE_DATA:
     {
-        size_t actualSize = (*me->mCallback)(
-            me, buffer->raw, buffer->size, me->mCallbackCookie);
+        size_t actualSize = 0;
+        if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+            actualSize = (*me->mCallback2)(
+                me, buffer->raw, buffer->size, me->mCallbackCookie,
+                CB_EVENT_FILL_BUFFER);
+        } else {
+            actualSize = (*me->mCallback)(
+                me, buffer->raw, buffer->size, me->mCallbackCookie);
+        }
         if ( (actualSize == 0) && (buffer->size > 0) &&
              ((me->mNextOutput == NULL) ||
              (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)) ) {
@@ -1743,8 +1761,8 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
             // to avoid buffer time-out until EOS is posted.
             memset(buffer->raw, 0, buffer->size);
             actualSize = buffer->size;
-       }
-       buffer->size = actualSize;
+        }
+        buffer->size = actualSize;
     } break;
     default:
     {

@@ -130,6 +130,12 @@ private:
             MediaPlayerBase::AudioSink *audioSink,
             void *data, size_t size, void *me);
 
+    // Overloaded for offload callback events
+    static size_t AudioSinkCallback(
+            MediaPlayerBase::AudioSink *audioSink,
+            void *data, size_t size, void *me,
+            MediaPlayerBase::AudioSink::cb_event_t event);
+
     size_t fillBuffer(void *data, size_t size);
 
     int64_t getRealTimeUsLocked() const;

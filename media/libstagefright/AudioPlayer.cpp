@@ -438,17 +438,31 @@ size_t AudioPlayer::AudioSinkCallback(
         MediaPlayerBase::AudioSink *audioSink,
         void *buffer, size_t size, void *cookie) {
     AudioPlayer *me = (AudioPlayer *)cookie;
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    AudioTrack::Buffer *buff = (AudioTrack::Buffer *)buffer;
-
-    // Check for control events in this callback function
-    if((size == 4) && me->mObserver && (buff->flags == AudioTrack::EVENT_TEAR_DOWN)) {
-        ALOGV("AudioSinkCallback: Tear down event received");
-        me->mObserver->postAudioOffloadTearDown();
-        return 0;
-    }
-#endif
     return me->fillBuffer(buffer, size);
+}
+
+// static
+size_t AudioPlayer::AudioSinkCallback(
+        MediaPlayerBase::AudioSink *audioSink,
+        void *buffer, size_t size, void *cookie,
+        MediaPlayerBase::AudioSink::cb_event_t event) {
+    ALOGV("Offload AudioSinkCallback");
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+     AudioPlayer *me = (AudioPlayer *)cookie;
+
+    if(event == MediaPlayerBase::AudioSink::CB_EVENT_FILL_BUFFER) {
+        return me->fillBuffer(buffer, size);
+    } else if( event == MediaPlayerBase::AudioSink::CB_EVENT_STREAM_END ) {
+        ALOGV("AudioSinkCallback: stream end");
+        me->mReachedEOS = true;
+        me->notifyAudioEOS();
+    } else if( event ==  MediaPlayerBase::AudioSink::CB_EVENT_TEAR_DOWN ) {
+        ALOGV("AudioSinkCallback: Tear down event");
+        me->mObserver->postAudioOffloadTearDown();
+    }
+    return 0;
+#endif
+    return 0;
 }
 
 void AudioPlayer::AudioCallback(int event, void *info) {
