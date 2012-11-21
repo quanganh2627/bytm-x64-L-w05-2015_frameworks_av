@@ -101,7 +101,7 @@ class MediaPlayerService : public BnMediaPlayerService
                 uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
                 int bitRate,
                 audio_format_t format, int bufferCount,
-                AudioCallback cb, void *cookie,
+                AudioCallback2 cb, void *cookie,
                 audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE);
 
 
@@ -149,6 +149,7 @@ class MediaPlayerService : public BnMediaPlayerService
         static int              mMinBufferCount;  // 12 for emulator; otherwise 4
         audio_output_flags_t    mFlags;
         int                     mBitRate;
+        AudioCallback2          mCallback2;
 
         // CallbackData is what is passed to the AudioTrack as the "user" data.
         // We need to be able to target this to a different Output on the fly,
@@ -212,7 +213,7 @@ class MediaPlayerService : public BnMediaPlayerService
                 uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
                 int bitRate,
                 audio_format_t format, int bufferCount,
-                AudioCallback cb, void *cookie,
+                AudioCallback2 cb, void *cookie,
                 audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE){return NO_ERROR;}
 
         virtual void            start();
