@@ -1714,7 +1714,7 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
         // no output set, likely because the track was scheduled to be reused
         // by another player, but the format turned out to be incompatible.
         data->unlock();
-        buffer->size = 0;
+        if (buffer != NULL) buffer->size = 0;
         return;
     }
 
@@ -1765,7 +1765,7 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
         // no output set, likely because the track was scheduled to be reused
         // by another player, but the format turned out to be incompatible.
         data->unlock();
-        buffer->size = 0;
+        if (buffer != NULL) buffer->size = 0;
         return;
     }
 
