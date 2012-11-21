@@ -44,6 +44,11 @@
 
 #include "include/avc_utils.h"
 
+#ifdef USE_INTEL_MDP
+#include "UMCMacro.h"
+#include "include/ThreadedSource.h"
+#endif
+
 namespace android {
 
 // Treat time out as an error if we have not received any output
@@ -61,6 +66,10 @@ const static uint32_t kMaxColorFormatSupported = 1000;
 static sp<MediaSource> Make##name(const sp<MediaSource> &source, const sp<MetaData> &meta) { \
     return new name(source, meta); \
 }
+
+#ifdef USE_INTEL_MDP
+FACTORY_CREATE_DECL(CIPVP8Decoder)
+#endif
 
 #define FACTORY_REF(name) { #name, Make##name },
 
@@ -318,6 +327,13 @@ sp<MediaSource> OMXCodec::Create(
 
             componentName = tmp.c_str();
         }
+
+#if USE_INTEL_MDP
+        if (!strncmp(componentName, "CIPVP8Decoder", 13)) {
+            ALOGI("Loading CIPVP8Decoder");
+            return new ThreadedSource(MakeCIPVP8Decoder(source));
+        }
+#endif
 
         if (createEncoder) {
             sp<MediaSource> softwareCodec =
