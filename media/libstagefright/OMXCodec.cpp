@@ -256,6 +256,10 @@ uint32_t OMXCodec::getComponentQuirks(
                 index, "requires-set-fps")) {
         quirks |= kRequiresSetFPS;
     }
+    if (list->codecHasQuirk(
+                index, "requires-loaded-to-idle-after-allocation")) {
+        quirks |= kRequiresLoadedToIdleAfterAllocation;
+    }
     return quirks;
 }
 
