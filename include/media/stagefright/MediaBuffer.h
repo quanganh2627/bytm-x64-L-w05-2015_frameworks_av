@@ -91,7 +91,9 @@ protected:
 private:
     friend class MediaBufferGroup;
     friend class OMXDecoder;
-
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    friend class MediaBufferPool;
+#endif
     // For use by OMXDecoder, reference count must be 1, drop reference
     // count to 0 without signalling the observer.
     void claim();
