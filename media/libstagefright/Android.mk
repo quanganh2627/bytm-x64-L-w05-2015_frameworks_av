@@ -120,6 +120,16 @@ LOCAL_SRC_FILES += \
         chromium_http_stub.cpp
 LOCAL_CPPFLAGS += -DCHROMIUM_AVAILABLE=1
 
+ifeq ($(USE_INTEL_ASF_EXTRACTOR),true)
+
+LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libmix_asf_extractor
+
+LOCAL_STATIC_LIBRARIES += libasfextractor
+LOCAL_SHARED_LIBRARIES += libasfparser
+LOCAL_CPPFLAGS += -DUSE_INTEL_ASF_EXTRACTOR
+endif
+
 LOCAL_SHARED_LIBRARIES += libstlport
 include external/stlport/libstlport.mk
 
