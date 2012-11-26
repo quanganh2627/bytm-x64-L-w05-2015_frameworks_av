@@ -2776,8 +2776,13 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
 
             ALOGVV("track %d u=%08x, s=%08x [NOT READY] on thread %p", name, cblk->user,
                     cblk->server, this);
-            if ((track->sharedBuffer() != 0) || track->isTerminated() ||
-                    track->isStopped() || track->isPaused()) {
+
+            //Do not check if a suspended track has it's frames written to audio HAL.
+            //Proceed to underrun counting because we want to avoid having an audioOut thread enter
+            //an infinite sleep loop without releasing its wakelock as long as the track hasn't been
+            //restored.
+            if (((track->sharedBuffer() != 0) || track->isTerminated() ||
+                    track->isStopped() || track->isPaused()) && !mSuspended) {
                 // We have consumed all the buffers of this track.
                 // Remove it from the list of active tracks.
                 // TODO: use actual buffer filling status instead of latency when available from
