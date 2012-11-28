@@ -4762,6 +4762,12 @@ status_t AudioFlinger::PlaybackThread::Track::getNextBuffer(
     uint32_t framesReady;
     uint32_t framesReq = buffer->frameCount;
 
+    // check whether the serverbase has overflown integer limit
+    if ((int32_t)cblk->serverBase < 0) {
+        LOGW("[AF]ServerBase overflow - reset to zero");
+        cblk->serverBase = 0;
+    }
+
     // Check if last stepServer failed, try to step now
     if (mStepServerFailed) {
         // FIXME When called by fast mixer, this takes a mutex with tryLock().
