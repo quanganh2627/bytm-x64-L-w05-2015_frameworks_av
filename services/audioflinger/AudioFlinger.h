@@ -133,6 +133,7 @@ public:
     virtual     bool        streamMute(audio_stream_type_t stream) const;
 
     virtual     status_t    setMode(audio_mode_t mode);
+
     virtual     status_t    setFmRxMode(int mode);
 
     virtual     status_t    setMicMute(bool state);
@@ -226,6 +227,7 @@ public:
             int output);
 
     virtual bool isAudioEffectEnabled(int sessionId) const;
+    virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
     class SyncEvent;
@@ -268,11 +270,9 @@ public:
                                         sync_event_callback_t callBack,
                                         void *cookie);
 
+
 private:
-    class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
-
-               audio_mode_t getMode() const { return mMode; }
-
+   class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
                 bool        btNrecIsOff() const { return mBtNrecIsOff; }
 
                             AudioFlinger();
