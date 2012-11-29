@@ -1038,7 +1038,7 @@ status_t AwesomePlayer::play() {
 
     //  Before play, we should query audio flinger to see if any effect is enabled.
     //  if (effect is enabled) we should do another prepare w/ IA SW decoding
-    if (mOffload && (isAudioEffectEnabled() ||
+    if (mOffload && ( isInCall() || isAudioEffectEnabled() ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_BLUETOOTH_A2DP, "")
@@ -1768,6 +1768,7 @@ status_t AwesomePlayer::initAudioDecoder() {
         mAudioSource = mAudioTrack;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
         mAudioSource = mAudioTrack;
+        mOffload = false;
     } else {
         // For non PCM the out put format will be PCM 16 bit.
         // Set it for player creation
@@ -1777,6 +1778,7 @@ status_t AwesomePlayer::initAudioDecoder() {
                     false, // createEncoder
                     mAudioTrack);
         mAudioFormat = AUDIO_FORMAT_PCM_16_BIT;
+        mOffload = false;
     }
 #else
     if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
@@ -3617,6 +3619,22 @@ void AwesomePlayer::onAudioOffloadTearDownEvent() {
     }
     mOffloadTearDown = false;
 #endif
+}
+
+bool AwesomePlayer::isInCall() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("isInCall");
+    audio_mode_t mode;
+    const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
+
+    if (audioFlinger != 0) {
+        mode = audioFlinger->getMode();
+        ALOGV("isInCall: Mode read from AF = %d", mode);
+    }
+    return ((mode == AUDIO_MODE_IN_CALL) ||
+            (mode == AUDIO_MODE_IN_COMMUNICATION));
+#endif
+    return false;
 }
 
 bool AwesomePlayer::isAudioEffectEnabled() {
