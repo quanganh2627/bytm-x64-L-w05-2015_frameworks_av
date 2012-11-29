@@ -115,6 +115,8 @@ public:
 
     // set audio mode
     virtual     status_t    setMode(audio_mode_t mode) = 0;
+    // get audio mode
+    virtual audio_mode_t   getMode() const  = 0;
 
     // mic mute/state
     virtual     status_t    setMicMute(bool state) = 0;

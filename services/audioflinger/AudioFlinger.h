@@ -229,6 +229,7 @@ public:
             int output);
 
     virtual bool isAudioEffectEnabled(int sessionId) const;
+    virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
     sp<NBLog::Writer>   newWriter_l(size_t size, const char *name);
@@ -278,11 +279,9 @@ public:
                                         sync_event_callback_t callBack,
                                         void *cookie);
 
+
 private:
-    class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
-
-               audio_mode_t getMode() const { return mMode; }
-
+   class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
                 bool        btNrecIsOff() const { return mBtNrecIsOff; }
 
                             AudioFlinger();
