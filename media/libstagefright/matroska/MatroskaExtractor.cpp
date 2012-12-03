@@ -681,13 +681,17 @@ MatroskaExtractor::MatroskaExtractor(const sp<DataSource> &source)
     }
 
     ret = mSegment->ParseHeaders();
-    CHECK_EQ(ret, 0);
+    if (ret < 0) {
+        LOGE("Parse headers error %d", ret);
+        delete mSegment;
+        mSegment = NULL;
+        return;
+    }
 
     long len;
     ret = mSegment->LoadCluster(pos, len);
-    CHECK_EQ(ret, 0);
-
     if (ret < 0) {
+        LOGE("Cluster loading =error %d", ret);
         delete mSegment;
         mSegment = NULL;
         return;
