@@ -381,8 +381,8 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                 } else if (videoformat != NULL) {
                     int width = 0 ;
                     int height = 0;
-                    CHECK(videoformat->findInt32("widt", &width));
-                    CHECK(videoformat->findInt32("heig", &height));
+                    CHECK(videoformat->findInt32("width", &width));
+                    CHECK(videoformat->findInt32("height", &height));
                     notifyListener(MEDIA_SET_VIDEO_SIZE, width, height);
                     finishPrepare();
                 } else {
