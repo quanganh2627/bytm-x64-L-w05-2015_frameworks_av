@@ -992,6 +992,7 @@ void AudioPolicyService::AudioCommandThread::insertCommand_l(AudioCommand *comma
         // commands are sorted by increasing time stamp: no need to scan the rest of mAudioCommands
         if (command2->mTime <= command->mTime) break;
         if (command2->mCommand != command->mCommand) continue;
+        if (command2->mWaitStatus) continue;
 
         switch (command->mCommand) {
         case SET_PARAMETERS: {
