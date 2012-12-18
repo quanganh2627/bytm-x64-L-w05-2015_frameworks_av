@@ -45,6 +45,7 @@
 #include <media/stagefright/MediaDefs.h>
 #include <media/stagefright/MediaExtractor.h>
 #include <media/stagefright/MediaSource.h>
+#include "include/AsyncOMXCodecWrapper.h"
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/OMXCodec.h>
 
@@ -1903,12 +1904,19 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
     }
 #endif
     ALOGV("initVideoDecoder flags=0x%x", flags);
-    mVideoSource = OMXCodec::Create(
-            mClient.interface(), mVideoTrack->getFormat(),
-            false, // createEncoder
-            mVideoTrack,
-            NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
-
+    if (mCachedSource != NULL) {
+        mVideoSource = AsyncOMXCodecWrapper::Create(
+                mClient.interface(), mVideoTrack->getFormat(),
+                false, // createEncoder
+                mVideoTrack,
+                NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+    } else {
+        mVideoSource = OMXCodec::Create(
+                mClient.interface(), mVideoTrack->getFormat(),
+                false, // createEncoder
+                mVideoTrack,
+                NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+    }
     if (mVideoSource != NULL) {
         int64_t durationUs;
         if (mVideoTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
@@ -2049,8 +2057,10 @@ void AwesomePlayer::onVideoEvent() {
 
             if (err != OK) {
                 CHECK(mVideoBuffer == NULL);
-
-                if (err == INFO_FORMAT_CHANGED) {
+                if (err == -EWOULDBLOCK) {
+                    postVideoEvent_l(10000);
+                    return;
+                } else if (err == INFO_FORMAT_CHANGED) {
                     ALOGV("VideoSource signalled format change.");
 
                     notifyVideoSize_l();
