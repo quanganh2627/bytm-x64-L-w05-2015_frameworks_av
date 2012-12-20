@@ -11,6 +11,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
 	libbinder
 
+ifeq ($(INTEL_WIDI), true)
+LOCAL_SHARED_LIBRARIES += libdl
+LOCAL_CFLAGS += -DINTEL_WIDI
+endif
+
 # FIXME The duplicate audioflinger is temporary
 LOCAL_C_INCLUDES := \
     frameworks/av/media/libmediaplayerservice \
