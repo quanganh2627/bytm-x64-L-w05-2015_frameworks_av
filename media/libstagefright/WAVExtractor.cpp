@@ -32,6 +32,10 @@
 
 #define CHANNEL_MASK_USE_CHANNEL_ORDER 0
 
+//Maximum input sampling rate that can be handled by the resampler.
+//This is a limitation of the resampler and not the WAV format.
+#define MAX_INPUT_SAMPLING_RATE 96000
+
 namespace android {
 
 enum {
@@ -204,7 +208,7 @@ status_t WAVExtractor::init() {
 
             mSampleRate = U32_LE_AT(&formatSpec[4]);
 
-            if (mSampleRate == 0) {
+            if (mSampleRate <= 0 || mSampleRate > MAX_INPUT_SAMPLING_RATE) {
                 return ERROR_MALFORMED;
             }
 
