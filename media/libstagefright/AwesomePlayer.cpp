@@ -2488,7 +2488,13 @@ void AwesomePlayer::onCheckAudioStatus() {
             postStreamDoneEvent_l(finalStatus);
         }
     } else {
-        if (mWatchForAudioEOS && mAudioPlayer->reachedEOS(&finalStatus) && mOffloadPostAudioEOS) {
+        // When seeked at the end of the file, MEDIA_SEEK_COMPLETE will
+        // get posted and also it post MEDIA_PLAYBACK_COMPLETE, even though
+        // few frames are yet to get rendered.
+        // Send MEDIA_PLAYBACK_COMPLETE only after playing all the frames,
+        // not just rely on reachedEOS and mWatchForAudioEOS.
+        if (mWatchForAudioEOS && mAudioPlayer->reachedEOS(&finalStatus) &&
+            !(mAudioPlayer->mOffloadPostEOSPending)) {
             mOffloadPostAudioEOS = false;
             mWatchForAudioEOS = false;
             modifyFlags(AUDIO_AT_EOS, SET);
