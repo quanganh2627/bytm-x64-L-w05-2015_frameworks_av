@@ -884,7 +884,7 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
                 if (strncmp(mAudioHwDevs.valueAt(i)->moduleName(),
                     CODEC_OFFLOAD_MODULE_NAME,
                     strlen(CODEC_OFFLOAD_MODULE_NAME)) == 0) {
-                    ALOGW("getOffloadBufferSize: offload module %s matches",
+                    ALOGW("setParameters: offload module %s matches",
                            CODEC_OFFLOAD_MODULE_NAME);
                     mOffloadDev = mAudioHwDevs.valueAt(i)->hwDevice();
                }

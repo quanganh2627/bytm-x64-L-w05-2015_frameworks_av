@@ -45,7 +45,8 @@ public:
             void        flush();
             void        destroy();
             int         name() const { return mName; }
-
+            status_t    setParameters(const String8& keyValuePairs);
+            status_t    setOffloadEOSReached(bool value);
             audio_stream_type_t streamType() const {
                 return mStreamType;
             }
@@ -60,6 +61,9 @@ public:
     virtual uint32_t    getVolumeLR();
 
     virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
+	
+            bool        isOffloaded() const { return mFlags & IAudioFlinger::TRACK_OFFLOAD; 
+}
 
 protected:
     // for numerous
@@ -81,6 +85,7 @@ protected:
     bool isPausing() const { return mState == PAUSING; }
     bool isPaused() const { return mState == PAUSED; }
     bool isResuming() const { return mState == RESUMING; }
+    bool isActive() const {return (mState == ACTIVE || mState == RESUMING); }
     bool isReady() const;
     void setPaused() { mState = PAUSED; }
     void reset();
@@ -102,7 +107,9 @@ public:
     bool isInvalid() const { return mIsInvalid; }
     virtual bool isTimedTrack() const { return false; }
     bool isFastTrack() const { return (mFlags & IAudioFlinger::TRACK_FAST) != 0; }
-
+    bool mOffloadDrain;
+    bool mOffloadDrained;
+    bool mInOffloadEOS;
 protected:
 
     // FILLED state is used for suppressing volume ramp at begin of playing

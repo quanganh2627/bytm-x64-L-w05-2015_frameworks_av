@@ -57,9 +57,11 @@ struct AudioTrackSharedStatic {
 #define CBLK_OFFLOAD_TEAR_DOWN_MSK         0x0100
 #define CBLK_OFFLOAD_TEAR_DOWN_ON          0x0100  // track invalidated by AudioFlinger. Track to recreate
 #define CBLK_OFFLOAD_USES_DEEP_BUFFER      0x0200  // indicates that the track is deep buffered in the AudioFlinger
-#define CBLK_OFFLOAD_STREAM_END_DONE       0x0400  // Indicates stream end event has been generated
+#define CBLK_OFFLOADED                     0x0400  // indicates that the track is offloaded to hw codec
 #define MAX_OFFLOAD_DEEP_BUFFER_TIMEOUT_MS 20000 //assuming upto a maximum of 20 seconds of deep buffering
 #define WAIT_PERIOD_MUSIC_OFFLOAD_MS       6000
+#define CBLK_OFFLOAD_STREAM_END_DONE    0x1000  // Indicates stream end event has been generated
+#define OFFLOAD_WAIT_PERIOD_MS          100
 
 // Important: do not add any virtual methods, including ~
 struct audio_track_cblk_t

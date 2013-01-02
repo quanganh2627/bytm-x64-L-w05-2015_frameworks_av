@@ -75,9 +75,14 @@ public:
 
     bool isSeeking();
     bool reachedEOS(status_t *finalStatus);
-    void notifyAudioEOS();
 
     status_t setPlaybackRatePermille(int32_t ratePermille);
+
+#ifdef INTEL_WIDI
+    status_t setRouteAudioToWidi(bool on);
+#endif
+
+    void notifyAudioEOS();
 
 private:
     friend class VideoEditorAudioPlayer;
@@ -146,6 +151,10 @@ private:
 
     AudioPlayer(const AudioPlayer &);
     AudioPlayer &operator=(const AudioPlayer &);
+
+public:
+    // This flag is checked from AwesomePlayer for posting MEDIA_PLAYBACK_COMPLETE
+    bool mOffloadPostEOSPending;
 };
 
 }  // namespace android

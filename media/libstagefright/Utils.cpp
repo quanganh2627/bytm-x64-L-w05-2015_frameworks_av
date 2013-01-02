@@ -27,6 +27,9 @@
 #include <media/stagefright/foundation/AMessage.h>
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/Utils.h>
+#include <media/AudioSystem.h>
+#include <media/MediaPlayerInterface.h>
+#include <hardware/audio.h>
 
 namespace android {
 
@@ -469,6 +472,55 @@ AString MakeUserAgent() {
     ua.append(")");
 
     return ua;
+}
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+static const struct {
+    uint32_t    key;
+    const char* name;
+} metadataList[] = {
+    { kKeySampleRate,     AUDIO_OFFLOAD_CODEC_SAMPLE_RATE },
+    { kKeyChannelMask,    AUDIO_OFFLOAD_CODEC_NUM_CHANNEL },
+    { kKeyBitRate,        AUDIO_OFFLOAD_CODEC_AVG_BIT_RATE },
+    { kKeyEncoderDelay,   AUDIO_OFFLOAD_CODEC_DELAY_SAMPLES },
+    { kKeyEncoderPadding, AUDIO_OFFLOAD_CODEC_PADDING_SAMPLES },
+    { 0, NULL }
+};
+#endif
+
+status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink,
+                           const sp<MetaData>& meta)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+
+    int32_t sampleRate = 0;
+    int32_t bitRate = 0;
+    int32_t numChannels = 0;
+    int32_t delaySamples = 0;
+    int32_t paddingSamples = 0;
+
+    meta->findInt32(kKeySampleRate, &sampleRate);
+    meta->findInt32(kKeyChannelMask, &numChannels);
+    meta->findInt32(kKeyBitRate, &bitRate);
+    meta->findInt32(kKeyEncoderDelay, &delaySamples);
+    meta->findInt32(kKeyEncoderPadding, &paddingSamples);
+
+    AudioParameter param = AudioParameter();
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_AVG_BIT_RATE), bitRate);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_SAMPLE_RATE), sampleRate);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_NUM_CHANNEL), numChannels);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_DELAY_SAMPLES), delaySamples);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_PADDING_SAMPLES), paddingSamples);
+
+    ALOGV("sendMetaDataToHal: bitRate %d, sampleRate %d, numChan %d,"
+          "delaySample %d, paddingSample %d", bitRate, sampleRate, numChannels, delaySamples, paddingSamples);
+
+    sink->setParameters(param.toString());
+    return OK;
+
+#else
+    return OK;
+#endif
 }
 
 }  // namespace android

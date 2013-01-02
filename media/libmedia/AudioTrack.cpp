@@ -49,8 +49,6 @@
 #include "iasrc_resampler.h"
 #endif
 
-#define OFFLOAD_MULTIPLIER 100
-#define DEFAULT_MULTIPLIER 1
 namespace android {
 // ---------------------------------------------------------------------------
 
@@ -189,7 +187,7 @@ AudioTrack::AudioTrack(
 {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     mOutput = 0;
-    mBitRate = 0;
+    mBitRate = bitRate;
     mStatus = set(streamType, sampleRate, format, channelMask,
         frameCount, flags, cbf, user, notificationFrames,
         0, false, sessionId);
@@ -316,6 +314,11 @@ status_t AudioTrack::set(
     if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
         // Get offload buffer size and also sets bitrate for output stream in HAL
         int bufferSize = 0;
+        if(mBitRate < 0) {
+            mBitRate = 0;
+            ALOGV("set: mBitRate reset to %d", mBitRate);
+        }
+
         bufferSize = getOffloadBufferSize(mBitRate, sampleRate, channelMask, NULL);
         if (bufferSize == 0) {
             // cannot offload with zero buffer size return track not initailized
@@ -392,6 +395,7 @@ status_t AudioTrack::set(
     AudioSystem::acquireAudioSessionId(mSessionId);
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     mOutput = output;
+    mOffloadEOSReached = false;
 #endif
     return NO_ERROR;
 }
@@ -413,6 +417,19 @@ size_t AudioTrack::getOffloadBufferSize(
 #else
     ALOGI("getOffloadBufferSize is not supported");
     return 0;
+#endif
+}
+
+status_t AudioTrack::setParameters( const String8& keyValuePairs )
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if ((mAudioTrack != 0) && (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)) {
+        return mAudioTrack->setParameters( keyValuePairs );
+    } else {
+        return NO_INIT;
+    }
+#else
+    return NO_ERROR;
 #endif
 }
 
@@ -475,7 +492,6 @@ void AudioTrack::start()
             }
         }
     }
-
 }
 
 void AudioTrack::stop()
@@ -536,7 +552,7 @@ void AudioTrack::flush()
 
 void AudioTrack::flush_l()
 {
-    ALOGV("flush");
+    ALOGV("flush_l");
     ALOG_ASSERT(!mActive);
 
     // clear playback marker and periodic update counter
@@ -553,6 +569,8 @@ void AudioTrack::flush_l()
         mAudioTrack->flush();
         // Release AudioTrack callback thread in case it was waiting for new buffers
         // in AudioTrack::obtainBuffer()
+
+        mOffloadEOSReached = false;
         mCblk->cv.signal();
     }
 }
@@ -782,7 +800,6 @@ status_t AudioTrack::getPosition(uint32_t *position)
         return BAD_VALUE;
     }
     AutoMutex lock(mLock);
-
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (!(mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)) {
         *position = mFlushed ? 0 : mCblk->server;
@@ -796,6 +813,22 @@ status_t AudioTrack::getPosition(uint32_t *position)
     }
 #else
     *position = mFlushed ? 0 : mCblk->server;
+#endif
+    return NO_ERROR;
+}
+
+status_t AudioTrack::setOffloadEOSReached(bool value)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+        mOffloadEOSReached = value;
+        ALOGV("mOffloadEOSReached: %x", mOffloadEOSReached);
+        if (mAudioTrack != 0) {
+            ALOGV("setOffloadEOSReached: calling setOffloadEOSReached");
+            return mAudioTrack->setOffloadEOSReached(mOffloadEOSReached);
+        }
+    }
+    return NO_INIT;
 #endif
     return NO_ERROR;
 }
@@ -983,7 +1016,7 @@ status_t AudioTrack::createTrack_l(
         }
     }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
         trackFlags |= IAudioFlinger::TRACK_OFFLOAD;
     }
 #endif
@@ -1089,6 +1122,14 @@ status_t AudioTrack::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
 
     cblk->lock.lock();
     if (cblk->flags & CBLK_INVALID) {
+//To be checked
+//    if (cblk->flags & CBLK_INVALID_MSK) {
+        // no need to clear the invalid flag as this cblk will not be used anymore
+        if (cblk->flags & CBLK_OFFLOAD_TEAR_DOWN_MSK) {
+            ALOGW("obtainBuffer() before loop, track %p invalidated. Tear down stream", this);
+            cblk->lock.unlock();
+            return TEAR_DOWN;
+        }
         goto create_new_track;
     }
     cblk->lock.unlock();
@@ -1360,7 +1401,7 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
 {
     Buffer audioBuffer;
     uint32_t frames;
-    size_t writtenSize;
+    size_t writtenSize = 0;
 
     mLock.lock();
     if (mAwaitBoost) {
@@ -1393,8 +1434,19 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
     // since mLock is unlocked the IAudioTrack and shared memory may be re-created,
     // so all cblk references might still refer to old shared memory, but that should be benign
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if ((mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) &&
+        (mOffloadEOSReached) && (mCblk->flags & CBLK_OFFLOAD_STREAM_END_DONE)) {
+        android_atomic_and(~CBLK_OFFLOAD_STREAM_END_DONE, &cblk->flags);
+        mOffloadEOSReached = false;
+        ALOGV("Posting play complete");
+        mCbf(EVENT_STREAM_END, mUserData, 0);
+    }
+#endif
+
     // Manage underrun callback
-    if (active && (mProxy->framesAvailable() == mFrameCount)) {
+    if (!mOffloadEOSReached &&
+        active && (cblk->framesAvailable() == cblk->frameCount)) {
         ALOGV("Underrun user: %x, server: %x, flags %04x", cblk->user, cblk->server, cblk->flags);
         if (!(android_atomic_or(CBLK_UNDERRUN, &cblk->flags) & CBLK_UNDERRUN)) {
             mCbf(EVENT_UNDERRUN, mUserData, 0);
@@ -1459,10 +1511,9 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
                         "Error obtaining an audio buffer, giving up.");
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
                 if (err == status_t(TEAR_DOWN)) {
-                    ALOGW("processAudioBuffer: Tear down in progress");
+                    ALOGV("processAudioBuffer: Tear down in progress");
                     mCbf(EVENT_TEAR_DOWN, mUserData, NULL);
-                }
-                else {
+                } else {
                     ALOGE_IF(err != status_t(NO_MORE_BUFFERS), "Error obtaining an audio buffer, giving up.");
                 }
 #else
@@ -1494,9 +1545,12 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
             // still try to get more data in intervals of WAIT_PERIOD_MS
             // but don't just loop and block the CPU, so wait
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-            usleep( ((mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) ?
-                     OFFLOAD_MULTIPLIER : DEFAULT_MULTIPLIER) *
-                     WAIT_PERIOD_MS*1000 );
+            if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD & mOffloadEOSReached) {
+                ALOGV("processAudioBuffer: EOS reached, sleeping for 100 ms");
+                usleep(OFFLOAD_WAIT_PERIOD_MS*1000);
+            } else {
+                usleep(WAIT_PERIOD_MS*1000);
+            }
 #else
             usleep(WAIT_PERIOD_MS*1000);
 #endif

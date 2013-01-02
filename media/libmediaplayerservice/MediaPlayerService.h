@@ -124,6 +124,10 @@ class MediaPlayerService : public BnMediaPlayerService
                 void            switchToNextOutput();
         virtual bool            needsTrailingPadding() { return mNextOutput == NULL; }
 
+        virtual status_t        setParameters(const String8& keyValuePairs);
+        virtual String8         getParameters(const String8& keys);
+        virtual status_t        setOffloadEOSReached(bool value);
+
     private:
         static void             setMinBufferCount();
         static void             CallbackWrapper(
@@ -201,7 +205,6 @@ class MediaPlayerService : public BnMediaPlayerService
         virtual status_t        getPosition(uint32_t *position) const;
         virtual status_t        getFramesWritten(uint32_t *frameswritten) const;
         virtual int             getSessionId() const;
-
         virtual status_t        open(
                 uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
                 audio_format_t format, int bufferCount = 1,
@@ -235,6 +238,7 @@ class MediaPlayerService : public BnMediaPlayerService
         static  void            notify(void* cookie, int msg,
                                        int ext1, int ext2, const Parcel *obj);
         virtual status_t        dump(int fd, const Vector<String16>& args) const;
+        virtual status_t        setOffloadEOSReached(bool value) { return NO_ERROR; };
 
     private:
                                 AudioCache();

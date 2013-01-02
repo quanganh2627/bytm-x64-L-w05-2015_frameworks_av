@@ -424,6 +424,10 @@ private:
         virtual void        stop();
         virtual status_t onTransact(
             uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
+
+        virtual status_t    setParameters(const String8& keyValuePairs);
+        virtual status_t    setOffloadEOSReached(bool value);
+
     private:
         const sp<RecordThread::RecordTrack> mRecordTrack;
 

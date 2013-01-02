@@ -533,6 +533,12 @@ public:
                                             uint32_t channel,
                                             audio_io_handle_t output = 0);
 
+    /* Set parameters - only possible when using direct output */
+            status_t   setParameters(const String8& keyValuePairs);
+
+    /* Set offload EOS reached */
+            status_t    setOffloadEOSReached(bool value);
+
 protected:
     /* copying audio tracks is not allowed */
                         AudioTrack(const AudioTrack& other);
@@ -651,6 +657,7 @@ protected:
     int                     mWakeTimeMs;
     audio_io_handle_t       mOutput;
     int                     mBitRate;
+    bool                    mOffloadEOSReached;
 };
 
 class TimedAudioTrack : public AudioTrack

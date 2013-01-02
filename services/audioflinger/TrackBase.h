@@ -28,7 +28,8 @@ public:
         TERMINATED,
         FLUSHED,
         STOPPED,
-        // next 2 states are currently used for fast tracks only
+        // next 2 states are currently used for fast tracks
+        // and offloaded audio only
         STOPPING_1,     // waiting for first underrun
         STOPPING_2,     // waiting for presentation complete
         RESUMING,
@@ -89,7 +90,7 @@ protected:
         return (mState == STOPPED || mState == FLUSHED);
     }
 
-    // for fast tracks only
+    // for fast tracks and offloaded tracks only
     bool isStopping() const {
         return mState == STOPPING_1 || mState == STOPPING_2;
     }
@@ -102,6 +103,10 @@ protected:
 
     bool isTerminated() const {
         return mState == TERMINATED;
+    }
+	
+    bool isFlushed() const {
+        return mState == FLUSHED;    
     }
 
     bool step();    // mStepCount is an implicit input

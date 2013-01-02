@@ -129,6 +129,10 @@ public:
 
         virtual status_t    setPlaybackRatePermille(int32_t rate) { return INVALID_OPERATION; }
         virtual bool        needsTrailingPadding() { return true; }
+
+        virtual status_t    setParameters(const String8& keyValuePairs) { return NO_ERROR; };
+        virtual String8     getParameters(const String8& keys) { return String8::empty(); };
+        virtual status_t    setOffloadEOSReached(bool value) { return NO_ERROR; };
     };
 
                         MediaPlayerBase() : mCookie(0), mNotify(0) {}

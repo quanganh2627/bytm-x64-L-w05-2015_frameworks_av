@@ -394,7 +394,7 @@ public:
                                 status_t *status);
 
                 AudioStreamOut* getOutput() const;
-                AudioStreamOut* getOutput_l() const;
+                AudioStreamOut* getOutput_l() const { return mOutput; }
                 AudioStreamOut* clearOutput();
                 virtual audio_stream_t* stream() const;
 
@@ -652,8 +652,13 @@ private:
 
     // prepareTracks_l() tells threadLoop_mix() the name of the single active track
     sp<Track>               mActiveTrack;
+    sp<Track>               mLastTrack;
 public:
     virtual     bool        hasFastMixer() const { return false; }
+
+                bool        mDraining;
+private:
+                bool        mIsOffloaded;   // if current track is offloaded
 };
 
 class DuplicatingThread : public MixerThread {
