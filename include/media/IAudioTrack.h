@@ -25,6 +25,7 @@
 #include <binder/IInterface.h>
 #include <binder/IMemory.h>
 #include <utils/LinearTransform.h>
+#include <utils/String8.h>
 
 namespace android {
 
@@ -89,6 +90,12 @@ public:
                                               int target) = 0;
     // For Offload
     virtual void setVolume(float left, float right) = 0;
+
+    /* Send parameters to the audio hardware */
+    virtual status_t    setParameters(const String8& keyValuePairs) = 0;
+
+    /* Set EOS reached in AudioFlinger */
+    virtual status_t setOffloadEOSReached(bool value) = 0;
 };
 
 // ----------------------------------------------------------------------------

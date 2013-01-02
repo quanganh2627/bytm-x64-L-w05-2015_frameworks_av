@@ -384,7 +384,8 @@ private:
                 TERMINATED,
                 FLUSHED,
                 STOPPED,
-                // next 2 states are currently used for fast tracks only
+                // next 2 states are currently used for fast tracks
+                // and offloaded audio only
                 STOPPING_1,     // waiting for first underrun
                 STOPPING_2,     // waiting for presentation complete
                 RESUMING,
@@ -446,7 +447,7 @@ private:
                 return (mState == STOPPED || mState == FLUSHED);
             }
 
-            // for fast tracks only
+            // for fast tracks and offloaded tracks only
             bool isStopping() const {
                 return mState == STOPPING_1 || mState == STOPPING_2;
             }
@@ -459,6 +460,10 @@ private:
 
             bool isTerminated() const {
                 return mState == TERMINATED;
+            }
+
+            bool isFlushed() const {
+                return mState == FLUSHED;
             }
 
             bool step();
@@ -808,7 +813,8 @@ private:
                     void        mute(bool);
                     int         name() const { return mName; }
                     void        setVolume(float left, float right);
-
+                    status_t    setParameters(const String8& keyValuePairs);
+                    status_t    setOffloadEOSReached(bool value);
                     audio_stream_type_t streamType() const {
                         return mStreamType;
                     }
@@ -822,6 +828,8 @@ private:
         // implement FastMixerState::VolumeProvider interface
             virtual uint32_t    getVolumeLR();
             virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
+
+                    bool        isOffloaded() const { return mFlags & IAudioFlinger::TRACK_OFFLOAD; }
 
         protected:
             // for numerous
@@ -839,7 +847,6 @@ private:
             virtual size_t framesReady() const;
 
             bool isMuted() const { return mMute; }
-            bool isActive() { return (mState == ACTIVE || mState == RESUMING); }
             bool isPausing() const {
                 return mState == PAUSING;
             }
@@ -848,6 +855,9 @@ private:
             }
             bool isResuming() const {
                 return mState == RESUMING;
+            }
+            bool isActive() const {
+                return (mState == ACTIVE || mState == RESUMING);
             }
             bool isReady() const;
             void setPaused() { mState = PAUSED; }
@@ -865,7 +875,9 @@ private:
             void triggerEvents(AudioSystem::sync_event_t type);
             virtual bool isTimedTrack() const { return false; }
             bool isFastTrack() const { return (mFlags & IAudioFlinger::TRACK_FAST) != 0; }
-            bool isOffloadTrack() const { return (mFlags & IAudioFlinger::TRACK_OFFLOAD) != 0; }
+            bool                            mOffloadDrain;
+            bool                            mOffloadDrained;
+            bool                            mInOffloadEOS;
         protected:
 
             // written by Track::mute() called by binder thread(s), without a mutex or barrier.
@@ -1098,7 +1110,7 @@ public:
                                     status_t *status);
 
                     AudioStreamOut* getOutput() const;
-                    AudioStreamOut* getOutput_l() const;
+                    AudioStreamOut* getOutput_l() const { return mOutput; }
                     AudioStreamOut* clearOutput();
                     virtual audio_stream_t* stream() const;
 
@@ -1151,6 +1163,7 @@ public:
         volatile int32_t                mSuspended;
 
         int                             mBytesWritten;
+
     private:
         // mMasterMute is in both PlaybackThread and in AudioFlinger.  When a
         // PlaybackThread needs to find out if master-muted, it checks it's local
@@ -1239,7 +1252,6 @@ public:
 
         // DUPLICATING only
         uint32_t                        writeFrames;
-
     private:
         // The HAL output sink is treated as non-blocking, but current implementation is blocking
         sp<NBAIO_Sink>          mOutputSink;
@@ -1353,8 +1365,13 @@ public:
 private:
         // prepareTracks_l() tells threadLoop_mix() the name of the single active track
         sp<Track>               mActiveTrack;
+        sp<Track>               mLastTrack;
     public:
         virtual     bool        hasFastMixer() const { return false; }
+
+                    bool        mDraining;
+    private:
+                    bool        mIsOffloaded;   // if current track is offloaded
     };
 
     class DuplicatingThread : public MixerThread {
@@ -1440,6 +1457,10 @@ private:
                                                   int target);
         virtual status_t onTransact(
             uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
+
+        virtual status_t    setParameters(const String8& keyValuePairs);
+        virtual status_t    setOffloadEOSReached(bool value);
+
     private:
         const sp<PlaybackThread::Track> mTrack;
     };

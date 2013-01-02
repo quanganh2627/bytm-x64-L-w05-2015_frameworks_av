@@ -124,11 +124,11 @@ static const int8_t kMaxTrackStartupRetries = 50;
 // direct outputs can be a scarce resource in audio hardware and should
 // be released as quickly as possible. However if the stream is deep buffered
 // we need to make sure that AudioTrack client has enough time to send large buffers
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-static const int8_t kMaxTrackRetriesDirect = 20;
-#else
 static const int8_t kMaxTrackRetriesDirect = 2;
-#endif
+
+// If the stream is offloaded
+// we need to make sure that AudioTrack client has enough time to send large buffers
+static const int8_t kMaxTrackRetriesOffloaded = 20;
 
 static const int kDumpLockRetries = 50;
 static const int kDumpLockSleepUs = 20000;
@@ -914,7 +914,7 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
                 if (strncmp(mAudioHwDevs.valueAt(i)->moduleName(),
                     CODEC_OFFLOAD_MODULE_NAME,
                     strlen(CODEC_OFFLOAD_MODULE_NAME)) == 0) {
-                    ALOGW("getOffloadBufferSize: offload module %s matches",
+                    ALOGW("setParameters: offload module %s matches",
                            CODEC_OFFLOAD_MODULE_NAME);
                     mOffloadDev = mAudioHwDevs.valueAt(i)->hwDevice();
                }
@@ -1999,7 +1999,7 @@ bool AudioFlinger::PlaybackThread::isOffloadTrack() const
     bool offloadTrack = false;
     for (size_t i = 0; i < mTracks.size(); ++i) {
         sp<Track> t = mTracks[i];
-        if (t != 0 && t->isOffloadTrack()) {
+        if (t != 0 && t->isOffloaded()) {
             offloadTrack = true;
         }
     }
@@ -2368,15 +2368,6 @@ AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::getOutput() const
 {
     Mutex::Autolock _l(mLock);
     return mOutput;
-}
-
-AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::getOutput_l() const
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    ALOGV("returns mOutput");
-    return mOutput;
-#endif
-    return NULL;
 }
 
 AudioFlinger::AudioStreamOut* AudioFlinger::PlaybackThread::clearOutput()
@@ -3016,10 +3007,31 @@ void AudioFlinger::PlaybackThread::threadLoop_write()
     // otherwise use the HAL / AudioStreamOut directly
     } else {
         // Direct output thread.
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        bytesWritten = (int)mOutput->stream->write(mOutput->stream, mMixBuffer, mixBufferSize);
+
+        for (size_t i = 0; i < mTracks.size(); ++i) {
+            sp<Track> t = mTracks[i];
+            if (t != 0 && t->isOffloaded()) {
+                t->mOffloadDrained = false;
+                if (t->mOffloadDrain) {
+                    mOutput->stream->drain(mOutput->stream);
+                    t->mOffloadDrain = false;
+                    t->mOffloadDrained = true;
+                }
+            }
+        }
+    }
+
+    if (bytesWritten > 0) mBytesWritten += mixBufferSize;
+
+#else
         bytesWritten = (int)mOutput->stream->write(mOutput->stream, mMixBuffer, mixBufferSize);
     }
 
     if (bytesWritten > 0) mBytesWritten += mixBufferSize;
+#endif
+
     mNumWrites++;
     mInWrite = false;
 }
@@ -3929,6 +3941,10 @@ AudioFlinger::DirectOutputThread::DirectOutputThread(const sp<AudioFlinger>& aud
         AudioStreamOut* output, audio_io_handle_t id, audio_devices_t device)
     :   PlaybackThread(audioFlinger, output, id, device, DIRECT)
         // mLeftVolFloat, mRightVolFloat
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        ,mIsOffloaded(false),
+        mDraining(false)
+#endif
 {
 }
 
@@ -3953,26 +3969,44 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
         Track* const track = t.get();
         audio_track_cblk_t* cblk = track->cblk();
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        mIsOffloaded = track->isOffloaded();
+#endif
+
         // The first time a track is added we wait
         // for all its buffers to be filled before processing it
+        // unless it is offloaded in which case the HAL buffer is very large
+        // relative to the track size so we write data as soon as it is available
         uint32_t minFrames;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if ((track->sharedBuffer() == 0) && !track->isStopped() && !track->isPausing()
+                                        && !mIsOffloaded ) {
+#else
         if ((track->sharedBuffer() == 0) && !track->isStopped() && !track->isPausing()) {
+#endif
             minFrames = mNormalFrameCount;
         } else {
             minFrames = 1;
         }
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        bool offloadTrack = track->isOffloadTrack();
-        if (offloadTrack) {
+        if (mIsOffloaded) {
             if (track->isPausing()) {
                 track->setPaused();
+            }
+            if (track->mState == TrackBase::RESUMING) {
+                ALOGV("prepTrack: track->mOffloadDrained %d", track->mOffloadDrained);
+                if (track->mOffloadDrained) {
+                    track->mState = TrackBase::STOPPING_2; // This will allow to post EOS
+                } else if (track->mInOffloadEOS) {
+                    track->mState = TrackBase::STOPPING_1; // This will make sure last buffer gets played
+                }
             }
         }
 
         if ((track->framesReady() >= minFrames) && track->isReady() &&
-                (offloadTrack ? (track->isActive()) :
-                               (!track->isPaused() && !track->isTerminated())))
+                (mIsOffloaded ? (track->isActive()) :
+                               (!track->isPaused() && !track->isTerminated())) )
         {
 #else
         if ((track->framesReady() >= minFrames) && track->isReady() &&
@@ -4033,10 +4067,130 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
             }
 
             // reset retry count
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            track->mRetryCount = (mIsOffloaded ? kMaxTrackRetriesOffloaded
+                                               : kMaxTrackRetriesDirect );
+            mDraining = false;
+            track->mOffloadDrain = false;
+            track->mOffloadDrained = false;
+#else
             track->mRetryCount = kMaxTrackRetriesDirect;
+#endif
             mActiveTrack = t;
             mixerStatus = MIXER_TRACKS_READY;
         } else {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            // clear effect chain input buffer if an active track underruns to avoid sending
+            // previous audio buffer again to effects
+            if (!mEffectChains.isEmpty()) {
+                mEffectChains[0]->clearInputBuffer();
+            }
+
+            //ALOGV("track %d u=%08x, s=%08x [NOT READY]", track->name(), cblk->user, cblk->server);
+            if (mIsOffloaded) {
+                // When offloading there is a large hardware buffer so we can underrun
+                // and drop into here while the track actually has a significant time
+                // still to play from the hw buffer. We must handle the case
+                // that a pause request was made after underrun but while still
+                // playing in hardware, and if that happens we must remove the
+                // track from the active list so that the thread can sleep
+                if (track->isPausing() || track->isPaused()) {
+                    ALOGV("direct: underrun and PAUSING/PAUSED -> PAUSED");
+                    //track->setPaused();
+                    //trackToRemove = track;
+                } else if(track->isStopping_1()) {
+                    // for an offloaded track we must do one final pass after
+                    // we've written the last buffer to the HAL to wait for the
+                    // entire hardware buffer to be played ("drain"). We only do
+                    // this if the track is stopping
+                    ALOGV("direct: underrun and STOPPING_1 -> draining, STOPPING_2");
+                    track->mOffloadDrain = true;
+                    track->mState = TrackBase::STOPPING_2; // so presentation completes after drain
+                    track->mInOffloadEOS = false;
+                    // reset retry count
+                    track->mRetryCount = (mIsOffloaded ? kMaxTrackRetriesOffloaded
+                                                   : kMaxTrackRetriesDirect );
+                    mActiveTrack = t;
+                    mixerStatus = MIXER_TRACKS_READY;
+                } else if ((track->sharedBuffer() != 0) || track->isTerminated() ||
+                        track->isStopping_2() || track->isStopped() || track->isPaused()) {
+                    // We have consumed all the buffers of this track.
+                    // Remove it from the list of active tracks.
+
+                    // for offloaded tracks the presentation is complete
+                    // when we have done a drain, this is indicated by a
+                    // track state of STOPPING_2
+                    if( track->isStopping_2() ) {
+                        ALOGV("direct: underrun of offloaded in STOPPING_2");
+                        mDraining = false;
+                        // Make it to active for gapless playback and stop in buffer time out
+                        track->mState = TrackBase::ACTIVE;
+                        track->mInOffloadEOS = false;
+                        // Signal a stream end
+                        ALOGV("Signalling Stream End");
+                        audio_track_cblk_t* cblk = track->cblk();
+
+                        android_atomic_or(CBLK_OFFLOAD_STREAM_END_DONE, &cblk->flags);
+                        cblk->cv.signal();
+                    } else if (track->isFlushed()) {
+                        ALOGV("direct: underrun, in flushed state");
+                        track->mRetryCount = (mIsOffloaded ? kMaxTrackRetriesOffloaded
+                                                           : kMaxTrackRetriesDirect );
+                        mDraining = false;
+                        track->mOffloadDrain = false;
+                        track->mOffloadDrained = false;
+                        mActiveTrack = t;
+                    } else {
+                        // We've underrun unexpectedly. change to STOPPING_1
+                        // to drain all data that has already been written
+                        // (This is equivalent to the behaviour of
+                        // presentationComplete() for a PCM track)
+                        ALOGV("direct: underrun of offloaded => remove track");
+                        if (track->isStopped()) {
+                            ALOGV("direct: underrun calling track reset");
+                            track->reset();
+                        }
+                        trackToRemove = track;
+                    }
+                } else {
+                    // No buffers for this track. Give it a few chances to
+                    // fill a buffer, then remove it from active list.
+                    if (--(track->mRetryCount) <= 0) {
+                        ALOGV("BUFFER TIMEOUT: remove(%d) from active list", track->name());
+                        trackToRemove = track;
+                    } else {
+                        ALOGV("prep: track not ready, wait for buffer time out");
+                    }
+                }
+            } else {
+                if ((track->sharedBuffer() != 0) || track->isTerminated() ||
+                        track->isStopped() || track->isPaused()) {
+                    // We have consumed all the buffers of this track.
+                    // Remove it from the list of active tracks.
+                    // TODO: implement behavior for compressed audio
+                    size_t audioHALFrames =
+                            (mOutput->stream->get_latency(mOutput->stream)*mSampleRate) / 1000;
+                    size_t framesWritten =
+                            mBytesWritten / audio_stream_frame_size(&mOutput->stream->common);
+                    if (track->presentationComplete(framesWritten, audioHALFrames)) {
+                        if (track->isStopped()) {
+                            track->reset();
+                        }
+                        trackToRemove = track;
+                    }
+                } else {
+                    // No buffers for this track. Give it a few chances to
+                    // fill a buffer, then remove it from active list.
+                    if (--(track->mRetryCount) <= 0) {
+                        ALOGV("BUFFER TIMEOUT: remove(%d) from active list", track->name());
+                        trackToRemove = track;
+                    } else {
+                        mixerStatus = MIXER_TRACKS_ENABLED;
+                    }
+                }
+            }
+        }
+#else
             // clear effect chain input buffer if an active track underruns to avoid sending
             // previous audio buffer again to effects
             if (!mEffectChains.isEmpty()) {
@@ -4069,6 +4223,8 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
                 }
             }
         }
+#endif
+
     }
 
     // FIXME merge this with similar code for removing multiple tracks
@@ -4094,6 +4250,9 @@ void AudioFlinger::DirectOutputThread::threadLoop_mix()
     AudioBufferProvider::Buffer buffer;
     size_t frameCount = mFrameCount;
     int8_t *curBuf = (int8_t *)mMixBuffer;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mixBufferSize = 0;
+#endif
     // output audio to hardware
     while (frameCount) {
         buffer.frameCount = frameCount;
@@ -4106,7 +4265,8 @@ void AudioFlinger::DirectOutputThread::threadLoop_mix()
         frameCount -= buffer.frameCount;
         curBuf += buffer.frameCount * mFrameSize;
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        //Used in writing offload data to avoid sending padded bytes.
+        mixBufferSize += buffer.frameCount * mFrameSize;
+#else
         mixBufferSize = buffer.frameCount * mFrameSize;
 #endif
         mActiveTrack->releaseBuffer(&buffer);
@@ -4114,7 +4274,6 @@ void AudioFlinger::DirectOutputThread::threadLoop_mix()
     sleepTime = 0;
     standbyTime = systemTime() + standbyDelay;
     mActiveTrack.clear();
-
 }
 
 void AudioFlinger::DirectOutputThread::threadLoop_sleepTime()
@@ -4444,7 +4603,18 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
     // ALOGD("Creating track with %d buffers @ %d bytes", bufferCount, bufferSize);
     size_t size = sizeof(audio_track_cblk_t);
     uint8_t channelCount = popcount(channelMask);
-    size_t bufferSize = frameCount*channelCount*sizeof(int16_t);
+    size_t bufferSize;
+    if ( audio_is_linear_pcm(format) ) {
+        // fixed 16-bit samples
+        bufferSize = frameCount*channelCount*sizeof(int16_t);
+        ALOGV( "PCM: bufferSize = %d", bufferSize );
+    } else {
+        // number of samples in buffer is variable depending on compression
+        // algorithm, so client passes us the buffer size as frameCount
+        bufferSize = frameCount;
+        ALOGV( "compressed: bufferSize = %d", bufferSize );
+    }
+
     if (sharedBuffer == 0) {
         size += bufferSize;
     }
@@ -4467,7 +4637,7 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
                 mChannelMask = channelMask;
                 if (sharedBuffer == 0) {
                     mBuffer = (char*)mCblk + sizeof(audio_track_cblk_t);
-                    memset(mBuffer, 0, frameCount*channelCount*sizeof(int16_t));
+                    memset(mBuffer, 0, bufferSize);
                     // Force underrun condition to avoid false underrun callback until first data is
                     // written to buffer (other flags are cleared)
                     mCblk->flags = CBLK_UNDERRUN_ON;
@@ -4496,7 +4666,7 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
         mChannelCount = channelCount;
         mChannelMask = channelMask;
         mBuffer = (char*)mCblk + sizeof(audio_track_cblk_t);
-        memset(mBuffer, 0, frameCount*channelCount*sizeof(int16_t));
+        memset(mBuffer, 0, bufferSize);
         // Force underrun condition to avoid false underrun callback until first data is
         // written to buffer (other flags are cleared)
         mCblk->flags = CBLK_UNDERRUN_ON;
@@ -4614,7 +4784,10 @@ AudioFlinger::PlaybackThread::Track::Track(
     mFlags(flags),
     mFastIndex(-1),
     mUnderrunCount(0),
-    mCachedVolume(1.0)
+    mCachedVolume(1.0),
+    mOffloadDrain(false),
+    mOffloadDrained(false),
+    mInOffloadEOS(false)
 {
     if (mCblk != NULL) {
         // NOTE: audio_track_cblk_t::frameSize for 8 bit PCM data is based on a sample size of
@@ -4667,7 +4840,12 @@ void AudioFlinger::PlaybackThread::Track::destroy()
         sp<ThreadBase> thread = mThread.promote();
         if (thread != 0) {
             if (!isOutputTrack()) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+                if (mState == ACTIVE || mState == RESUMING ||
+                    ((isOffloaded() && mState == STOPPING_1))) {
+#else
                 if (mState == ACTIVE || mState == RESUMING) {
+#endif
                     AudioSystem::stopOutput(thread->id(), mStreamType, mSessionId);
 
 #ifdef ADD_BATTERY_DATA
@@ -4843,7 +5021,12 @@ size_t AudioFlinger::PlaybackThread::Track::framesReady() const {
 
 // Don't call for fast tracks; the framesReady() could result in priority inversion
 bool AudioFlinger::PlaybackThread::Track::isReady() const {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mFillingUpStatus != FS_FILLING || isStopped() || isPausing() ||
+        (isOffloaded() && isStopping())) return true;
+#else
     if (mFillingUpStatus != FS_FILLING || isStopped() || isPausing()) return true;
+#endif
 
     if (framesReady() >= mCblk->frameCount ||
             (mCblk->flags & CBLK_FORCEREADY_MSK)) {
@@ -4872,6 +5055,11 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
             ALOGV("PAUSED => RESUMING (%d) on thread %p", mName, this);
         } else {
             mState = TrackBase::ACTIVE;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            if (isOffloaded()) {
+                android_atomic_and(~CBLK_OFFLOAD_STREAM_END_DONE, &mCblk->flags);
+            }
+#endif
             ALOGV("? => ACTIVE (%d) on thread %p", mName, this);
         }
 
@@ -4898,7 +5086,7 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
         // In case of Music Offload write, it could be blocked on pause-event
         // make sure we restart the output
         PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
-        if ( (isOffloadTrack()) && (state==PAUSING || state==PAUSED) ) {
+        if ( (isOffloaded()) && (state==PAUSING || state==PAUSED) ) {
             ALOGV("start: offload resume");
             status_t status = playbackThread->getOutput_l()->stream->resume(
                                             playbackThread->getOutput_l()->stream);
@@ -4908,11 +5096,11 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
             mState = TrackBase::RESUMING;
         }
 #endif
-    }else if (thread == 0){
+    } else if (thread == 0){
      /*in case of direct output thread, on disconnect; the thread exits hence
       we need to make sure the tracks are restored */
         status = DEAD_OBJECT;
-    }else {
+    } else {
         status = BAD_VALUE;
     }
     return status;
@@ -4925,7 +5113,8 @@ void AudioFlinger::PlaybackThread::Track::stop()
     if (thread != 0) {
         Mutex::Autolock _l(thread->mLock);
         track_state state = mState;
-        if (state == RESUMING || state == ACTIVE || state == PAUSING || state == PAUSED) {
+        if (state == RESUMING || state == ACTIVE || state == PAUSING ||
+            state == PAUSED || state == STOPPING_1 || state == STOPPING_2) {
             // If the track is not active (PAUSED and buffers full), flush buffers
             PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
             if (playbackThread->mActiveTracks.indexOf(this) < 0) {
@@ -4941,7 +5130,8 @@ void AudioFlinger::PlaybackThread::Track::stop()
             ALOGV("not stopping/stopped => stopping/stopped (%d) on thread %p",
                                              mName, playbackThread);
         }
-        if (!isOutputTrack() && (state == ACTIVE || state == RESUMING)) {
+        if (!isOutputTrack() && (state == ACTIVE || state == RESUMING ||
+            state == STOPPING_1 || state == STOPPING_2)) {
             thread->mLock.unlock();
             AudioSystem::stopOutput(thread->id(), mStreamType, mSessionId);
             thread->mLock.lock();
@@ -4953,8 +5143,13 @@ void AudioFlinger::PlaybackThread::Track::stop()
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
-        if (isOffloadTrack()) {
-            if (state!=ACTIVE && state!=RESUMING && playbackThread->getOutput_l()) {
+        if (isOffloaded()) {
+            if (state!=ACTIVE && state!=RESUMING && state != STOPPING_1 &&
+                state != STOPPING_2 &&
+                playbackThread->getOutput_l() && state != IDLE) {
+                android_atomic_and(~CBLK_OFFLOAD_STREAM_END_DONE, &mCblk->flags);
+                mInOffloadEOS = false;
+                mOffloadDrain = false;
                 ALOGV("Track:stop: offload state!=ACTIVE && state!=RESUMING");
                 status_t status = playbackThread->getOutput_l()->stream->flush(
                                            playbackThread->getOutput_l()->stream);
@@ -4974,14 +5169,19 @@ void AudioFlinger::PlaybackThread::Track::pause()
     sp<ThreadBase> thread = mThread.promote();
     if (thread != 0) {
         Mutex::Autolock _l(thread->mLock);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mState == ACTIVE || mState == RESUMING ||
+            (isOffloaded() && (mState == STOPPING_1 || mState == STOPPING_2))) {
+#else
         if (mState == ACTIVE || mState == RESUMING) {
+#endif
             mState = PAUSING;
             ALOGV("ACTIVE/RESUMING => PAUSING (%d) on thread %p", mName, thread.get());
             if (!isOutputTrack()) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
                 // Call direct pause for offload mechanism
                 PlaybackThread* pPBThread = static_cast<PlaybackThread*>(thread.get());
-                if (isOffloadTrack()) {
+                if (isOffloaded()) {
                     ALOGV("pause: offload pause");
                     status_t status = pPBThread->getOutput_l()->stream->pause(
                                                pPBThread->getOutput_l()->stream);
@@ -5014,14 +5214,18 @@ void AudioFlinger::PlaybackThread::Track::flush()
         Mutex::Autolock _l(thread->mLock);
         PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (isOffloadTrack()) {
+        if (isOffloaded()) {
             ALOGV("flush: offload flush");
             mCblk->lock.lock();
             reset();
+            android_atomic_and(~CBLK_OFFLOAD_STREAM_END_DONE, &mCblk->flags);
             mCblk->lock.unlock();
-            // If state needs to be set to STOPPED, do that here
-            if (mState == STOPPED || mState == PAUSED || mState == PAUSING) {
-                mState = STOPPED;
+            mInOffloadEOS = false;
+            mOffloadDrain = false;
+
+            if (mState == STOPPING_1 || mState == STOPPING_2) {
+                ALOGV("flushed in STOPPING_1 or 2 state, change state to ACTIVE");
+                mState = ACTIVE;
             }
 
             playbackThread->getOutput_l()->stream->flush(
@@ -5037,10 +5241,12 @@ void AudioFlinger::PlaybackThread::Track::flush()
         // No point remaining in PAUSED state after a flush => go to
         // FLUSHED state
         mState = FLUSHED;
+
         // do not reset the track if it is still in the process of being stopped or paused.
         // this will be done by prepareTracks_l() when the track is stopped.
         // prepareTracks_l() will see mState == FLUSHED, then
         // remove from active track list, reset(), and trigger presentation complete
+
         if (playbackThread->mActiveTracks.indexOf(this) < 0) {
             reset();
         }
@@ -5054,7 +5260,7 @@ void AudioFlinger::PlaybackThread::Track::reset()
     // For MusicOffload: Flush the data if requested anytime
     // Check if Music Offload playback is running
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if ( (!mResetDone) || (isOffloadTrack()) ) {
+    if ( (!mResetDone) || (isOffloaded()) ) {
 #else
     if (!mResetDone) {
 #endif
@@ -5082,6 +5288,45 @@ void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
    /* Call set volume of offload hal. This will be invoked by the
     * volume control from application
     */
+}
+
+status_t AudioFlinger::PlaybackThread::Track::setParameters(
+                                              const String8& keyValuePairs)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    sp<ThreadBase> thread = mThread.promote();
+    if (thread == 0) {
+        ALOGE("thread is dead");
+        return FAILED_TRANSACTION;
+    } else if (thread->type() == ThreadBase::DIRECT) {
+        return thread->setParameters( keyValuePairs );
+    } else {
+        return PERMISSION_DENIED;
+    }
+#else
+    return NO_ERROR;
+#endif
+}
+
+status_t AudioFlinger::PlaybackThread::Track::setOffloadEOSReached(bool value)
+{
+    ALOGV("setOffloadEOSReached");
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (!isOffloaded()) {
+        return NO_INIT;
+    }
+
+    if (value) {
+        ALOGV("setting state to STOPPING_1");
+        mState = STOPPING_1;
+        mInOffloadEOS = true;
+    } else {
+        mInOffloadEOS = false;
+    }
+    return NO_ERROR;
+#else
+    return NO_ERROR;
+#endif
 }
 
 status_t AudioFlinger::PlaybackThread::Track::attachAuxEffect(int EffectId)
@@ -5154,6 +5399,7 @@ bool AudioFlinger::PlaybackThread::Track::presentationComplete(size_t framesWrit
         ALOGV("presentationComplete() session %d complete: framesWritten %d",
                   mSessionId, framesWritten);
         triggerEvents(AudioSystem::SYNC_EVENT_PRESENTATION_COMPLETE);
+
         return true;
     }
     return false;
@@ -6196,6 +6442,24 @@ void AudioFlinger::TrackHandle::pause() {
 void AudioFlinger::TrackHandle::setVolume(float left, float right) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     mTrack->setVolume(left, right);
+#endif
+}
+
+status_t AudioFlinger::TrackHandle::setParameters(const String8& keyValuePairs)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    return mTrack->setParameters( keyValuePairs );
+#else
+    return NO_ERROR;
+#endif
+}
+
+status_t AudioFlinger::TrackHandle::setOffloadEOSReached(bool value)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    return mTrack->setOffloadEOSReached( value );
+#else
+    return NO_ERROR;
 #endif
 }
 

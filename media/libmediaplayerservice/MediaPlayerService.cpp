@@ -1386,6 +1386,37 @@ status_t MediaPlayerService::AudioOutput::getFramesWritten(uint32_t *frameswritt
     return OK;
 }
 
+status_t MediaPlayerService::AudioOutput::setOffloadEOSReached(bool value)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mTrack == 0) return NO_INIT;
+    ALOGV("setOffloadEOSReached");
+    return mTrack->setOffloadEOSReached(value);
+#else
+    return OK;
+#endif
+}
+
+status_t MediaPlayerService::AudioOutput::setParameters(const String8& keyValuePairs)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mTrack == 0) return NO_INIT;
+    return mTrack->setParameters(keyValuePairs);
+#else
+    return OK;
+#endif
+}
+
+String8 MediaPlayerService::AudioOutput::getParameters(const String8& keys)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mTrack == 0) return String8::empty();
+    return AudioSystem::getParameters( mTrack->getOutput(), keys );
+#else
+    return String8::empty();
+#endif
+}
+
 // Overloaded open
 status_t MediaPlayerService::AudioOutput::open(
         uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
@@ -1546,6 +1577,12 @@ status_t MediaPlayerService::AudioOutput::open(
             ALOGV("output flags differ %08x/%08x", flags, mFlags);
             reuse = false;
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        else if ((mRecycledTrack->format() != format) &&
+              (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)) {
+            reuse = false;
+        }
+#endif
         if (reuse) {
             ALOGV("chaining to next output");
             close();
@@ -1736,7 +1773,6 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
     {
         // For AudioTrack events of Tear down  just call
         // registered call back function and pass the event
-        AudioTrack::Buffer buffer;
         if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
             (*me->mCallback2)(me, NULL, 0, me->mCallbackCookie, CB_EVENT_TEAR_DOWN);
         }
@@ -1751,20 +1787,24 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
         } else {
             actualSize = (*me->mCallback)(
                 me, buffer->raw, buffer->size, me->mCallbackCookie);
-        }
-        if ( (actualSize == 0) && (buffer->size > 0) &&
-             ((me->mNextOutput == NULL) ||
-             (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)) ) {
-            // We've reached EOS but the audio track is not stopped yet,
-            // keep playing silence.
-            // In offload, buffer size is large and we've not yet finished
-            // writing last buffer to HAL. So keep filling buffer with zero's
-            // to avoid buffer time-out until EOS is posted.
-            memset(buffer->raw, 0, buffer->size);
-            actualSize = buffer->size;
+
+            if (actualSize == 0 && buffer->size > 0 && me->mNextOutput == NULL) {
+                // We've reached EOS but the audio track is not stopped yet,
+                // keep playing silence.
+                memset(buffer->raw, 0, buffer->size);
+                actualSize = buffer->size;
+            }
         }
         buffer->size = actualSize;
     } break;
+    case AudioTrack::EVENT_STREAM_END:
+    {
+        ALOGV("STREAM_END received");
+        if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+            (*me->mCallback2)(me, NULL, 0, me->mCallbackCookie, CB_EVENT_STREAM_END);
+        }
+    } break;
+
     default:
     {
         LOGE("received unknown event type: %d inside CallbackWrapper !", event);
