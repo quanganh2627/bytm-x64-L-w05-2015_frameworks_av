@@ -26,6 +26,10 @@
 #include <media/stagefright/OMXCodec.h>
 #endif
 
+#ifdef LVSE
+#include "LVAudioSource.h"
+#endif
+
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/DataSource.h>
 #include <media/stagefright/OMXClient.h>
@@ -395,6 +399,11 @@ private:
     sp<TimedEventQueue::Event> mAudioOffloadTearDownEvent;
     bool mAudioOffloadTearDownEventPending;
     bool mOffloadSinkCreationError;
+
+#ifdef LVSE
+    sp<LVAudioSource> mLVAudioSource;
+#endif
+
 };
 
 }  // namespace android

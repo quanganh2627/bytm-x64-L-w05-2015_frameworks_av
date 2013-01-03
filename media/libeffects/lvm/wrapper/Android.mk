@@ -1,3 +1,4 @@
+ifneq ($(strip $(USE_INTEL_LVSE)),true)
 LOCAL_PATH:= $(call my-dir)
 
 # music bundle wrapper
@@ -58,3 +59,4 @@ LOCAL_C_INCLUDES += \
     $(call include-path-for, audio-effects)
 
 include $(BUILD_SHARED_LIBRARY)
+endif
