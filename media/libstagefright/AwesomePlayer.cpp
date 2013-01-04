@@ -416,34 +416,15 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
              * directly to the window compositor;
              */
             if (wcom == 1) {
-                sp<MetaData> meta = NULL;
-                int32_t displayW, displayH, frameRate;
-                displayW = displayH = frameRate = 0;
                 memset(&info, 0, sizeof(MDSVideoInfo));
                 info.isplaying = true;
                 info.isprotected = (mDecryptHandle != NULL);
-                bool success = false;
-                if (mVideoTrack != NULL)
-                    meta = mVideoTrack->getFormat();
-                if (meta != NULL) {
-                    success = meta->findInt32(kKeyFrameRate, &frameRate);
-                    if (!success)
-                        frameRate = 0;
+                {
+                    Mutex::Autolock autoLock(mStatsLock);
+                    info.frameRate = mStats.mFrameRate;
+                    info.displayW = mStats.mVideoWidth;
+                    info.displayH = mStats.mVideoHeight;
                 }
-                if (mVideoSource != NULL) {
-                    meta = mVideoSource->getFormat();
-                    if (meta != NULL) {
-                        success = meta->findInt32(kKeyWidth, &displayW);
-                        if (!success)
-                            displayW = 0;
-                        success = meta->findInt32(kKeyHeight, &displayH);
-                        if (!success)
-                            displayH = 0;
-                    }
-                }
-                info.frameRate = frameRate;
-                info.displayW = displayW;
-                info.displayH = displayH;
                 mMDClient->updateVideoInfo(&info);
             }
         }
@@ -735,6 +716,7 @@ void AwesomePlayer::reset_l() {
         mStats.mNumVideoFramesDropped = 0;
         mStats.mVideoWidth = -1;
         mStats.mVideoHeight = -1;
+        mStats.mFrameRate = -1;
         mStats.mFlags = 0;
         mStats.mTracks.clear();
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
@@ -1311,6 +1293,9 @@ void AwesomePlayer::notifyVideoSize_l() {
         Mutex::Autolock autoLock(mStatsLock);
         mStats.mVideoWidth = usableWidth;
         mStats.mVideoHeight = usableHeight;
+        if (!mVideoTrack->getFormat()->findInt32(kKeyFrameRate, &mStats.mFrameRate)) {
+            mStats.mFrameRate = 0;
+        }
     }
 
     int32_t rotationDegrees;
