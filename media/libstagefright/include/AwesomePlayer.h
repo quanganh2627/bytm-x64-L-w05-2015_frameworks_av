@@ -359,6 +359,7 @@ private:
         int64_t mNumVideoFramesDropped;
         int32_t mVideoWidth;
         int32_t mVideoHeight;
+        int32_t mFrameRate;
         uint32_t mFlags;
         Vector<TrackStat> mTracks;
         bool mOffloadSinkCreationError;
