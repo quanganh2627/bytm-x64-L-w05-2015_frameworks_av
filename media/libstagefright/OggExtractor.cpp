@@ -507,7 +507,7 @@ status_t MyVorbisExtractor::readNextPacket(MediaBuffer **out) {
             if (timeUs > 0) {
                 int64_t durationUs = 0;
                 if (mMeta->findInt64(kKeyDuration, &durationUs)) {
-                    if (durationUs < timeUs) {
+                    if (durationUs < timeUs && durationUs > 0) {
                         LOGV("Reached End of File");
                         return ERROR_END_OF_STREAM;
                     }
