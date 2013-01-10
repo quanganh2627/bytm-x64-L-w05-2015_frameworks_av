@@ -509,6 +509,10 @@ status_t MyVorbisExtractor::readNextPacket(MediaBuffer **out) {
                 if (mMeta->findInt64(kKeyDuration, &durationUs)) {
                     if (durationUs < timeUs && durationUs > 0) {
                         LOGV("Reached End of File");
+                        if (tmp) {
+                            tmp->release();
+                            tmp = NULL;
+                        }
                         return ERROR_END_OF_STREAM;
                     }
                 }
@@ -522,6 +526,10 @@ status_t MyVorbisExtractor::readNextPacket(MediaBuffer **out) {
             if (n < (ssize_t)packetSize) {
                 ALOGV("failed to read %d bytes at 0x%016llx, got %ld bytes",
                      packetSize, dataOffset, n);
+                if (tmp) {
+                    tmp->release();
+                    tmp = NULL;
+                }
                 return ERROR_IO;
             }
 
