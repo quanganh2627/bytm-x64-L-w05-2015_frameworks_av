@@ -90,6 +90,9 @@ ssize_t FileSourceBuffer::readFromBuffer(off64_t offset, void *data, size_t size
                 }
             }
         }
+        if (mNextBuffer == -1) {
+            return UNKNOWN_ERROR;
+        }
         mMetaBuffer[mNextBuffer].valid = 0;
         size_t len = ::read(file, mMetaBuffer[mNextBuffer].data, FILE_SOURCE_META_BUFFER_DATA_SIZE);
         if (len <= 0) {

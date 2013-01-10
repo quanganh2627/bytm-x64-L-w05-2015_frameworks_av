@@ -480,6 +480,9 @@ status_t MatroskaSource::readBlock() {
     enum { VIDEO_TRACK = 1, AUDIO_TRACK = 2 };
     frameTimeUs = timeUs;
     diffTimeUs = 0;
+    if ((tracks == NULL) || (track == NULL) || (block == NULL)) {
+        return UNKNOWN_ERROR;
+    }
     if (track->GetType() == AUDIO_TRACK) {
         if (!mBlockIter.eos()) {
             nextBlkTimeUs = mBlockIter.blockTimeUs();
