@@ -977,6 +977,13 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
         AString mime = tmp;
 
         if (!strncasecmp("video/", mime.c_str(), 6)) {
+            if (durationUs != 0) {
+                int32_t frameRate = (track->mSamples.size() * 1000000LL + (durationUs >> 1)) / durationUs;
+                if (frameRate > 0) {
+                    track->mMeta->setInt32(kKeyFrameRate, frameRate);
+                    ALOGV("video framerate = %d", frameRate);
+                }
+            }
             if (track->mThumbnailSampleIndex >= 0) {
                 int64_t thumbnailTimeUs;
                 CHECK_EQ((status_t)OK,
