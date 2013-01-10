@@ -31,6 +31,7 @@
 #include "include/ThrottledSource.h"
 #include "include/MPEG2TSExtractor.h"
 #include "include/WVMExtractor.h"
+#include "include/ThreadedSource.h"
 
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
@@ -1899,7 +1900,7 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         mVideoSource = OMXCodec::Create(
                 mClient.interface(), mVideoTrack->getFormat(),
                 false, // createEncoder
-                mVideoTrack,
+                (mWVMExtractor != NULL) ? mVideoTrack : new ThreadedSource(mVideoTrack, MediaSource::kMaxMediaBufferSize),
                 NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
     }
     if (mVideoSource != NULL) {

@@ -27,7 +27,7 @@
 namespace android {
 
 struct ThreadedSource : public MediaSource {
-    ThreadedSource(const sp<MediaSource> &source);
+    ThreadedSource(const sp<MediaSource> &source, int size = kMaxQueueSize);
 
     virtual status_t start(MetaData *params);
     virtual status_t stop();
@@ -44,7 +44,7 @@ protected:
 
 private:
     enum {
-        kWhatDecodeMore = 'deco',
+        kWhatReadMore = 'read',
         kWhatSeek       = 'seek',
     };
 
@@ -56,13 +56,19 @@ private:
     Condition mCondition;
     List<MediaBuffer *> mQueue;
     status_t mFinalResult;
-    bool mDecodePending;
+    bool mReadPending;
     bool mStarted;
+
+    int mMaxQueueSize;
 
     int64_t mSeekTimeUs;
     ReadOptions::SeekMode mSeekMode;
 
-    void postDecodeMore_l();
+    enum {
+        kMaxQueueSize = 10,
+    };
+
+    void postReadMore_l();
     void clearQueue_l();
 
     DISALLOW_EVIL_CONSTRUCTORS(ThreadedSource);

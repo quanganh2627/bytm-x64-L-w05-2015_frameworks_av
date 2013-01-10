@@ -105,8 +105,9 @@ status_t AVIExtractor::AVISource::start(MetaData *params) {
 
     mBufferGroup = new MediaBufferGroup;
 
-    mBufferGroup->add_buffer(new MediaBuffer(mTrack.mMaxSampleSize));
-    mBufferGroup->add_buffer(new MediaBuffer(mTrack.mMaxSampleSize));
+    for (int i = 0; i < kMaxMediaBufferSize; i++) {
+        mBufferGroup->add_buffer(new MediaBuffer(mTrack.mMaxSampleSize));
+    }
     mSampleIndex = 0;
 
     const char *mime;
