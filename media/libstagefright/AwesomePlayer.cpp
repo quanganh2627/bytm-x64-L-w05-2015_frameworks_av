@@ -1438,7 +1438,7 @@ bool AwesomePlayer::isPlaying() const {
 status_t AwesomePlayer::setSurfaceTexture(const sp<ISurfaceTexture> &surfaceTexture) {
     Mutex::Autolock autoLock(mLock);
 
-    status_t err;
+    status_t err = UNKNOWN_ERROR;
     sp<ANativeWindow> anw;
     if (surfaceTexture != NULL) {
         anw = new SurfaceTextureClient(surfaceTexture);
@@ -3646,15 +3646,15 @@ void AwesomePlayer::onAudioOffloadTearDownEvent() {
 bool AwesomePlayer::isInCall() {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     ALOGV("isInCall");
-    audio_mode_t mode;
+    audio_mode_t mode = AUDIO_MODE_INVALID;
     const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
 
     if (audioFlinger != 0) {
         mode = audioFlinger->getMode();
         ALOGV("isInCall: Mode read from AF = %d", mode);
+        return ((mode == AUDIO_MODE_IN_CALL) ||
+                (mode == AUDIO_MODE_IN_COMMUNICATION));
     }
-    return ((mode == AUDIO_MODE_IN_CALL) ||
-            (mode == AUDIO_MODE_IN_COMMUNICATION));
 #endif
     return false;
 }
