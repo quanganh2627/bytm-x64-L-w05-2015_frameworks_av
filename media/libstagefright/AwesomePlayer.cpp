@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 The Android Open Source Project
+* Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1568,7 +1568,7 @@ bool AwesomePlayer::isPlaying() const {
 status_t AwesomePlayer::setSurfaceTexture(const sp<IGraphicBufferProducer> &bufferProducer) {
     Mutex::Autolock autoLock(mLock);
 
-    status_t err;
+    status_t err = UNKNOWN_ERROR;
 
     if (bufferProducer != NULL) {
         sp<ANativeWindow> anw = new Surface(bufferProducer);
