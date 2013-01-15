@@ -1560,6 +1560,10 @@ OMXCodec::OMXCodec(
         const sp<MediaSource> &source,
         const sp<ANativeWindow> &nativeWindow)
     : mOMX(omx),
+#ifdef TARGET_HAS_VPP
+      mVppInBufNum(0),
+      mVppOutBufNum(0),
+#endif
       mOMXLivesLocally(omx->livesLocally(node, getpid())),
       mNode(node),
       mQuirks(quirks),
@@ -1949,6 +1953,18 @@ status_t OMXCodec::applyRotation() {
     return err;
 }
 
+#ifdef TARGET_HAS_VPP
+void OMXCodec::setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum) {
+    mVppInBufNum = inBufNum;
+    mVppOutBufNum = outBufNum;
+}
+
+bool OMXCodec::isVppBufferAvail() {
+    if (mVppInBufNum == 0) return false;
+    return true;
+}
+#endif
+
 status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
     // Get the number of buffers needed.
     OMX_PARAM_PORTDEFINITIONTYPE def;
@@ -2035,21 +2051,6 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         minUndequeuedBufs += 2;
     }
 
-#ifdef TARGET_HAS_VPP
-    //add more buffers
-    bool isVppOn = VPPProcessor::getVppStatus();
-    if (isVppOn) {
-        def.nBufferCountActual += VPPProcessor::INPUT_BUFFER_COUNT + VPPProcessor::OUTPUT_BUFFER_COUNT;
-        err = mOMX->setParameter(
-                mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
-        if (err != OK) {
-            CODEC_LOGE("setting nBufferCountActual to %lu failed: %d",
-                    def.nBufferCountActual, err);
-            return err;
-        }
-    }
-#endif
-
     // XXX: Is this the right logic to use?  It's not clear to me what the OMX
     // buffer counts refer to - how do they account for the renderer holding on
     // to buffers?
@@ -2065,6 +2066,46 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         }
     }
 
+#ifdef TARGET_HAS_VPP
+    //add more buffers
+    bool isVppOn = VPPProcessor::isVppOn();
+    if (isVppOn) {
+        ALOGE("def.nBufferCountActual = %d",def.nBufferCountActual);
+        int totalBufferCount = def.nBufferCountActual + mVppInBufNum + mVppOutBufNum;
+
+        err = native_window_set_buffer_count(
+                mNativeWindow.get(), totalBufferCount);
+        if (err == 0) {
+            def.nBufferCountActual = totalBufferCount;
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            if (err != OK) {
+                CODEC_LOGE("setting nBufferCountActual to %lu failed: %d",
+                    def.nBufferCountActual, err);
+                return err;
+            }
+        } else {
+            err = native_window_set_buffer_count(
+                mNativeWindow.get(), def.nBufferCountActual);
+            if (err == 0) {
+                mVppInBufNum = 0;
+                mVppOutBufNum = 0;
+            } else {
+                ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err),
+                        -err);
+                return err;
+            }
+        }
+    } else {
+        err = native_window_set_buffer_count(
+                mNativeWindow.get(), def.nBufferCountActual);
+        if (err != 0) {
+            ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err),
+                    -err);
+            return err;
+        }
+    }
+#else
     err = native_window_set_buffer_count(
             mNativeWindow.get(), def.nBufferCountActual);
     if (err != 0) {
@@ -2072,6 +2113,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                 -err);
         return err;
     }
+#endif
 
     CODEC_LOGV("allocating %lu buffers from a native window of size %lu on "
             "output port", def.nBufferCountActual, def.nBufferSize);
@@ -2121,7 +2163,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         // Return the last two buffers to the native window.
 #ifdef TARGET_HAS_VPP
         if (isVppOn) {
-            cancelStart = def.nBufferCountActual - minUndequeuedBufs - VPPProcessor::OUTPUT_BUFFER_COUNT;
+            cancelStart = def.nBufferCountActual - minUndequeuedBufs - mVppOutBufNum;
         } else {
             cancelStart = def.nBufferCountActual - minUndequeuedBufs;
         }

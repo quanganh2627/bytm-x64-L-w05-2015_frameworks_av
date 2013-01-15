@@ -660,13 +660,6 @@ void AwesomePlayer::reset_l() {
 
     mVideoRenderer.clear();
 
-#ifdef TARGET_HAS_VPP
-    if (mVPPProcessor != NULL) {
-        delete mVPPProcessor;
-        mVPPProcessor = NULL;
-    }
-#endif
-
     if (mVideoSource != NULL) {
         shutdownVideoDecoder_l();
     }
@@ -1482,11 +1475,15 @@ status_t AwesomePlayer::setSurfaceTexture(const sp<ISurfaceTexture> &surfaceText
 }
 
 void AwesomePlayer::shutdownVideoDecoder_l() {
-    if (mVideoBuffer
 #ifdef TARGET_HAS_VPP
-        && mVideoBuffer->refcount() > 0
+    if (mVPPProcessor != NULL) {
+        delete mVPPProcessor;
+        mVPPProcessor = NULL;
+    }
+    if (mVideoBuffer && mVideoBuffer->refcount() > 0) {
+#else
+    if (mVideoBuffer) {
 #endif
-    ) {
         mVideoBuffer->release();
         mVideoBuffer = NULL;
     }
@@ -1536,17 +1533,6 @@ status_t AwesomePlayer::setNativeWindow_l(const sp<ANativeWindow> &native) {
         mSeekTimeUs = mLastVideoTimeUs;
         modifyFlags((AT_EOS | AUDIO_AT_EOS | VIDEO_AT_EOS), CLEAR);
     }
-
-#ifdef TARGET_HAS_VPP
-    if (mVPPProcessor != NULL) {
-        err = mVPPProcessor->setNativeWindow(native);
-        if (err != VPP_OK) {
-            ALOGE("failed to setNativeWindow to VPPProcessor!");
-            delete mVPPProcessor;
-            mVPPProcessor = NULL;
-        }
-    }
-#endif
 
     if (wasPlaying) {
         play_l();
@@ -1857,6 +1843,35 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
     mVideoTrack = source;
 }
 
+#ifdef TARGET_HAS_VPP
+VPPProcessor* AwesomePlayer::createVppProcessor_l() {
+    VPPProcessor* processor = NULL;
+    if (VPPProcessor::isVppOn()) {
+        VPPVideoInfo info;
+        sp<MetaData> meta = NULL;
+        int32_t width, height, fps;
+        width = height = fps = 0;
+        memset(&info, 0, sizeof(VPPVideoInfo));
+        if (mVideoTrack != NULL)
+            meta = mVideoTrack->getFormat();
+        if (meta != NULL)
+            CHECK(meta->findInt32(kKeyFrameRate, &fps));
+        if (mVideoSource != NULL) {
+            meta = mVideoSource->getFormat();
+            if (meta != NULL) {
+                CHECK(meta->findInt32(kKeyWidth, &width));
+                CHECK(meta->findInt32(kKeyHeight, &height));
+            }
+        }
+        info.fps = fps;
+        info.width = width;
+        info.height = height;
+        processor = new VPPProcessor(mNativeWindow, &info);
+    }
+    return processor;
+}
+#endif
+
 status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
     ATRACE_CALL();
 
@@ -1927,6 +1942,16 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
             }
         }
 
+#ifdef TARGET_HAS_VPP
+        if (mVPPProcessor != NULL) {
+            delete mVPPProcessor;
+            mVPPProcessor = NULL;
+        }
+        mVPPProcessor = createVppProcessor_l();
+        OMXCodec* omxCodec = (OMXCodec*) (mVideoSource.get());
+        if (mVPPProcessor != NULL)
+            omxCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+#endif
         status_t err = mVideoSource->start();
 
         if (err != OK) {
@@ -1934,6 +1959,21 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
             mVideoSource.clear();
             return err;
         }
+#ifdef TARGET_HAS_VPP
+        if (mVPPProcessor != NULL) {
+            bool success = omxCodec->isVppBufferAvail();
+            if (success) {
+                status_t err = mVPPProcessor->init((OMXCodec *)(mVideoSource.get()));
+                if(err != VPP_OK) {
+                    delete mVPPProcessor;
+                    mVPPProcessor = NULL;
+                }
+            } else {
+                delete mVPPProcessor;
+                mVPPProcessor = NULL;
+            }
+        }
+#endif
     }
 
     if (mVideoSource != NULL) {
@@ -2195,6 +2235,7 @@ void AwesomePlayer::onVideoEvent() {
                     modifyFlags(AUDIO_AT_EOS, SET); // video is eos, end the audio?
                     mVideoTimeUs = mSeekTimeUs;
                 }
+                mVPPProcessor->setEOS();
 
                 //modifyFlags(VIDEO_AT_EOS, SET);
                 //postStreamDoneEvent_l(err);
@@ -2214,7 +2255,7 @@ void AwesomePlayer::onVideoEvent() {
             break;
         }
 
-        ALOGE("SET DATA %p\n", mVideoBuffer);
+        ALOGV("SET DATA %p\n", mVideoBuffer);
         if (mVPPProcessor->setDecoderBufferToVPP(mVideoBuffer) == VPP_OK) {
             mVideoBuffer = NULL;
         }
@@ -2228,15 +2269,24 @@ void AwesomePlayer::onVideoEvent() {
 
     mVideoBuffer = tmpVideoBuffer;
     if (!mVideoBuffer) {
-        status_t err = OK;
-        if ((err = mVPPProcessor->read(&mVideoBuffer)) == ERROR_END_OF_STREAM) {
-            ALOGE("read mVideoBuffer = %p", mVideoBuffer);
+        status_t err = mVPPProcessor->read(&mVideoBuffer);
+        if (err == ERROR_END_OF_STREAM) {
+            ALOGV("VPP finished");
             CHECK(mVideoBuffer == NULL);
             modifyFlags(VIDEO_AT_EOS, SET);
             postStreamDoneEvent_l(err);
             return;
-         }
-        ALOGE("read mVideoBuffer = %p", mVideoBuffer);
+        } else if (err == VPP_BUFFER_NOT_READY) {
+            ALOGV("no available buffer to rend, try later");
+            postVideoEvent_l(100);
+            return;
+        } else if (err == VPP_FAIL) {
+            ALOGE("error happens, delete VPPProcessor and continue playback");
+            delete mVPPProcessor;
+            mVPPProcessor = NULL;
+            postVideoEvent_l(100);
+        }
+        ALOGV("read mVideoBuffer = %p", mVideoBuffer);
     }
     }
 #endif
@@ -2822,25 +2872,6 @@ void AwesomePlayer::onPrepareAsyncEvent() {
             return;
         }
     }
-#ifdef TARGET_HAS_VPP
-    if (VPPProcessor::getVppStatus()) {
-        if (mVPPProcessor == NULL)
-            mVPPProcessor = new VPPProcessor();
-        if (mVPPProcessor != NULL) {
-            status_t err = mVPPProcessor->setBufferInfoFromDecoder((OMXCodec *)(mVideoSource.get()));
-            if(err != VPP_OK) {
-                delete mVPPProcessor;
-                mVPPProcessor = NULL;
-            } else {
-                err = mVPPProcessor->setNativeWindow(mNativeWindow);
-                if(err != VPP_OK) {
-                    delete mVPPProcessor;
-                    mVPPProcessor = NULL;
-                }
-            }
-        }
-    }
-#endif
 
     modifyFlags(PREPARING_CONNECTED, SET);
 
