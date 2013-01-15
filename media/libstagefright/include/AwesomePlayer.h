@@ -303,6 +303,9 @@ private:
     status_t initAudioDecoder();
 
     void setVideoSource(sp<MediaSource> source);
+#ifdef TARGET_HAS_VPP
+    VPPProcessor* createVppProcessor_l();
+#endif
     status_t initVideoDecoder(uint32_t flags = 0);
 
     void addTextSource_l(size_t trackIndex, const sp<MediaSource>& source);

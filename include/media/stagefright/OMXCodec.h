@@ -126,6 +126,11 @@ struct OMXCodec : public MediaSource,
 
     static bool findCodecQuirks(const char *componentName, uint32_t *quirks);
 
+#ifdef TARGET_HAS_VPP
+    void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
+    bool isVppBufferAvail();
+#endif
+
 protected:
     virtual ~OMXCodec();
 
@@ -137,6 +142,8 @@ private:
 #ifdef TARGET_HAS_VPP
     // Make sure BufferInfo is accessible in VPPProcessor
     friend class VPPProcessor;
+    uint32_t mVppInBufNum;
+    uint32_t mVppOutBufNum;
 #endif
 
     // Call this with mLock hold
