@@ -105,6 +105,7 @@ private:
     Mutex mLock;
     Condition mCondition;
     sp<AMessage> mAsyncResult;
+    MediaSource::ReadOptions mOptions;
     bool mReadPending;
 };
 

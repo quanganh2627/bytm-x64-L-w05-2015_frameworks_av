@@ -86,8 +86,9 @@ status_t AsyncOMXCodecWrapper::read(
     int64_t seekTimeUs = -1;
     *buffer = NULL;
     if (!mReadPending) {
+        mOptions = *options;
         sp<AMessage> msg = new AMessage(kWhatRead, mReflector->id());
-        msg->setPointer("options", (void*)options);
+        msg->setPointer("options", (void*)&mOptions);
         msg->post();
         mReadPending  = true;
     } else {
@@ -123,12 +124,14 @@ status_t AsyncOMXCodecWrapper::read(
             mAsyncResult.clear();
             mReadPending = false;
             mediaBuffer->release();
+            mOptions.clearSeekTo();
             return -EWOULDBLOCK;
         }
         ALOGV("old seek time=%lld, comming is = %lld", currentSeekTime, seekTimeUs);
     }
     *buffer = mediaBuffer;
     mAsyncResult.clear();
+    mOptions.clearSeekTo();
     mReadPending = false;
     return err;
 }
