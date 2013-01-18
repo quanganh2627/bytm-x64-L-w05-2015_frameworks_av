@@ -588,6 +588,9 @@ status_t LiveSession::fetchFile(
                 maxBytesToRead);
 
         if (n < 0) {
+            if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
+                source.clear();
+            }
             return n;
         }
 
@@ -600,6 +603,9 @@ status_t LiveSession::fetchFile(
 
     *out = buffer;
 
+    if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
+        source.clear();
+    }
     return OK;
 }
 
