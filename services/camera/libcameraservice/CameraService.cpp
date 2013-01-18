@@ -430,16 +430,22 @@ void CameraService::loadSound() {
     LOG1("CameraService::loadSound ref=%d", mSoundRef);
     if (mSoundRef++) return;
 
+    int64_t token = IPCThreadState::self()->clearCallingIdentity();
+
     mSoundPlayer[SOUND_SHUTTER] = newMediaPlayer("/system/media/audio/ui/camera_click.ogg");
     mSoundPlayer[SOUND_RECORDING] = newMediaPlayer("/system/media/audio/ui/VideoRecord.ogg");
     mSoundPlayer[SOUND_BURST].clear(); //we use AudioTrack instead of MediaPlayer
     loadSoundBurst();
+
+    IPCThreadState::self()->restoreCallingIdentity(token);
 }
 
 void CameraService::releaseSound() {
     Mutex::Autolock lock(mSoundLock);
     LOG1("CameraService::releaseSound ref=%d", mSoundRef);
     if (--mSoundRef) return;
+
+    int64_t token = IPCThreadState::self()->clearCallingIdentity();
 
     for (int i = 0; i < NUM_SOUNDS; i++) {
         if (mSoundPlayer[i] != 0) {
@@ -458,11 +464,15 @@ void CameraService::releaseSound() {
         mBufferBurst = NULL;
         mBufferBurstSize = 0;
     }
+
+    IPCThreadState::self()->restoreCallingIdentity(token);
 }
 
 void CameraService::playSound(sound_kind kind) {
     LOG1("playSound(%d)", kind);
     Mutex::Autolock lock(mSoundLock);
+
+    int64_t token = IPCThreadState::self()->clearCallingIdentity();
 
     //Only for SOUND_BURST play the sound from fast_click.pcm
     if (kind == SOUND_BURST) {
@@ -480,6 +490,8 @@ void CameraService::playSound(sound_kind kind) {
             // call stop() to make the audiotrack played immediately.
             mAudioTrackBurst->stop();
         }
+
+        IPCThreadState::self()->restoreCallingIdentity(token);
         return;
     }
 
@@ -488,6 +500,8 @@ void CameraService::playSound(sound_kind kind) {
         player->seekTo(0);
         player->start();
     }
+
+    IPCThreadState::self()->restoreCallingIdentity(token);
 }
 
 // ----------------------------------------------------------------------------
