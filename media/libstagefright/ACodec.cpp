@@ -3830,10 +3830,11 @@ bool ACodec::LoadedState::onConfigureComponent(
                 static_cast<NativeWindowWrapper *>(obj.get()));
         CHECK(nativeWindow != NULL);
         mCodec->mNativeWindow = nativeWindow->getNativeWindow();
-
-        native_window_set_scaling_mode(
-                mCodec->mNativeWindow.get(),
-                NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW);
+        if (mCodec->mNativeWindow != NULL) {
+            native_window_set_scaling_mode(
+                    mCodec->mNativeWindow.get(),
+                    NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW);
+        }
     }
     CHECK_EQ((status_t)OK, mCodec->initNativeWindow());
 
