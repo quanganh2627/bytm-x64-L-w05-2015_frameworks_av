@@ -357,6 +357,7 @@ status_t CameraClient::startPreview() {
 // start recording mode
 status_t CameraClient::startRecording() {
     LOG1("startRecording (pid %d)", getCallingPid());
+    disableMsgType(CAMERA_MSG_SHUTTER);
     return startCameraMode(CAMERA_RECORDING_MODE);
 }
 
