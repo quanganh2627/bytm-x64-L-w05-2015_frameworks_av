@@ -674,7 +674,10 @@ void AwesomePlayer::reset_l() {
     mDurationUs = -1;
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mOffload) {
-        timer_delete(mPausedTimerId);
+        if (mPausedTimerId) {
+            timer_delete(mPausedTimerId);
+            mPausedTimerId = (time_t)0;
+        }
         /* If the reset is called in long pause case, don't change the mOffload and
         * mFlags. Which will be used when resume, i.e Play is called
         */
@@ -1013,7 +1016,10 @@ status_t AwesomePlayer::play() {
     if ((mOffload == true) && ((mFlags & PLAYING) == 0)) {
         ALOGV("Not playing");
         /* Offload and the state is not playing stop the pause timer */
-        timer_delete(mPausedTimerId);
+        if (mPausedTimerId) {
+            timer_delete(mPausedTimerId);
+            mPausedTimerId = (time_t)0;
+        }
         /* If the system is in supended mode because of long pause and
          * then resume to continue playing
          */
@@ -1371,7 +1377,10 @@ status_t AwesomePlayer::pause() {
     modifyFlags(CACHE_UNDERRUN, CLEAR);
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mOffload) {
-        timer_delete(mPausedTimerId);
+        if (mPausedTimerId) {
+            timer_delete(mPausedTimerId);
+            mPausedTimerId = (time_t)0;
+        }
         offloadPauseStartTimer(OFFLOAD_PAUSED_TIMEOUT_DURATION, true);
     }
 #endif
@@ -1396,7 +1405,10 @@ status_t AwesomePlayer::pause_l(bool at_eos) {
             // During offload, enter standby after 3 seconds
             // if no playback activity.
             if (mOffload) {
-                timer_delete(mPausedTimerId);
+                if (mPausedTimerId) {
+                    timer_delete(mPausedTimerId);
+                    mPausedTimerId = (time_t)0;
+                }
                 offloadPauseStartTimer(OFFLOAD_STANDBY_TIMEOUT_DURATION, true);
             }
 #endif
@@ -1632,7 +1644,10 @@ status_t AwesomePlayer::seekTo_l(int64_t timeUs) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mOffload) {
         ALOGV("AwesomePlayer::seekToi_l deleting offload time if any");
-        timer_delete(mPausedTimerId);
+        if (mPausedTimerId) {
+            timer_delete(mPausedTimerId);
+            mPausedTimerId = (time_t)0;
+        }
         mOffloadCalAudioEOS = false;
         if (mOffloadTearDownForPause) {
             mOffloadPauseUs = timeUs;
@@ -3273,7 +3288,10 @@ status_t AwesomePlayer::offloadSuspend() {
     if (mOffload && ((mFlags & PLAYING) == 0)) {
          ALOGV("offloadSuspend(): Deleting timer");
          mOffloadTearDownForPause = true;
-         timer_delete(mPausedTimerId);
+         if (mPausedTimerId) {
+             timer_delete(mPausedTimerId);
+             mPausedTimerId = (time_t)0;
+         }
     }
 
     reset_l();
@@ -3533,8 +3551,10 @@ status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFor
 void AwesomePlayer::offloadPauseStartTimer(int64_t time, bool at_pause) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     ALOGV("offloadPauseStartTimer with time = %lld ", time);
-
-    timer_delete(mPausedTimerId);
+    if (mPausedTimerId) {
+        timer_delete(mPausedTimerId);
+        mPausedTimerId = (time_t)0;
+    }
 
     if (time == 0) {
         ALOGV("offloadPauseStartTimer: Posting EOS immediately");
