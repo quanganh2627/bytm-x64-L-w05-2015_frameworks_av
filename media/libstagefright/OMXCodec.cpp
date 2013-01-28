@@ -2203,6 +2203,10 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
     // Dequeue the next buffer from the native window.
     ANativeWindowBuffer* buf;
     int fenceFd = -1;
+    BufferInfo *bufInfo = 0;
+#ifdef TARGET_HAS_VPP
+    while (1) {
+#endif
     int err = native_window_dequeue_buffer_and_wait(mNativeWindow.get(), &buf);
     if (err != 0) {
       CODEC_LOGE("dequeueBuffer failed w/ error 0x%08x", err);
@@ -2213,7 +2217,6 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
 
     // Determine which buffer we just dequeued.
     Vector<BufferInfo> *buffers = &mPortBuffers[kPortIndexOutput];
-    BufferInfo *bufInfo = 0;
     for (size_t i = 0; i < buffers->size(); i++) {
       sp<GraphicBuffer> graphicBuffer = buffers->itemAt(i).
           mMediaBuffer->graphicBuffer();
@@ -2230,13 +2233,26 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
         return 0;
     }
 
+#ifdef TARGET_HAS_VPP
+    if (bufInfo->mStatus == OWNED_BY_CLIENT) {
+        // It's still been used by VPP, so clear kKeyRendered flag
+        // to make sure it will be cancelled by VPP later, and then
+        // continue to dequeue a valid one
+        MediaBuffer* mediaBuffer = bufInfo->mMediaBuffer;
+        CODEC_LOGV("dequeued a buffer used by VPP");
+        sp<MetaData> metaData = mediaBuffer->meta_data();
+        metaData->setInt32(kKeyRendered, 0);
+        continue;
+    }
+    else
+        break;
+    }// while end
+    bufInfo->mMediaBuffer->setObserver(this);
+#endif
     // The native window no longer owns the buffer.
     CHECK_EQ((int)bufInfo->mStatus, (int)OWNED_BY_NATIVE_WINDOW);
     bufInfo->mStatus = OWNED_BY_US;
 
-#ifdef TARGET_HAS_VPP
-    bufInfo->mMediaBuffer->setObserver(this);
-#endif
     return bufInfo;
 }
 
