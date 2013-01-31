@@ -775,7 +775,8 @@ void CameraClient::handleShutter(void) {
     CameraParameters params(mHardware->getParameters());
     if (mPlayShutterSound) {
         if ((params.get("burst-length") == NULL) ||
-            (params.getInt("burst-length") == 1))
+            (params.getInt("burst-length") <= 1) ||
+            (params.getInt("burst-start-index") != 0))
             mCameraService->playSound(CameraService::SOUND_SHUTTER);
         else
             mCameraService->playSound(CameraService::SOUND_BURST);
@@ -789,7 +790,8 @@ void CameraClient::handleShutter(void) {
     }
 
     if ((params.get("burst-length") == NULL) ||
-        (params.getInt("burst-length") == 1))
+        (params.getInt("burst-length") <= 1) ||
+        (params.getInt("burst-start-index") != 0))
         disableMsgType(CAMERA_MSG_SHUTTER);
 
     mLock.unlock();
