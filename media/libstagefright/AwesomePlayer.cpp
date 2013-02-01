@@ -1178,11 +1178,12 @@ status_t AwesomePlayer::play_l() {
                 mOffloadCalAudioEOS = false;
             }
 #endif
-            // We don't want to post an error notification at this point,
-            // the error returned from MediaPlayer::start() will suffice.
+            // We need to post an error notification at this point,
+            // since the gapless-playback feature requires the playback
+            // to be started in the notify call of MediaPlayerService
 
             status_t err = startAudioPlayer_l(
-                    false /* sendErrorNotification */);
+                    true /* sendErrorNotification */);
 
             if (err != OK) {
                 delete mAudioPlayer;
