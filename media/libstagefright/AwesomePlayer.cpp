@@ -68,6 +68,11 @@
 #include "include/ESDS.h"
 #endif
 
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#include "MetaDataExt.h"
+#endif
+
 #define USE_SURFACE_ALLOC 1
 #define FRAME_DROP_FREQ 0
 #define AOT_SBR 5
@@ -1954,10 +1959,23 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
                 mVideoTrack,
                 NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
     } else {
+        sp<MetaData> meta = mExtractor->getMetaData();
+        const char *mime;
+        CHECK(meta->findCString(kKeyMIMEType, &mime));
+        bool isPrefetchSupported = false;
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG4)
+            || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MATROSKA)
+            || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_AVI)
+#ifdef USE_INTEL_ASF_EXTRACTOR
+            || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)
+#endif
+      ) {
+            isPrefetchSupported = true;
+        }
         mVideoSource = OMXCodec::Create(
                 mClient.interface(), mVideoTrack->getFormat(),
                 false, // createEncoder
-                (mWVMExtractor != NULL) ? mVideoTrack : new ThreadedSource(mVideoTrack, MediaSource::kMaxMediaBufferSize),
+                isPrefetchSupported ? new ThreadedSource(mVideoTrack, MediaSource::kMaxMediaBufferSize) : mVideoTrack,
                 NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
     }
     if (mVideoSource != NULL) {
