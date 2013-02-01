@@ -1575,7 +1575,7 @@ status_t AwesomePlayer::setSurfaceTexture(const sp<IGraphicBufferProducer> &buff
         //NOTES: we must re-connect api here because we need to get right
         //infomation from surface texture's back end. Otherwise, we only get
         //uninitlized mTransformHint, mDefaultWidth, mDefaultHeight, etc.
-        status_t err = native_window_api_disconnect(anw.get(),
+        err = native_window_api_disconnect(anw.get(),
                 NATIVE_WINDOW_API_MEDIA);
         if (err != OK) {
             ALOGE("setSurfaceTexture: api disconnect failed: %d", err);
