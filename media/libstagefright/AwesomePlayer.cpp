@@ -1551,6 +1551,15 @@ status_t AwesomePlayer::setNativeWindow_l(const sp<ANativeWindow> &native) {
     pause_l();
     mVideoRenderer.clear();
 
+    if (mCachedSource != NULL) {
+        // interrupt the retrying
+        mCachedSource->stop();
+    }
+    if (mConnectingDataSource != NULL) {
+        ALOGI("interrupting the connection process in setNativeWindow_l");
+        mConnectingDataSource->disconnect();
+    }
+
     shutdownVideoDecoder_l();
 
     status_t err = initVideoDecoder();

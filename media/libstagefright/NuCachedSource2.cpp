@@ -293,13 +293,6 @@ void NuCachedSource2::fetchInternal() {
         }
     }
 
-    if (mForceStop && mFinalStatus != OK) {
-        reconnect = false;
-        mNumRetriesLeft = 0;
-        ALOGV("do not reconnect in stop state");
-        return;
-    }
-
     if (reconnect) {
         status_t err =
             mSource->reconnectAtOffset(mCacheOffset + mCache->totalSize());
@@ -571,6 +564,9 @@ ssize_t NuCachedSource2::readInternal(off64_t offset, void *data, size_t size) {
     size_t delta = offset - mCacheOffset;
 
     if (mFinalStatus != OK && (mNumRetriesLeft == 0 || mForceStop)) {
+        if (mForceStop) {
+            mForceStop = false;
+        }
         if (delta >= mCache->totalSize()) {
             return mFinalStatus;
         }
