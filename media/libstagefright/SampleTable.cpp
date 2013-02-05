@@ -692,14 +692,18 @@ status_t SampleTable::findSyncSampleNear(
         case kFlagBefore:
         {
             if (x > start_sample_index) {
-                CHECK(left > 0);
 
-                x = mSyncSamples[left - 1];
+                if (left > 0) {
+                    x = mSyncSamples[left - 1];
 
-                if (x > start_sample_index) {
-                    // The table of sync sample indices was not sorted
-                    // properly.
-                    return ERROR_MALFORMED;
+                    if (x > start_sample_index) {
+                        // The table of sync sample indices was not sorted
+                        // properly.
+                        return ERROR_MALFORMED;
+                    }
+                } else {
+                    // If seek time is 0, return the first sample as a sync sample
+                    x = 0;
                 }
             }
             break;
