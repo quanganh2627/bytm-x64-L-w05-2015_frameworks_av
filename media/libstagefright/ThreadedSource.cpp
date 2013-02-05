@@ -102,12 +102,18 @@ status_t ThreadedSource::read(
         msg->post();
 
         while (!seekComplete) {
-            mCondition.wait(mLock);
+            status_t err = mCondition.wait(mLock);
+            if (err != OK) {
+                return err;
+            }
         }
     }
 
     while (mQueue.empty() && mFinalResult == OK) {
-        mCondition.wait(mLock);
+        status_t err = mCondition.wait(mLock);
+        if (err != OK) {
+            return err;
+        }
     }
 
     if (!mQueue.empty()) {
