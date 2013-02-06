@@ -64,6 +64,10 @@ ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
     LOCAL_SHARED_LIBRARIES += libmultidisplay
     LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
 endif
+#VPP support on MRFLD only
+ifeq ($(TARGET_HAS_VPP), true)
+    LOCAL_CFLAGS += -DGFX_BUF_EXT
+endif
 
 LOCAL_MODULE:= libmediaplayerservice
 
