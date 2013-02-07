@@ -780,6 +780,12 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     ALOGE("%s track encountered an error (%d)",
                          audio ? "audio" : "video", finalResult);
 
+                    if (!audio && (mVideoDecoder != NULL)
+                            && (mFlushingVideo == AWAITING_DISCONTINUITY)) {
+                        // if video decoder is in AWAITING_DISCONTINUITY state
+                        // shut down it to avoid reset blocking
+                        flushDecoder(false,true);
+                    }
                     notifyListener(
                             MEDIA_ERROR, MEDIA_ERROR_UNKNOWN, finalResult);
                 }
