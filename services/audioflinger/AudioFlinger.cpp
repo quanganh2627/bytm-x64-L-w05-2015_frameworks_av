@@ -3664,6 +3664,12 @@ void AudioFlinger::PlaybackThread::invalidateTracks(audio_stream_type_t streamTy
         sp<Track> t = mTracks[i];
         if (t->streamType() == streamType) {
             android_atomic_or(CBLK_INVALID_ON, &t->mCblk->flags);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            if ((t->isOffloaded()) && (!t->isPaused()) &&
+                (!(t->mCblk->flags & CBLK_OFFLOAD_TEAR_DOWN_ON))) {
+                android_atomic_or(CBLK_OFFLOAD_TEAR_DOWN_ON, &t->mCblk->flags);
+            }
+#endif
             t->mCblk->cv.signal();
         }
     }
