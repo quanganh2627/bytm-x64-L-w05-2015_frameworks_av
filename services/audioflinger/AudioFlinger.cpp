@@ -3715,6 +3715,8 @@ bool AudioFlinger::MixerThread::checkForNewParameters_l()
         AudioParameter param = AudioParameter(keyValuePair);
         int value;
 
+        ALOGD("reconfig due to o/p flag ?");
+
         if (param.getInt(String8(AudioParameter::keySamplingRate), value) == NO_ERROR) {
             reconfig = true;
         }
@@ -5256,7 +5258,19 @@ void AudioFlinger::PlaybackThread::Track::flush()
 
             playbackThread->getOutput_l()->stream->flush(
                                       playbackThread->getOutput_l()->stream);
+        } else {
+            // Added for deep buffer
+            if (playbackThread->getOutput_l()->stream->flush) {
+                playbackThread->getOutput_l()->stream->flush(playbackThread->getOutput_l()->stream);
+                ALOGD("Flushed the data ");
+            }
         }
+#else
+    // Added for deep buffer
+    if (playbackThread->getOutput_l()->stream->flush) {
+        playbackThread->getOutput_l()->stream->flush(playbackThread->getOutput_l()->stream);
+        ALOGD("Flushed the data ");
+    }
 #endif
 
         if (mState != STOPPING_1 && mState != STOPPING_2 &&

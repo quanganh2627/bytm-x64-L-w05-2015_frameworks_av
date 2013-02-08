@@ -615,6 +615,8 @@ void AudioTrack::flush_l()
         mOffloadEOSReached = false;
 #endif
         mCblk->cv.signal();
+    } else if (mFlags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER) {
+        mAudioTrack->flush();
     }
 }
 
