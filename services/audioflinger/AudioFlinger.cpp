@@ -5249,6 +5249,11 @@ void AudioFlinger::PlaybackThread::Track::flush()
                 mState = ACTIVE;
             }
 
+            if (mState == ACTIVE) {
+                ALOGV("flush called in active state, resetting buffer time out retry count");
+                mRetryCount = kMaxTrackRetriesOffloaded;
+            }
+
             playbackThread->getOutput_l()->stream->flush(
                                       playbackThread->getOutput_l()->stream);
         }
