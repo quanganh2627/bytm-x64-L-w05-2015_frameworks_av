@@ -740,9 +740,9 @@ static void convertTimeToDate(int64_t time_1904, String8 *s) {
     ptr_time = gmtime(&time_1970);
     if (ptr_time != NULL) {
         strftime(tmp, sizeof(tmp), "%Y%m%dT%H%M%S.000Z", ptr_time);
+        s->setTo(tmp);
     }
 
-    s->setTo(tmp);
 }
 
 status_t MPEG4Extractor::parseUdtaMetaData(off64_t offset, size_t size) {
