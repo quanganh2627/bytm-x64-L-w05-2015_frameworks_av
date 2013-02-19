@@ -320,7 +320,7 @@ sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
         getRemoteDisplayFunc_t getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(hlibintelwidi, "getRemoteDisplay");
         sp<IRemoteDisplay> rd;
         const char* error = dlerror();
-        if(error == NULL) {
+        if((error == NULL) && getRemoteDisplay) {
             rd = (*getRemoteDisplay)(iface, client);
         }
         else {

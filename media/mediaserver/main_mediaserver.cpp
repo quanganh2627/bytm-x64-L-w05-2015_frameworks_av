@@ -54,7 +54,7 @@ int main(int argc, char** argv)
         typedef bool (*instantiateFunc_t)();
         instantiateFunc_t instantiate = (instantiateFunc_t) dlsym(hlibintelwidi, "instantiate");
         const char* error = dlerror();
-        if(error == NULL) {
+        if((error == NULL) && instantiate) {
             bool ret = (*instantiate)();
             if(!ret) {
                 ALOGI("Could not invoke instantiate() on libwidiservice.so! Intel widi will not be used.");
