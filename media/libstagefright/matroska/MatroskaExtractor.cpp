@@ -472,6 +472,9 @@ status_t MatroskaSource::readBlock() {
 
     const mkvparser::Block *block = mBlockIter.block();
     const mkvparser::Tracks *tracks = (mExtractor->mSegment)->GetTracks();
+    if((block == NULL) || (tracks == NULL)) {
+       return UNKNOWN_ERROR;
+    }
     const mkvparser::Track *track = tracks->GetTrackByNumber(block->GetTrackNumber());
     int64_t nextBlkTimeUs, diffTimeUs, frameTimeUs;
     int64_t timeUs = mBlockIter.blockTimeUs();
@@ -479,7 +482,7 @@ status_t MatroskaSource::readBlock() {
     enum { VIDEO_TRACK = 1, AUDIO_TRACK = 2 };
     frameTimeUs = timeUs;
     diffTimeUs = 0;
-    if ((tracks == NULL) || (track == NULL) || (block == NULL)) {
+    if  (track == NULL) {
         return UNKNOWN_ERROR;
     }
     if (track->GetType() == AUDIO_TRACK) {
