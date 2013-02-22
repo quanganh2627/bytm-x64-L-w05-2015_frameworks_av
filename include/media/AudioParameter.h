@@ -50,6 +50,7 @@ public:
     static const char * const keyInputSource;
     static const char * const keyScreenState;
     static const char * const keyStreamFlags;
+    static const char * const keyBGMState;
 
     String8 toString();
 
