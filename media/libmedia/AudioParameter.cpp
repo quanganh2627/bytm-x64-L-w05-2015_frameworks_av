@@ -33,6 +33,7 @@ const char * const AudioParameter::keyFrameCount = AUDIO_PARAMETER_STREAM_FRAME_
 const char * const AudioParameter::keyInputSource = AUDIO_PARAMETER_STREAM_INPUT_SOURCE;
 const char * const AudioParameter::keyScreenState = AUDIO_PARAMETER_KEY_SCREEN_STATE;
 const char * const AudioParameter::keyStreamFlags = AUDIO_PARAMETER_KEY_STREAM_FLAGS;
+const char * const AudioParameter::keyBGMState = AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE;
 
 AudioParameter::AudioParameter(const String8& keyValuePairs)
 {
