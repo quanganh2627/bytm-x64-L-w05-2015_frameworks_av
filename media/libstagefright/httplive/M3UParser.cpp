@@ -32,8 +32,7 @@ M3UParser::M3UParser(
       mBaseURI(baseURI),
       mIsExtM3U(false),
       mIsVariantPlaylist(false),
-      mIsComplete(false),
-      mIsEvent(false) {
+      mIsComplete(false) {
     mInitCheck = parse(data, size);
 }
 
@@ -54,10 +53,6 @@ bool M3UParser::isVariantPlaylist() const {
 
 bool M3UParser::isComplete() const {
     return mIsComplete;
-}
-
-bool M3UParser::isEvent() const {
-    return mIsEvent;
 }
 
 sp<AMessage> M3UParser::meta() {
@@ -205,8 +200,6 @@ status_t M3UParser::parse(const void *_data, size_t size) {
                 err = parseCipherInfo(line, &itemMeta, mBaseURI);
             } else if (line.startsWith("#EXT-X-ENDLIST")) {
                 mIsComplete = true;
-            } else if (line.startsWith("#EXT-X-PLAYLIST-TYPE:EVENT")) {
-                mIsEvent = true;
             } else if (line.startsWith("#EXTINF")) {
                 if (mIsVariantPlaylist) {
                     return ERROR_MALFORMED;

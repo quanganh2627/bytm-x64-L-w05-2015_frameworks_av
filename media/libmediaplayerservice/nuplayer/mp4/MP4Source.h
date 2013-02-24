@@ -35,8 +35,6 @@ struct MP4Source : public NuPlayer::Source {
     virtual status_t dequeueAccessUnit(
             bool audio, sp<ABuffer> *accessUnit);
 
-    virtual uint32_t flags() const;
-
 protected:
     virtual ~MP4Source();
 

@@ -93,22 +93,8 @@ status_t NuPlayer::StreamingSource::feedMoreTSData() {
         } else {
             if (buffer[0] == 0x00) {
                 // XXX legacy
-
-                if (extra == NULL) {
-                    extra = new AMessage;
-                }
-
-                uint8_t type = buffer[1];
-
-                if (type & 2) {
-                    int64_t mediaTimeUs;
-                    memcpy(&mediaTimeUs, &buffer[2], sizeof(mediaTimeUs));
-
-                    extra->setInt64(IStreamListener::kKeyMediaTimeUs, mediaTimeUs);
-                }
-
                 mTSParser->signalDiscontinuity(
-                        ((type & 1) == 0)
+                        buffer[1] == 0x00
                             ? ATSParser::DISCONTINUITY_SEEK
                             : ATSParser::DISCONTINUITY_FORMATCHANGE,
                         extra);
@@ -171,10 +157,6 @@ status_t NuPlayer::StreamingSource::dequeueAccessUnit(
 #endif
 
     return err;
-}
-
-uint32_t NuPlayer::StreamingSource::flags() const {
-    return 0;
 }
 
 }  // namespace android

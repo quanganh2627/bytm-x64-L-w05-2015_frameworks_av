@@ -47,6 +47,7 @@ MediaPlayer::MediaPlayer()
     ALOGV("constructor");
     mListener = NULL;
     mCookie = NULL;
+    mDuration = -1;
     mStreamType = AUDIO_STREAM_MUSIC;
     mCurrentPosition = -1;
     mSeekPosition = -1;
@@ -89,6 +90,7 @@ void MediaPlayer::disconnect()
 // always call with lock held
 void MediaPlayer::clear_l()
 {
+    mDuration = -1;
     mCurrentPosition = -1;
     mSeekPosition = -1;
     mVideoWidth = mVideoHeight = 0;
@@ -393,14 +395,14 @@ status_t MediaPlayer::getCurrentPosition(int *msec)
 
 status_t MediaPlayer::getDuration_l(int *msec)
 {
-    ALOGV("getDuration_l");
+    ALOGV("getDuration");
     bool isValidState = (mCurrentState & (MEDIA_PLAYER_PREPARED | MEDIA_PLAYER_STARTED | MEDIA_PLAYER_PAUSED | MEDIA_PLAYER_STOPPED | MEDIA_PLAYER_PLAYBACK_COMPLETE));
     if (mPlayer != 0 && isValidState) {
-        int durationMs;
-        status_t ret = mPlayer->getDuration(&durationMs);
-        if (msec) {
-            *msec = durationMs;
-        }
+        status_t ret = NO_ERROR;
+        if (mDuration <= 0)
+            ret = mPlayer->getDuration(&mDuration);
+        if (msec)
+            *msec = mDuration;
         return ret;
     }
     ALOGE("Attempt to call getDuration without a valid mediaplayer");
@@ -420,28 +422,14 @@ status_t MediaPlayer::seekTo_l(int msec)
         if ( msec < 0 ) {
             ALOGW("Attempt to seek to invalid position: %d", msec);
             msec = 0;
+        } else if ((mDuration > 0) && (msec > mDuration)) {
+            ALOGW("Attempt to seek to past end of file: request = %d, EOF = %d", msec, mDuration);
+            msec = mDuration;
         }
-
-        int durationMs;
-        status_t err = mPlayer->getDuration(&durationMs);
-
-        if (err != OK) {
-            ALOGW("Stream has no duration and is therefore not seekable.");
-            return err;
-        }
-
-        if (msec > durationMs) {
-            ALOGW("Attempt to seek to past end of file: request = %d, "
-                  "durationMs = %d",
-                  msec,
-                  durationMs);
-
-            msec = durationMs;
-        }
-
         // cache duration
         mCurrentPosition = msec;
         if (mSeekPosition < 0) {
+            getDuration_l(NULL);
             mSeekPosition = msec;
             return mPlayer->seekTo(msec);
         }

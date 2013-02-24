@@ -121,20 +121,9 @@ status_t NuPlayer::HTTPLiveSource::feedMoreTSData() {
         } else {
             if (buffer[0] == 0x00) {
                 // XXX legacy
-
-                uint8_t type = buffer[1];
-
-                sp<AMessage> extra = new AMessage;
-
-                if (type & 2) {
-                    int64_t mediaTimeUs;
-                    memcpy(&mediaTimeUs, &buffer[2], sizeof(mediaTimeUs));
-
-                    extra->setInt64(IStreamListener::kKeyMediaTimeUs, mediaTimeUs);
-                }
-
+                sp<AMessage> extra;
                 mTSParser->signalDiscontinuity(
-                        ((type & 1) == 0)
+                        buffer[1] == 0x00
                             ? ATSParser::DISCONTINUITY_SEEK
                             : ATSParser::DISCONTINUITY_FORMATCHANGE,
                         extra);
@@ -192,17 +181,8 @@ status_t NuPlayer::HTTPLiveSource::seekTo(int64_t seekTimeUs) {
     return OK;
 }
 
-uint32_t NuPlayer::HTTPLiveSource::flags() const {
-    uint32_t flags = 0;
-    if (mLiveSession->isSeekable()) {
-        flags |= FLAG_SEEKABLE;
-    }
-
-    if (mLiveSession->hasDynamicDuration()) {
-        flags |= FLAG_DYNAMIC_DURATION;
-    }
-
-    return flags;
+bool NuPlayer::HTTPLiveSource::isSeekable() {
+    return mLiveSession->isSeekable();
 }
 
 }  // namespace android

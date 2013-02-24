@@ -210,8 +210,8 @@ void NuPlayer::RTSPSource::performSeek(int64_t seekTimeUs) {
     mHandler->seek(seekTimeUs);
 }
 
-uint32_t NuPlayer::RTSPSource::flags() const {
-    return FLAG_SEEKABLE;
+bool NuPlayer::RTSPSource::isSeekable() {
+    return true;
 }
 
 void NuPlayer::RTSPSource::onMessageReceived(const sp<AMessage> &msg) {
