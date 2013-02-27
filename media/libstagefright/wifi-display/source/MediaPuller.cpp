@@ -34,8 +34,7 @@ MediaPuller::MediaPuller(
     : mSource(source),
       mNotify(notify),
       mPullGeneration(0),
-      mIsAudio(false),
-      mPaused(false) {
+      mIsAudio(false) {
     sp<MetaData> meta = source->getFormat();
     const char *mime;
     CHECK(meta->findCString(kKeyMIMEType, &mime));
@@ -72,14 +71,6 @@ void MediaPuller::stopAsync(const sp<AMessage> &notify) {
     msg->post();
 }
 
-void MediaPuller::pause() {
-    (new AMessage(kWhatPause, id()))->post();
-}
-
-void MediaPuller::resume() {
-    (new AMessage(kWhatResume, id()))->post();
-}
-
 void MediaPuller::onMessageReceived(const sp<AMessage> &msg) {
     switch (msg->what()) {
         case kWhatStart:
@@ -104,6 +95,7 @@ void MediaPuller::onMessageReceived(const sp<AMessage> &msg) {
 
             uint32_t replyID;
             CHECK(msg->senderAwaitsResponse(&replyID));
+
             response->postReply(replyID);
             break;
         }
@@ -137,16 +129,6 @@ void MediaPuller::onMessageReceived(const sp<AMessage> &msg) {
 
             MediaBuffer *mbuf;
             status_t err = mSource->read(&mbuf);
-
-            if (mPaused) {
-                if (err == OK) {
-                    mbuf->release();
-                    mbuf = NULL;
-                }
-
-                schedulePull();
-                break;
-            }
 
             if (err != OK) {
                 if (err == ERROR_END_OF_STREAM) {
@@ -191,18 +173,6 @@ void MediaPuller::onMessageReceived(const sp<AMessage> &msg) {
 
                 schedulePull();
             }
-            break;
-        }
-
-        case kWhatPause:
-        {
-            mPaused = true;
-            break;
-        }
-
-        case kWhatResume:
-        {
-            mPaused = false;
             break;
         }
 

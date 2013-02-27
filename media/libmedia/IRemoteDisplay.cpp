@@ -23,8 +23,6 @@ namespace android {
 
 enum {
     DISPOSE = IBinder::FIRST_CALL_TRANSACTION,
-    PAUSE,
-    RESUME,
 };
 
 class BpRemoteDisplay: public BpInterface<IRemoteDisplay>
@@ -33,20 +31,6 @@ public:
     BpRemoteDisplay(const sp<IBinder>& impl)
         : BpInterface<IRemoteDisplay>(impl)
     {
-    }
-
-    virtual status_t pause() {
-        Parcel data, reply;
-        data.writeInterfaceToken(IRemoteDisplay::getInterfaceDescriptor());
-        remote()->transact(PAUSE, data, &reply);
-        return reply.readInt32();
-    }
-
-    virtual status_t resume() {
-        Parcel data, reply;
-        data.writeInterfaceToken(IRemoteDisplay::getInterfaceDescriptor());
-        remote()->transact(RESUME, data, &reply);
-        return reply.readInt32();
     }
 
     status_t dispose()
@@ -71,21 +55,6 @@ status_t BnRemoteDisplay::onTransact(
             reply->writeInt32(dispose());
             return NO_ERROR;
         }
-
-        case PAUSE:
-        {
-            CHECK_INTERFACE(IRemoteDisplay, data, reply);
-            reply->writeInt32(pause());
-            return OK;
-        }
-
-        case RESUME:
-        {
-            CHECK_INTERFACE(IRemoteDisplay, data, reply);
-            reply->writeInt32(resume());
-            return OK;
-        }
-
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

@@ -40,14 +40,6 @@ RemoteDisplay::RemoteDisplay(
 RemoteDisplay::~RemoteDisplay() {
 }
 
-status_t RemoteDisplay::pause() {
-    return mSource->pause();
-}
-
-status_t RemoteDisplay::resume() {
-    return mSource->resume();
-}
-
 status_t RemoteDisplay::dispose() {
     mSource->stop();
 

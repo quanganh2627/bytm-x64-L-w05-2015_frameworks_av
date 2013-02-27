@@ -35,9 +35,6 @@ struct MediaPuller : public AHandler {
     status_t start();
     void stopAsync(const sp<AMessage> &notify);
 
-    void pause();
-    void resume();
-
 protected:
     virtual void onMessageReceived(const sp<AMessage> &msg);
     virtual ~MediaPuller();
@@ -47,15 +44,12 @@ private:
         kWhatStart,
         kWhatStop,
         kWhatPull,
-        kWhatPause,
-        kWhatResume,
     };
 
     sp<MediaSource> mSource;
     sp<AMessage> mNotify;
     int32_t mPullGeneration;
     bool mIsAudio;
-    bool mPaused;
 
     status_t postSynchronouslyAndReturnError(const sp<AMessage> &msg);
     void schedulePull();
