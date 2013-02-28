@@ -1564,12 +1564,10 @@ uint32_t AudioFlinger::PlaybackThread::hasAudioSession(int sessionId) const
 
 void AudioFlinger::PlaybackThread::getEffectSessionIds(Vector<int> &sessionIds)
 {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     size_t size = mEffectChains.size();
     for (size_t i=0; i < size; i++) {
         sessionIds.add(mEffectChains[i]->sessionId());
     }
-#endif
 }
 	
 uint32_t AudioFlinger::PlaybackThread::getStrategyForSession_l(int sessionId)
