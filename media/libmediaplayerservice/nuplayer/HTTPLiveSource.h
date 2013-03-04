@@ -34,6 +34,7 @@ struct NuPlayer::HTTPLiveSource : public NuPlayer::Source {
             uid_t uid = 0);
 
     virtual void start();
+    virtual void stop();
 
     virtual status_t feedMoreTSData();
 
@@ -43,7 +44,6 @@ struct NuPlayer::HTTPLiveSource : public NuPlayer::Source {
     virtual status_t getDuration(int64_t *durationUs);
     virtual status_t seekTo(int64_t seekTimeUs);
     virtual bool isSeekable();
-    virtual void stop();
 
 protected:
     virtual ~HTTPLiveSource();
