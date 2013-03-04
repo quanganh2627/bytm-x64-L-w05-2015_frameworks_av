@@ -93,9 +93,9 @@ private:
         kWhatReset                      = 'rset',
         kWhatSeek                       = 'seek',
         kWhatPause                      = 'paus',
-        kWhatResume                     = 'rsme',
         kWhatPrepare                    = 'prep',
         kWhatWaitPrepareDone            = 'preD',
+        kWhatResume                     = 'rsme',
     };
 
     wp<NuPlayerDriver> mDriver;
@@ -117,11 +117,11 @@ private:
     int32_t mAudioEosErr;
     int32_t mVideoEosErr;
 
-    bool mScanSourcesPending;
-    int32_t mScanSourcesGeneration;
-
     bool mPreparePending;
     bool mSourceAlreadyStart;
+
+    bool mScanSourcesPending;
+    int32_t mScanSourcesGeneration;
 
     enum FlushStatus {
         NONE,

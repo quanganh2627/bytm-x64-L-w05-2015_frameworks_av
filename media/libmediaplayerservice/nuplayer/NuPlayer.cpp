@@ -698,11 +698,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
         {
             ALOGV("kWhatReset");
 
-            if(mPreparePending) {
-                finishPrepare();
-                mPreparePending = false;
-            }
-
             if (mRenderer != NULL) {
                 // There's an edge case where the renderer owns all output
                 // buffers and is paused, therefore the decoder will not read
@@ -713,6 +708,11 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                         || mFlushingVideo == AWAITING_DISCONTINUITY) {
                     mRenderer->resume();
                 }
+            }
+
+            if (mPreparePending) {
+                finishPrepare();
+                mPreparePending = false;
             }
 
             if (mFlushingAudio != NONE || mFlushingVideo != NONE) {
