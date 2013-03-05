@@ -216,6 +216,8 @@ AwesomePlayer::AwesomePlayer()
       mDecryptHandle(NULL),
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDClient(NULL),
+      mFramesToDirty(0),
+      mRenderedFrames(0),
 #endif
       mLastVideoTimeUs(-1),
       mTextDriver(NULL)
@@ -444,6 +446,7 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
            mMDClient->updateVideoInfo(&info);
            delete mMDClient;
            mMDClient = NULL;
+           mFramesToDirty = 0;
         }
     }
 }
@@ -1488,6 +1491,7 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
     }
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     setDisplaySource_l(false);
+    mRenderedFrames = 0;
 #endif
 
     mVideoSource->stop();
@@ -2266,6 +2270,34 @@ void AwesomePlayer::onVideoEvent() {
 
     if (mVideoRenderer != NULL) {
         mSinceLastDropped++;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+        // Only check the seek after the player start rendering.
+        // Some player will seek to the last exit position in
+        // the beginning automatically, but is not done by the user.
+        // Use a counter for the rendered frames to check this case.
+        if (mRenderedFrames > 0 && wasSeeking == SEEK) {
+            int fps = 0;
+            if (mVideoTrack != NULL) {
+                sp<MetaData> meta = mVideoTrack->getFormat();
+                if (meta != NULL && !meta->findInt32(kKeyFrameRate, &fps)) {
+                    ALOGW("No frame rate info found.");
+                    fps = 0;
+                }
+            }
+
+            // Number of frames to set private flags after seeking
+            mFramesToDirty = fps > 0 ? fps : 30;
+        }
+        // Put a speicial flag
+        if (mFramesToDirty-- > 0) {
+            struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
+            if (anwBuff != NULL) {
+                anwBuff->usage |= GRALLOC_USAGE_PRIVATE_2;
+                ALOGV("Add private usage:%x", anwBuff->usage);
+            }
+        }
+        mRenderedFrames++;
+#endif
         mVideoRenderer->render(mVideoBuffer);
         if (!mVideoRenderingStarted) {
             mVideoRenderingStarted = true;

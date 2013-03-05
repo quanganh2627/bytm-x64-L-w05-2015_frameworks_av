@@ -223,6 +223,8 @@ private:
     bool mWatchForAudioEOS;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
+    int mFramesToDirty;
+    uint32_t mRenderedFrames;
 #endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
