@@ -48,7 +48,8 @@ struct NuPlayer::GenericSource : public NuPlayer::Source {
     virtual bool isStreamValid(bool audio);
     virtual status_t getDuration(int64_t *durationUs);
     virtual status_t seekTo(int64_t seekTimeUs);
-    virtual bool isSeekable();
+
+    virtual uint32_t flags() const;
 
 protected:
     virtual ~GenericSource();

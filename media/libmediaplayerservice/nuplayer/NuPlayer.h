@@ -96,6 +96,7 @@ private:
         kWhatPrepare                    = 'prep',
         kWhatWaitPrepareDone            = 'preD',
         kWhatResume                     = 'rsme',
+        kWhatPollDuration               = 'polD',
     };
 
     wp<NuPlayerDriver> mDriver;
@@ -122,6 +123,8 @@ private:
 
     bool mScanSourcesPending;
     int32_t mScanSourcesGeneration;
+
+    int32_t mPollDurationGeneration;
 
     enum FlushStatus {
         NONE,
@@ -172,6 +175,9 @@ private:
     void finishReset();
     void postWaitPrepare();
     void postScanSources();
+
+    void schedulePollDuration();
+    void cancelPollDuration();
 
     DISALLOW_EVIL_CONSTRUCTORS(NuPlayer);
 };
