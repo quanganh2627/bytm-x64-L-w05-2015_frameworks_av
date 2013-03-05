@@ -230,6 +230,8 @@ private:
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
     sp<ANativeWindow> mDefaultNativeWindow;
+    int mFramesToDirty;
+    uint32_t mRenderedFrames;
 #endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
