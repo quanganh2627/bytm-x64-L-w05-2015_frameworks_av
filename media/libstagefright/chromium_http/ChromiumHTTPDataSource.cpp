@@ -79,14 +79,14 @@ status_t ChromiumHTTPDataSource::connect_l(
         disconnect_l();
     }
 
+    LOG_PRI(ANDROID_LOG_INFO, LOG_TAG,
+                "connect to <URL suppressed> @%lld", offset);
+
     if (mDisconnectExternal) {
         LOG_PRI(ANDROID_LOG_INFO, LOG_TAG,
                 "should not connect when disconnect is already called in another thread");
         return mIOResult;
     }
-    LOG_PRI(ANDROID_LOG_INFO, LOG_TAG,
-                "connect to <URL suppressed> @%lld", offset);
-
     mURI = uri;
     mContentType = String8("application/octet-stream");
 
