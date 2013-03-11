@@ -167,7 +167,6 @@ private:
     sp<SurfaceTexture> mST;
     sp<SurfaceTextureClient> mSTC;
     int mWidth, mHeight;
-    uint32_t mTransform;
 
     // These are only valid during render() calls
     uint32_t mVideoEffect;

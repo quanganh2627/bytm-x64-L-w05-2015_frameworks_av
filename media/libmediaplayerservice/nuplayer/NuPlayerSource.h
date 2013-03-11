@@ -51,14 +51,6 @@ struct NuPlayer::Source : public RefBase {
         return false;
     }
 
-    virtual bool isIStreamSource() {
-        return false;
-    }
-
-    virtual bool isStreamValid(bool audio) {
-        return false;
-    }
-
 protected:
     virtual ~Source() {}
 

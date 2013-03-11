@@ -20,12 +20,6 @@ LOCAL_C_INCLUDES := \
 	$(TOP)/frameworks/av/media/libstagefright/rtsp                \
 	$(TOP)/frameworks/native/include/media/openmax
 
-ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
-    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
-    LOCAL_SHARED_LIBRARIES += libmultidisplay
-    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
-endif
-
 LOCAL_MODULE:= libstagefright_nuplayer
 
 LOCAL_MODULE_TAGS := eng

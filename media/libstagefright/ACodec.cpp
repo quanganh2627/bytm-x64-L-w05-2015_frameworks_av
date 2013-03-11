@@ -336,7 +336,6 @@ ACodec::ACodec()
     : mQuirks(0),
       mNode(NULL),
       mSentFormat(false),
-      mFirstFrame(true),
       mIsEncoder(false),
       mShutdownInProgress(false),
       mEncoderDelay(0),
@@ -572,14 +571,6 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         return err;
     }
 
-    // XXX: should hold extra two buffers in surface texture back end.
-    // Currently, intel hw overlay need always hold output buffer until
-    // flip to another buffer. So we should hold more buffers to avoid
-    // buffer overwrite by decoder.
-    if (mQuirks & OMXCodec::kRequiresHoldExtraBuffers) {
-        minUndequeuedBufs += 2;
-    }
-
     // XXX: Is this the right logic to use?  It's not clear to me what the OMX
     // buffer counts refer to - how do they account for the renderer holding on
     // to buffers?
@@ -722,8 +713,7 @@ status_t ACodec::freeOutputBuffersNotOwnedByComponent() {
             &mBuffers[kPortIndexOutput].editItemAt(i);
 
         if (info->mStatus !=
-                BufferInfo::OWNED_BY_COMPONENT && info->mStatus !=
-                BufferInfo::OWNED_BY_DOWNSTREAM) {
+                BufferInfo::OWNED_BY_COMPONENT) {
             // We shouldn't have sent out any buffers to the client at this
             // point.
             CHECK_NE((int)info->mStatus, (int)BufferInfo::OWNED_BY_DOWNSTREAM);
@@ -930,23 +920,6 @@ status_t ACodec::configureCodec(
                 err = INVALID_OPERATION;
             } else {
                 err = setupVideoDecoder(mime, width, height);
-            }
-
-            if (mQuirks & OMXCodec::kRequiresSetProfileLevel) {
-                int32_t level;
-                status_t err;
-                if (msg->findInt32("avc_level", &level)) {
-                    OMX_VIDEO_PARAM_AVCTYPE avcVideoParams;
-                    InitOMXParams(&avcVideoParams);
-                    avcVideoParams.nPortIndex = kPortIndexInput;
-                    err = mOMX->getParameter(
-                        mNode, OMX_IndexParamVideoAvc, &avcVideoParams, sizeof(avcVideoParams));
-                    CHECK_EQ(err, (status_t)OK);
-                    avcVideoParams.eLevel = (OMX_VIDEO_AVCLEVELTYPE)level;
-                    err = mOMX->setParameter(
-                        mNode, OMX_IndexParamVideoAvc, &avcVideoParams, sizeof(avcVideoParams));
-                    CHECK_EQ(err, (status_t)OK);
-               }
             }
         }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
@@ -2038,22 +2011,6 @@ status_t ACodec::setVideoFormatOnPort(
 
 status_t ACodec::initNativeWindow() {
     if (mNativeWindow != NULL) {
-        if (mOMX->livesLocally(mNode,getpid())){
-            OMX_PARAM_PORTDEFINITIONTYPE def;
-            OMX_VIDEO_PORTDEFINITIONTYPE *video_def = &def.format.video;
-
-            InitOMXParams(&def);
-            def.nPortIndex = kPortIndexInput;
-
-            status_t err = mOMX->getParameter(
-                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
-            CHECK_EQ(err, (status_t)OK);
-
-            ALOGD("set NativeWindow = %p",mNativeWindow.get());
-            video_def->pNativeWindow = mNativeWindow.get();
-            err = mOMX->setParameter(
-                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
-        }
         return mOMX->enableGraphicBuffers(mNode, kPortIndexOutput, OMX_TRUE);
     }
 
@@ -2155,6 +2112,8 @@ void ACodec::sendFormatChange() {
             CHECK_GE(rect.nTop, 0);
             CHECK_GE(rect.nWidth, 0u);
             CHECK_GE(rect.nHeight, 0u);
+            CHECK_LE(rect.nLeft + rect.nWidth - 1, videoDef->nFrameWidth);
+            CHECK_LE(rect.nTop + rect.nHeight - 1, videoDef->nFrameHeight);
 
             notify->setRect(
                     "crop",
@@ -2844,8 +2803,7 @@ bool ACodec::BaseState::onOMXFillBufferDone(
                 break;
             }
 
-            if (!mCodec->mIsEncoder && !mCodec->mSentFormat
-                && mCodec->mNativeWindow == NULL) {
+            if (!mCodec->mIsEncoder && !mCodec->mSentFormat) {
                 mCodec->sendFormatChange();
             }
 
@@ -2874,24 +2832,6 @@ bool ACodec::BaseState::onOMXFillBufferDone(
                 new AMessage(kWhatOutputBufferDrained, mCodec->id());
 
             reply->setPointer("buffer-id", info->mBufferID);
-
-            if (!mCodec->mIsEncoder && !mCodec->mSentFormat) {
-                ALOGV("Applying format change firstFrame=%d", mCodec->mFirstFrame);
-                // Do cropping for the first frame before
-                // the frame is send out. For the subsequent frames
-                // the cropping has to be done AFTER the frame is send
-                if (mCodec->mFirstFrame) {
-                    mCodec->sendFormatChange();
-                } else {
-                    reply->setInt32("sent-format", mCodec->mSentFormat);
-                    mCodec->mSentFormat = true;
-                }
-            }
-
-            if (mCodec->mNativeWindow != NULL && rangeLength == 0) {
-                reply->setInt32("hide",true);
-            }
-            mCodec->mFirstFrame = false;
 
             notify->setMessage("reply", reply);
 
@@ -2935,20 +2875,8 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
     CHECK_EQ((int)info->mStatus, (int)BufferInfo::OWNED_BY_DOWNSTREAM);
 
     int32_t render;
-    // The client may choose not to render a buffer but we will
-    // need to apply the format change regardless as we would get
-    // only one format change call, associated with a buffer.
-    int32_t sentformat;
-    int32_t hide;
-    if (msg->findInt32("sent-format", &sentformat)) {
-        if (!sentformat) {
-            mCodec->sendFormatChange();
-        }
-    }
-
     if (mCodec->mNativeWindow != NULL
-            && msg->findInt32("render", &render) && render != 0
-            && !msg->findInt32("hide", &hide)) {
+            && msg->findInt32("render", &render) && render != 0) {
         // The client wants this buffer to be rendered.
 
         status_t err;
@@ -3294,17 +3222,15 @@ bool ACodec::LoadedState::onConfigureComponent(
 
     sp<RefBase> obj;
     if (msg->findObject("native-window", &obj)
-            && strncmp("OMX.google.", mCodec->mComponentName.c_str(), 11)
-            && !strncasecmp(mime.c_str(), "video/", 6)) {
+            && strncmp("OMX.google.", mCodec->mComponentName.c_str(), 11)) {
         sp<NativeWindowWrapper> nativeWindow(
                 static_cast<NativeWindowWrapper *>(obj.get()));
         CHECK(nativeWindow != NULL);
         mCodec->mNativeWindow = nativeWindow->getNativeWindow();
-        if (mCodec->mNativeWindow != NULL) {
-            native_window_set_scaling_mode(
-                    mCodec->mNativeWindow.get(),
-                    NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW);
-        }
+
+        native_window_set_scaling_mode(
+                mCodec->mNativeWindow.get(),
+                NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW);
     }
     CHECK_EQ((status_t)OK, mCodec->initNativeWindow());
 
@@ -3319,11 +3245,11 @@ bool ACodec::LoadedState::onConfigureComponent(
 
 void ACodec::LoadedState::onStart() {
     ALOGV("onStart");
-    if (!(mCodec->mQuirks & OMXCodec::kRequiresLoadedToIdleAfterAllocation)) {
-        CHECK_EQ(mCodec->mOMX->sendCommand(
-                    mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),
-                 (status_t)OK);
-    }
+
+    CHECK_EQ(mCodec->mOMX->sendCommand(
+                mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),
+             (status_t)OK);
+
     mCodec->changeState(mCodec->mLoadedToIdleState);
 }
 
@@ -3345,10 +3271,6 @@ void ACodec::LoadedToIdleState::stateEntered() {
         mCodec->signalError(OMX_ErrorUndefined, err);
 
         mCodec->changeState(mCodec->mLoadedState);
-    } else if (mCodec->mQuirks & OMXCodec::kRequiresLoadedToIdleAfterAllocation) {
-        CHECK_EQ(mCodec->mOMX->sendCommand(
-                    mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),
-                 (status_t)OK);
     }
 }
 
@@ -3364,7 +3286,6 @@ status_t ACodec::LoadedToIdleState::allocateBuffers() {
 
 bool ACodec::LoadedToIdleState::onMessageReceived(const sp<AMessage> &msg) {
     switch (msg->what()) {
-        case kWhatFlush:
         case kWhatShutdown:
         {
             mCodec->deferMessage(msg);
@@ -3410,10 +3331,6 @@ void ACodec::IdleToExecutingState::stateEntered() {
 
 bool ACodec::IdleToExecutingState::onMessageReceived(const sp<AMessage> &msg) {
     switch (msg->what()) {
-        case kWhatFlush:
-        {
-            ALOGV("[%s] IdleToExecutingState flushing now ", mCodec->mComponentName.c_str());
-        }
         case kWhatShutdown:
         {
             mCodec->deferMessage(msg);

@@ -150,7 +150,7 @@ uint32 SfNetLog::NextID() {
 }
 
 net::NetLog::LogLevel SfNetLog::GetLogLevel() const {
-    return LOG_BASIC;
+    return LOG_ALL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

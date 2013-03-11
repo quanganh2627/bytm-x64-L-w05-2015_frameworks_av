@@ -244,7 +244,6 @@ M4OSA_ERR M4DECODER_NULL_setOption(M4OSA_Context context,
                 p_src += pTempDecYuvData[1].u_stride;
             }
 
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
             p_des = pStreamContext->pDecYuvWithEffect[2].pac_data +
              pStreamContext->pDecYuvWithEffect[2].u_topleft;
             p_src = pTempDecYuvData[2].pac_data +
@@ -258,7 +257,6 @@ M4OSA_ERR M4DECODER_NULL_setOption(M4OSA_Context context,
                 p_des += pStreamContext->pDecYuvWithEffect[2].u_stride;
                 p_src += pTempDecYuvData[2].u_stride;
             }
-#endif
             break;
 
         case M4DECODER_kOptionID_OutputFilter:
@@ -354,7 +352,6 @@ M4OSA_ERR M4DECODER_NULL_render(M4OSA_Context context, M4_MediaTime* pTime,
             p_src += pStreamContext->pDecYuvWithEffect[1].u_stride;
         }
 
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
         p_des = pOutputPlane[2].pac_data + pOutputPlane[2].u_topleft;
         p_src = pStreamContext->pDecYuvWithEffect[2].pac_data +
          pStreamContext->pDecYuvWithEffect[2].u_topleft;
@@ -364,7 +361,6 @@ M4OSA_ERR M4DECODER_NULL_render(M4OSA_Context context, M4_MediaTime* pTime,
             p_des += pOutputPlane[2].u_stride;
             p_src += pStreamContext->pDecYuvWithEffect[2].u_stride;
         }
-#endif
     } else {
 
         p_des = pOutputPlane[0].pac_data + pOutputPlane[0].u_topleft;
@@ -387,7 +383,6 @@ M4OSA_ERR M4DECODER_NULL_render(M4OSA_Context context, M4_MediaTime* pTime,
             p_src += pStreamContext->pDecYuvData[1].u_stride;
         }
 
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
         p_des = pOutputPlane[2].pac_data + pOutputPlane[2].u_topleft;
         p_src = pStreamContext->pDecYuvData[2].pac_data +
          pStreamContext->pDecYuvData[2].u_topleft;
@@ -397,7 +392,6 @@ M4OSA_ERR M4DECODER_NULL_render(M4OSA_Context context, M4_MediaTime* pTime,
             p_des += pOutputPlane[2].u_stride;
             p_src += pStreamContext->pDecYuvData[2].u_stride;
         }
-#endif
     }
     return err;
 }

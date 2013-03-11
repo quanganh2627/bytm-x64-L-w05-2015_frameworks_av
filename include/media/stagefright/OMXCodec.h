@@ -33,9 +33,6 @@ class MemoryDealer;
 struct OMXCodecObserver;
 struct CodecProfileLevel;
 class SkipCutBuffer;
-#ifdef TARGET_HAS_VPP
-class VPPProcessor;
-#endif
 
 struct OMXCodec : public MediaSource,
                   public MediaBufferObserver {
@@ -103,10 +100,6 @@ struct OMXCodec : public MediaSource,
         kSupportsMultipleFramesPerInputBuffer = 1024,
         kRequiresLargerEncoderOutputBuffer    = 2048,
         kOutputBuffersAreUnreadable           = 4096,
-        kRequiresSetProfileLevel              = 8192,
-        kRequiresSetFPS                       = 16384,
-        kRequiresHoldExtraBuffers             = 32768,
-        kRequiresSampleRate                   = 131072,
     };
 
     struct CodecNameAndQuirks {
@@ -126,11 +119,6 @@ struct OMXCodec : public MediaSource,
 
     static bool findCodecQuirks(const char *componentName, uint32_t *quirks);
 
-#ifdef TARGET_HAS_VPP
-    void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
-    bool isVppBufferAvail();
-#endif
-
 protected:
     virtual ~OMXCodec();
 
@@ -138,13 +126,6 @@ private:
 
     // Make sure mLock is accessible to OMXCodecObserver
     friend class OMXCodecObserver;
-
-#ifdef TARGET_HAS_VPP
-    // Make sure BufferInfo is accessible in VPPProcessor
-    friend class VPPProcessor;
-    uint32_t mVppInBufNum;
-    uint32_t mVppOutBufNum;
-#endif
 
     // Call this with mLock hold
     void on_message(const omx_message &msg);
@@ -179,9 +160,6 @@ private:
         OWNED_BY_COMPONENT,
         OWNED_BY_NATIVE_WINDOW,
         OWNED_BY_CLIENT,
-#ifdef TARGET_HAS_VPP
-        OWNED_BY_VPP,
-#endif
     };
 
     struct BufferInfo {
@@ -225,8 +203,6 @@ private:
     status_t mFinalStatus;
     bool mNoMoreOutputData;
     bool mOutputPortSettingsHaveChanged;
-    bool mFirstFrame;
-    bool mCropInfoChanged;
     int64_t mSeekTimeUs;
     ReadOptions::SeekMode mSeekMode;
     int64_t mTargetTimeUs;
@@ -272,8 +248,7 @@ private:
             int32_t numChannels, int32_t sampleRate, int32_t bitRate,
             int32_t aacProfile, bool isADTS);
 
-    void setG711Format(int32_t numChannels, int32_t sampleRate);
-    status_t setALACFormat( void *pConfig );
+    void setG711Format(int32_t numChannels);
 
     status_t setVideoPortFormatType(
             OMX_U32 portIndex,
@@ -309,7 +284,7 @@ private:
     void setJPEGInputFormat(
             OMX_U32 width, OMX_U32 height, OMX_U32 compressedSize);
 
-    status_t setMinBufferSize(OMX_U32 portIndex, OMX_U32 size);
+    void setMinBufferSize(OMX_U32 portIndex, OMX_U32 size);
 
     void setRawAudioFormat(
             OMX_U32 portIndex, int32_t sampleRate, int32_t numChannels);

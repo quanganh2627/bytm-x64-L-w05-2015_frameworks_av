@@ -30,10 +30,6 @@
 #include <machine/cpu-features.h>
 #endif
 
-#ifdef USE_INTEL_SRC
-#include "AudioResamplerIA.h"
-#endif
-
 namespace android {
 
 #ifdef __ARM_HAVE_HALFWORD_MULTIPLY // optimized asm option
@@ -208,25 +204,7 @@ AudioResampler* AudioResampler::create(int bitDepth, int inChannelCount,
         ALOGV("Create VERY_HIGH_QUALITY sinc Resampler = %d", quality);
         resampler = new AudioResamplerSinc(bitDepth, inChannelCount, sampleRate, quality);
         break;
-#ifdef USE_INTEL_SRC
-    case INTEL_LOW_QUALITY:
-    case INTEL_MED_QUALITY:
-    case INTEL_HIGH_QUALITY:
-    case INTEL_VERY_HIGH_QUALITY:
-        LOGV("Create intel  Resampler");
-        resampler = new AudioResamplerIA(bitDepth, inChannelCount, sampleRate);
-        break;
-#endif
-
     }
-#ifdef USE_INTEL_SRC
-    if (quality == LOW_QUALITY || quality == MED_QUALITY ||
-                            quality == HIGH_QUALITY) {
-        resampler->mResType = AF_DEFAULT_SRC;
-    } else {
-        resampler->mResType = INTEL_SRC;
-    }
-#endif
 
     // initialize resampler
     resampler->init();

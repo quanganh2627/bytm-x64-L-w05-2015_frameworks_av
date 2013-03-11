@@ -166,14 +166,6 @@ status_t AudioSystem::setMode(audio_mode_t mode)
     return af->setMode(mode);
 }
 
-status_t AudioSystem::setFmRxMode(int mode)
-{
-    if (mode >= AUDIO_MODE_FM_CNT) return BAD_VALUE;
-    const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
-    if (af == 0) return PERMISSION_DENIED;
-    return af->setFmRxMode(mode);
-}
-
 status_t AudioSystem::setParameters(audio_io_handle_t ioHandle, const String8& keyValuePairs) {
     const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
     if (af == 0) return PERMISSION_DENIED;
@@ -377,30 +369,6 @@ status_t AudioSystem::setVoiceVolume(float value)
     return af->setVoiceVolume(value);
 }
 
-status_t AudioSystem::setFmRxVolume(float value)
-{
-    const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
-    if (af == 0) return PERMISSION_DENIED;
-    return af->setFmRxVolume(value);
-}
-
-status_t AudioSystem::getRenderPosition(audio_io_handle_t ioHandle, uint32_t *halFrames,
-                                        uint32_t *dspFrames, audio_stream_type_t stream)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
-    if (af == 0) return PERMISSION_DENIED;
-
-    if (stream == AUDIO_STREAM_DEFAULT) {
-        stream = AUDIO_STREAM_MUSIC;
-    }
-    return af->getRenderPosition(halFrames, dspFrames, ioHandle);
-#else
-    ALOGI("getRenderPosition: is not supported");
-    return 0;
-#endif
-}
-
 status_t AudioSystem::getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames, audio_stream_type_t stream)
 {
     const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
@@ -409,6 +377,7 @@ status_t AudioSystem::getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames
     if (stream == AUDIO_STREAM_DEFAULT) {
         stream = AUDIO_STREAM_MUSIC;
     }
+
     return af->getRenderPosition(halFrames, dspFrames, getOutput(stream));
 }
 
@@ -599,14 +568,6 @@ status_t AudioSystem::setPhoneState(audio_mode_t state)
     if (aps == 0) return PERMISSION_DENIED;
 
     return aps->setPhoneState(state);
-}
-
-status_t AudioSystem::setFmRxState(int state)
-{
-    const sp<IAudioPolicyService>& aps = AudioSystem::get_audio_policy_service();
-    if (aps == 0) return PERMISSION_DENIED;
-
-    return aps->setFmRxState(state);
 }
 
 status_t AudioSystem::setForceUse(audio_policy_force_use_t usage, audio_policy_forced_cfg_t config)
@@ -804,29 +765,6 @@ void AudioSystem::clearAudioConfigCache()
     gOutputs.clear();
 }
 
-bool AudioSystem::isOffloadSupported(uint32_t format,
-                                    audio_stream_type_t stream,
-                                    uint32_t samplingRate,
-                                    uint32_t bitRate,
-                                    int64_t duration,
-                                    bool isVideo,
-                                    bool isStreaming)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    ALOGV("isOffloadSupported");
-    const sp<IAudioPolicyService>& aps = AudioSystem::get_audio_policy_service();
-    if (aps == 0) {
-        ALOGE("isOffloadSupported Error aps = 0");
-         return false;
-    }
-
-    return aps->isOffloadSupported(format, stream, samplingRate, bitRate,
-                duration, isVideo, isStreaming);
-#else
-    ALOGI("isOffloadSupported is not supported");
-    return false;
-#endif
-}
 // ---------------------------------------------------------------------------
 
 void AudioSystem::AudioPolicyServiceClient::binderDied(const wp<IBinder>& who) {

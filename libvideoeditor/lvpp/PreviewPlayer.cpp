@@ -1470,7 +1470,7 @@ status_t PreviewPlayer::readFirstVideoFrame() {
                     mSeekTimeUs / 1E6);
 
             options.setSeekTo(
-                    mSeekTimeUs, MediaSource::ReadOptions::SEEK_PREVIOUS_SYNC);
+                    mSeekTimeUs, MediaSource::ReadOptions::SEEK_CLOSEST);
         }
         for (;;) {
             status_t err = mVideoSource->read(&mVideoBuffer, &options);

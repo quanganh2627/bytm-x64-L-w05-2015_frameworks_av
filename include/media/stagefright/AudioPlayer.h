@@ -36,19 +36,8 @@ public:
         SEEK_COMPLETE
     };
 
-    enum create_flags_t {
-        ALLOW_DEEP_BUFFERING = 0x01,
-        USE_OFFLOAD = 0x02
-    };
-
     AudioPlayer(const sp<MediaPlayerBase::AudioSink> &audioSink,
                 bool allowDeepBuffering = false,
-                AwesomePlayer *audioObserver = NULL);
-
-    // Overloaded constructor for offload
-    AudioPlayer(audio_format_t audioFormat,
-                const sp<MediaPlayerBase::AudioSink> &audioSink,
-                uint32_t flags,
                 AwesomePlayer *audioObserver = NULL);
 
     virtual ~AudioPlayer();
@@ -77,12 +66,6 @@ public:
     bool reachedEOS(status_t *finalStatus);
 
     status_t setPlaybackRatePermille(int32_t ratePermille);
-
-#ifdef INTEL_WIDI
-    status_t setRouteAudioToWidi(bool on);
-#endif
-
-    void notifyAudioEOS();
 
 private:
     friend class VideoEditorAudioPlayer;
@@ -119,24 +102,12 @@ private:
     AwesomePlayer *mObserver;
     int64_t mPinnedTimeUs;
 
-    // for compressed playback support
-    int mBitRate;
-    bool mOffload;
-    int mChannels;
-    audio_format_t mOffloadFormat;
-    int64_t mStartPos;
     static void AudioCallback(int event, void *user, void *info);
     void AudioCallback(int event, void *info);
 
     static size_t AudioSinkCallback(
             MediaPlayerBase::AudioSink *audioSink,
             void *data, size_t size, void *me);
-
-    // Overloaded for offload callback events
-    static size_t AudioSinkCallback(
-            MediaPlayerBase::AudioSink *audioSink,
-            void *data, size_t size, void *me,
-            MediaPlayerBase::AudioSink::cb_event_t event);
 
     size_t fillBuffer(void *data, size_t size);
 
@@ -148,10 +119,6 @@ private:
 
     AudioPlayer(const AudioPlayer &);
     AudioPlayer &operator=(const AudioPlayer &);
-
-public:
-    // This flag is checked from AwesomePlayer for posting MEDIA_PLAYBACK_COMPLETE
-    bool mOffloadPostEOSPending;
 };
 
 }  // namespace android

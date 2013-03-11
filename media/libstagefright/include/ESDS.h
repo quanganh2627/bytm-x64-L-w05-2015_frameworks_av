@@ -33,9 +33,6 @@ public:
 
     status_t getObjectTypeIndication(uint8_t *objectTypeIndication) const;
     status_t getCodecSpecificInfo(const void **data, size_t *size) const;
-    status_t getCodecSpecificOffset(size_t *offset, size_t *size) const;
-    status_t getBitRate(uint32_t *brateMax, uint32_t *brateAvg) const;
-    status_t getStreamType(uint8_t *streamType) const;
 
 private:
     enum {
@@ -52,9 +49,7 @@ private:
     size_t mDecoderSpecificOffset;
     size_t mDecoderSpecificLength;
     uint8_t mObjectTypeIndication;
-    uint8_t mStreamType;
-    uint32_t mBitRateMax;
-    uint32_t mBitRateAvg;
+
     status_t skipDescriptorHeader(
             size_t offset, size_t size,
             uint8_t *tag, size_t *data_offset, size_t *data_size) const;

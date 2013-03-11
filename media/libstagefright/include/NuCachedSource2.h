@@ -51,7 +51,6 @@ struct NuCachedSource2 : public DataSource {
     size_t cachedSize();
     size_t approxDataRemaining(status_t *finalStatus) const;
 
-    void stop();
     void resumeFetchingIfNecessary();
 
     // The following methods are supported only if the
@@ -104,7 +103,6 @@ private:
     off64_t mLastAccessPos;
     sp<AMessage> mAsyncResult;
     bool mFetching;
-    bool mForceStop;
     int64_t mLastFetchTimeUs;
 
     int32_t mNumRetriesLeft;

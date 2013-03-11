@@ -1,4 +1,3 @@
-ifneq ($(strip $(USE_INTEL_LVSE)),true)
 LOCAL_PATH:= $(call my-dir)
 
 # Music bundle
@@ -178,4 +177,3 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/Common/src
 
 include $(BUILD_STATIC_LIBRARY)
-endif

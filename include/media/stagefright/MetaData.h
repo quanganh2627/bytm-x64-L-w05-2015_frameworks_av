@@ -52,12 +52,10 @@ enum {
     kKeyAACProfile        = 'aacp',  // int32_t
     kKeyAVCC              = 'avcc',  // raw data
     kKeyD263              = 'd263',  // raw data
-    kKeyAlacMagicCookie   = 'almc',  // raw data
     kKeyVorbisInfo        = 'vinf',  // raw data
     kKeyVorbisBooks       = 'vboo',  // raw data
     kKeyWantsNALFragments = 'NALf',
     kKeyIsSyncFrame       = 'sync',  // int32_t (bool)
-    kKeyIsFakeSync        = 'fake',  // int32_t (bool)
     kKeyIsCodecConfig     = 'conf',  // int32_t (bool)
     kKeyTime              = 'time',  // int64_t (usecs)
     kKeyDecodingTime      = 'decT',  // int64_t (decoding timestamp in usecs)
@@ -94,7 +92,6 @@ enum {
     kKeyCompilation       = 'cpil',  // cstring
     kKeyLocation          = 'loc ',  // cstring
     kKeyTimeScale         = 'tmsl',  // int32_t
-    KKeyCropChange        = 'crch',  // int32_t (bool)
 
     // video profile and level
     kKeyVideoProfile      = 'vprf',  // int32_t
@@ -158,13 +155,6 @@ enum {
     kKeyCryptoKey         = 'cryK',  // uint8_t[16]
     kKeyCryptoIV          = 'cryI',  // uint8_t[16]
     kKeyCryptoMode        = 'cryM',  // int32_t
-
-#ifdef USE_INTEL_ASF_EXTRACTOR
-    kKeyWmaBlockAlign     = 'blka',
-    kKeyWmaFormatTag      = 'frmt',
-    kKeyBitPerSample      = 'btps',
-#endif //ifdef USE_INTEL_ASF_EXTRACTOR
-
 };
 
 enum {

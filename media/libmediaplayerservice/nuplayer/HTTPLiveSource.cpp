@@ -178,35 +178,11 @@ status_t NuPlayer::HTTPLiveSource::seekTo(int64_t seekTimeUs) {
 
     mLiveSession->seekTo(seekTimeUs);
 
-    if (mFinalResult != OK) {
-        mFinalResult = OK;
-        sp<AnotherPacketSource> audiosource =
-        static_cast<AnotherPacketSource*>(mTSParser->getSource(ATSParser::AUDIO).get());
-        if (audiosource != NULL) {
-            audiosource->resetEOS();
-        }
-        sp<AnotherPacketSource> videosource =
-        static_cast<AnotherPacketSource*>(mTSParser->getSource(ATSParser::VIDEO).get());
-        if (videosource != NULL) {
-            videosource->resetEOS();
-        }
-    }
     return OK;
 }
 
 bool NuPlayer::HTTPLiveSource::isSeekable() {
     return mLiveSession->isSeekable();
-}
-
-bool NuPlayer::HTTPLiveSource::isStreamValid(bool audio) {
-    ATSParser::SourceType type = audio ? ATSParser::AUDIO : ATSParser::VIDEO;
-    return mTSParser->isStreamValid(type);
-}
-
-void NuPlayer::HTTPLiveSource::stop() {
-    if (mLiveSession != NULL) {
-        mLiveSession->disconnect();
-    }
 }
 
 }  // namespace android
