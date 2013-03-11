@@ -27,6 +27,9 @@
 #include <media/stagefright/foundation/AMessage.h>
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/Utils.h>
+#include <media/AudioSystem.h>
+#include <media/MediaPlayerInterface.h>
+#include <hardware/audio.h>
 
 namespace android {
 
@@ -79,12 +82,14 @@ status_t convertMetaDataToMessage(
     }
 
     if (!strncasecmp("video/", mime, 6)) {
-        int32_t width, height;
+        int32_t width, height, frameRate;
         CHECK(meta->findInt32(kKeyWidth, &width));
         CHECK(meta->findInt32(kKeyHeight, &height));
 
         msg->setInt32("width", width);
         msg->setInt32("height", height);
+        if (meta->findInt32(kKeyFrameRate, &frameRate))
+            msg->setInt32("frame-rate", frameRate);
     } else if (!strncasecmp("audio/", mime, 6)) {
         int32_t numChannels, sampleRate;
         CHECK(meta->findInt32(kKeyChannelCount, &numChannels));
@@ -145,6 +150,9 @@ status_t convertMetaDataToMessage(
 
         ptr += 6;
         size -= 6;
+
+        msg->setInt32("avc_profile", profile);
+        msg->setInt32("avc_level", level);
 
         sp<ABuffer> buffer = new ABuffer(1024);
         buffer->setRange(0, 0);
@@ -366,9 +374,12 @@ void convertMessageToMetaData(const sp<AMessage> &msg, sp<MetaData> &meta) {
     if (mime.startsWith("video/")) {
         int32_t width;
         int32_t height;
+        int32_t frameRate;
         if (msg->findInt32("width", &width) && msg->findInt32("height", &height)) {
             meta->setInt32(kKeyWidth, width);
             meta->setInt32(kKeyHeight, height);
+            if (msg->findInt32("frame-rate", &frameRate))
+                meta->setInt32(kKeyFrameRate, frameRate);
         } else {
             ALOGW("did not find width and/or height");
         }
@@ -431,6 +442,55 @@ void convertMessageToMetaData(const sp<AMessage> &msg, sp<MetaData> &meta) {
 #endif
 }
 
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+static const struct {
+    uint32_t    key;
+    const char* name;
+} metadataList[] = {
+    { kKeySampleRate,     AUDIO_OFFLOAD_CODEC_SAMPLE_RATE },
+    { kKeyChannelMask,    AUDIO_OFFLOAD_CODEC_NUM_CHANNEL },
+    { kKeyBitRate,        AUDIO_OFFLOAD_CODEC_AVG_BIT_RATE },
+    { kKeyEncoderDelay,   AUDIO_OFFLOAD_CODEC_DELAY_SAMPLES },
+    { kKeyEncoderPadding, AUDIO_OFFLOAD_CODEC_PADDING_SAMPLES },
+    { 0, NULL }
+};
+#endif
+
+status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink,
+                           const sp<MetaData>& meta)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+
+    int32_t sampleRate = 0;
+    int32_t bitRate = 0;
+    int32_t numChannels = 0;
+    int32_t delaySamples = 0;
+    int32_t paddingSamples = 0;
+
+    meta->findInt32(kKeySampleRate, &sampleRate);
+    meta->findInt32(kKeyChannelMask, &numChannels);
+    meta->findInt32(kKeyBitRate, &bitRate);
+    meta->findInt32(kKeyEncoderDelay, &delaySamples);
+    meta->findInt32(kKeyEncoderPadding, &paddingSamples);
+
+    AudioParameter param = AudioParameter();
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_AVG_BIT_RATE), bitRate);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_SAMPLE_RATE), sampleRate);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_NUM_CHANNEL), numChannels);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_DELAY_SAMPLES), delaySamples);
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_PADDING_SAMPLES), paddingSamples);
+
+    ALOGV("sendMetaDataToHal: bitRate %d, sampleRate %d, numChan %d,"
+          "delaySample %d, paddingSample %d", bitRate, sampleRate, numChannels, delaySamples, paddingSamples);
+
+    sink->setParameters(param.toString());
+    return OK;
+
+#else
+    return OK;
+#endif
+}
 
 }  // namespace android
 

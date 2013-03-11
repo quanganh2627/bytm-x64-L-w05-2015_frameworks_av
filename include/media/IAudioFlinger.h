@@ -48,7 +48,8 @@ public:
     enum {
         TRACK_DEFAULT = 0,  // client requests a default AudioTrack
         TRACK_TIMED   = 1,  // client requests a TimedAudioTrack
-        TRACK_FAST    = 2,  // client requests a fast AudioTrack or AudioRecord
+        TRACK_FAST    = 2,  // client requests a fast AudioTrack
+        TRACK_OFFLOAD = 4,  // client requests a offload AudioTrack
     };
     typedef uint32_t track_flags_t;
 
@@ -116,6 +117,10 @@ public:
 
     // set audio mode
     virtual     status_t    setMode(audio_mode_t mode) = 0;
+    // get audio mode
+    virtual audio_mode_t   getMode() const  = 0;
+    // set FM RX mode
+    virtual     status_t    setFmRxMode(int mode) = 0;
 
     // mic mute/state
     virtual     status_t    setMicMute(bool state) = 0;
@@ -155,6 +160,7 @@ public:
     virtual status_t setStreamOutput(audio_stream_type_t stream, audio_io_handle_t output) = 0;
 
     virtual status_t setVoiceVolume(float volume) = 0;
+    virtual status_t setFmRxVolume(float volume) = 0;
 
     virtual status_t getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames,
                                     audio_io_handle_t output) const = 0;
@@ -188,12 +194,20 @@ public:
 
     virtual audio_module_handle_t loadHwModule(const char *name) = 0;
 
+    virtual bool isAudioEffectEnabled(int sessionId) const = 0;
+
+    virtual size_t getOffloadBufferSize(
+            uint32_t bitRate,
+            uint32_t sampleRate,
+            uint32_t channel,
+            int output) = 0;
+
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     // FIXME move these APIs to AudioPolicy to permit a more accurate implementation
     // that looks on primary device for a stream with fast flag, primary flag, or first one.
     virtual int32_t getPrimaryOutputSamplingRate() = 0;
     virtual int32_t getPrimaryOutputFrameCount() = 0;
-
+    
 };
 
 

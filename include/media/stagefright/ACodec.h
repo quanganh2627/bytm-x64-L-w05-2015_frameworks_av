@@ -170,6 +170,7 @@ private:
     List<sp<AMessage> > mDeferredQueue;
 
     bool mSentFormat;
+    bool mFirstFrame;
     bool mIsEncoder;
 
     bool mShutdownInProgress;
@@ -184,6 +185,7 @@ private:
     bool mChannelMaskPresent;
     int32_t mChannelMask;
 
+    status_t setCyclicIntraMacroblockRefresh(const sp<AMessage> &msg, int32_t mode);
     status_t allocateBuffersOnPort(OMX_U32 portIndex);
     status_t freeBuffersOnPort(OMX_U32 portIndex);
     status_t freeBuffer(OMX_U32 portIndex, size_t i);

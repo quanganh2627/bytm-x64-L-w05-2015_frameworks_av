@@ -383,12 +383,16 @@ void BlockIterator::seek(
         }
     }
 
-    // Always *search* based on the video track, but finalize based on mTrackNum
+    // Always *search* based on the video track, if video is present.
     const mkvparser::CuePoint::TrackPosition* pTP;
-    if (pTrack && pTrack->GetType() == 1) {
-        pCues->Find(seekTimeNs, pTrack, pCP, pTP);
+    if (pTrack) {
+        bool ret = pCues->Find(seekTimeNs, pTrack, pCP, pTP);
+        if (!ret) {
+            ALOGE("Could not find the matching cue point");
+            return;
+        }
     } else {
-        ALOGE("Did not locate the video track for seeking");
+        ALOGE("Did not locate the track for seeking");
         return;
     }
 
@@ -406,8 +410,8 @@ void BlockIterator::seek(
 
         if (eos()) break;
 
-        if (isAudio || block()->IsKey()) {
-            // Accept the first key frame
+        if((!isAudio && block()->IsKey()) ||
+            (isAudio && (blockTimeUs() >= seekTimeUs))) {
             *actualFrameTimeUs = (block()->GetTime(mCluster) + 500LL) / 1000LL;
             ALOGV("Requested seek point: %lld actual: %lld",
                   seekTimeUs, actualFrameTimeUs);
@@ -461,28 +465,45 @@ status_t MatroskaSource::readBlock() {
     }
 
     const mkvparser::Block *block = mBlockIter.block();
-
+    const mkvparser::Tracks *tracks = (mExtractor->mSegment)->GetTracks();
+    if((block == NULL) || (tracks == NULL)) {
+       return UNKNOWN_ERROR;
+    }
+    const mkvparser::Track *track = tracks->GetTrackByNumber(block->GetTrackNumber());
+    int64_t nextBlkTimeUs, diffTimeUs, frameTimeUs;
     int64_t timeUs = mBlockIter.blockTimeUs();
+    mBlockIter.advance();
+    enum { VIDEO_TRACK = 1, AUDIO_TRACK = 2 };
+    frameTimeUs = timeUs;
+    diffTimeUs = 0;
+    if  (track == NULL) {
+        return UNKNOWN_ERROR;
+    }
+    if (track->GetType() == AUDIO_TRACK) {
+        if (!mBlockIter.eos()) {
+            nextBlkTimeUs = mBlockIter.blockTimeUs();
+            diffTimeUs = (nextBlkTimeUs - timeUs) / block->GetFrameCount();
+        }
+     }
 
     for (int i = 0; i < block->GetFrameCount(); ++i) {
         const mkvparser::Block::Frame &frame = block->GetFrame(i);
 
         MediaBuffer *mbuf = new MediaBuffer(frame.len);
-        mbuf->meta_data()->setInt64(kKeyTime, timeUs);
+        mbuf->meta_data()->setInt64(kKeyTime, frameTimeUs);
+        frameTimeUs += diffTimeUs;
         mbuf->meta_data()->setInt32(kKeyIsSyncFrame, block->IsKey());
 
         long n = frame.Read(mExtractor->mReader, (unsigned char *)mbuf->data());
         if (n != 0) {
             mPendingFrames.clear();
 
-            mBlockIter.advance();
             return ERROR_IO;
         }
 
         mPendingFrames.push_back(mbuf);
     }
 
-    mBlockIter.advance();
 
     return OK;
 }
@@ -655,13 +676,17 @@ MatroskaExtractor::MatroskaExtractor(const sp<DataSource> &source)
     }
 
     ret = mSegment->ParseHeaders();
-    CHECK_EQ(ret, 0);
+    if (ret < 0) {
+        LOGE("Parse headers error %d", ret);
+        delete mSegment;
+        mSegment = NULL;
+        return;
+    }
 
     long len;
     ret = mSegment->LoadCluster(pos, len);
-    CHECK_EQ(ret, 0);
-
     if (ret < 0) {
+        LOGE("Cluster loading =error %d", ret);
         delete mSegment;
         mSegment = NULL;
         return;
@@ -674,7 +699,12 @@ MatroskaExtractor::MatroskaExtractor(const sp<DataSource> &source)
          info->GetWritingAppAsUTF8());
 #endif
 
-    addTracks();
+    ret = addTracks();
+    if (ret < 0) {
+        delete mSegment;
+        mSegment = NULL;
+        return;
+    }
 }
 
 MatroskaExtractor::~MatroskaExtractor() {
@@ -785,7 +815,7 @@ void addVorbisCodecInfo(
             codecPrivateSize - len1 - len2 - 3);
 }
 
-void MatroskaExtractor::addTracks() {
+int MatroskaExtractor::addTracks() {
     const mkvparser::Tracks *tracks = mSegment->GetTracks();
 
     for (size_t index = 0; index < tracks->GetTracksCount(); ++index) {
@@ -831,10 +861,22 @@ void MatroskaExtractor::addTracks() {
                     }
                 } else if (!strcmp("V_VP8", codecID)) {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VPX);
-                } else {
+                } else if (!strcmp("V_MS/VFW/FOURCC", codecID)) {
+                    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_H263);
+                }
+                else {
                     ALOGW("%s is not supported.", codecID);
                     continue;
                 }
+
+                int32_t frame_rate = vtrack->GetFrameRate();
+                if (frame_rate <= 0){
+                    CalulateFrameRate(&frame_rate,track->GetNumber());
+                }
+                if (frame_rate > 0) {
+                    meta->setInt32(kKeyFrameRate, frame_rate);
+                }
+                ALOGI("frameRate = %d", frame_rate);
 
                 meta->setInt32(kKeyWidth, vtrack->GetWidth());
                 meta->setInt32(kKeyHeight, vtrack->GetHeight());
@@ -848,7 +890,9 @@ void MatroskaExtractor::addTracks() {
 
                 if (!strcmp("A_AAC", codecID)) {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AAC);
-                    CHECK(codecPrivateSize >= 2);
+                    if (codecPrivateSize < 2) {
+                        return -1;
+                    }
 
                     addESDSFromCodecPrivate(
                             meta, true, codecPrivate, codecPrivateSize);
@@ -879,6 +923,42 @@ void MatroskaExtractor::addTracks() {
         TrackInfo *trackInfo = &mTracks.editItemAt(mTracks.size() - 1);
         trackInfo->mTrackNum = track->GetNumber();
         trackInfo->mMeta = meta;
+    }
+    return 0;
+}
+static int compareTimeCode(const int64_t* timeUs1, const int64_t* timeUs2) {
+
+    if (*timeUs1 < *timeUs2)
+        return -1;
+    else if (*timeUs1 > *timeUs2)
+        return 1;
+    else
+        return 0;
+}
+
+void MatroskaExtractor::CalulateFrameRate(int32_t* framerate, int32_t trackNum) {
+    *framerate = 0;
+    Vector<int64_t> blockTimeArray;
+    blockTimeArray.clear();
+    BlockIterator iter(this, trackNum);
+    for(int i = 0; i < 50; i++) {
+        if (iter.eos()) {
+            break;
+        }
+        blockTimeArray.push(iter.blockTimeUs());
+        iter.advance();
+    }
+    blockTimeArray.sort(compareTimeCode); // sort by PTS
+    int32_t count = blockTimeArray.size();
+    if (count < 1)
+        return;
+    // remove the last 8 items.
+    count = count > 9 ? (count - 8) : count;
+    int64_t beginTimeUs = blockTimeArray.itemAt(0);;
+    int64_t endTimeUs = blockTimeArray.itemAt(count - 1);
+    int64_t duration = endTimeUs - beginTimeUs;
+    if (duration != 0) {
+        *framerate = ((count - 1) * 1000000LL + (duration >> 1)) / duration;
     }
 }
 

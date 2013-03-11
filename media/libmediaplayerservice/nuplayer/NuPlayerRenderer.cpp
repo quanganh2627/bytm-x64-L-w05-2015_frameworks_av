@@ -220,8 +220,23 @@ void NuPlayer::Renderer::signalAudioSinkChanged() {
 
 bool NuPlayer::Renderer::onDrainAudioQueue() {
     uint32_t numFramesPlayed;
-    if (mAudioSink->getPosition(&numFramesPlayed) != OK) {
-        return false;
+    status_t positionStatus = mAudioSink->getPosition(&numFramesPlayed);
+    if (positionStatus == NO_INIT) {
+        // The AudioSink track may not have been created yet, which returns NO_INIT.
+        // Check if EOS has been reached and call notifyEOS, so that this message
+        // is not lost before this funtion returns false below.
+        if (!mAudioQueue.empty()) {
+            QueueEntry *firstEntry = &*mAudioQueue.begin();
+            if (firstEntry->mBuffer == NULL) {
+                // EOS is reached
+                notifyEOS(true /*audio */, firstEntry->mFinalResult);
+                mAudioQueue.erase(mAudioQueue.begin());
+            }
+            firstEntry = NULL;
+         }
+         return false;
+    } else if (positionStatus != OK) {
+               return false;
     }
 
     ssize_t numFramesAvailableToWrite =
@@ -264,7 +279,7 @@ bool NuPlayer::Renderer::onDrainAudioQueue() {
             CHECK_EQ(mAudioSink->getPosition(&numFramesPlayed), (status_t)OK);
 
             uint32_t numFramesPendingPlayout =
-                mNumFramesWritten - numFramesPlayed;
+                (mNumFramesWritten > numFramesPlayed) ? (mNumFramesWritten - numFramesPlayed) : 0;
 
             int64_t realTimeOffsetUs =
                 (mAudioSink->latency() / 2  /* XXX */
@@ -539,7 +554,7 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
 
         Mutex::Autolock autoLock(mFlushLock);
         mFlushingAudio = false;
-
+        mHasAudio = false;
         mDrainAudioQueuePending = false;
         ++mAudioQueueGeneration;
     } else {
@@ -547,7 +562,7 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
 
         Mutex::Autolock autoLock(mFlushLock);
         mFlushingVideo = false;
-
+        mHasVideo = false;
         mDrainVideoQueuePending = false;
         ++mVideoQueueGeneration;
     }
@@ -642,6 +657,9 @@ void NuPlayer::Renderer::onPause() {
 
     if (mHasAudio) {
         mAudioSink->pause();
+    } else {
+        // if no audio, we need to clear mAnchorTimeMediaUs, reset it when first video buffer comes
+        mAnchorTimeMediaUs = -1;
     }
 
     ALOGV("now paused audio queue has %d entries, video has %d entries",

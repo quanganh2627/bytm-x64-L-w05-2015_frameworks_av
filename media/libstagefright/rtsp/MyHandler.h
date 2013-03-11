@@ -50,6 +50,10 @@ static int64_t kAccessUnitTimeoutUs = 10000000ll;
 // stream, assume none ever will and signal EOS or switch transports.
 static int64_t kStartupTimeoutUs = 10000000ll;
 
+// If tear down can not finish in 3 secs , client will give up the conection
+// actively
+static int64_t kTearDownTimeoutUs = 3000000ll;
+
 static int64_t kDefaultKeepAliveTimeoutUs = 60000000ll;
 
 namespace android {
@@ -133,9 +137,12 @@ struct MyHandler : public AHandler {
           mTryFakeRTCP(false),
           mReceivedFirstRTCPPacket(false),
           mReceivedFirstRTPPacket(false),
+          mFirstAccessUnitMediaTimeValid(true),
+          mFirstAccessUnitMediaTime(0),
           mSeekable(false),
           mKeepAliveTimeoutUs(kDefaultKeepAliveTimeoutUs),
-          mKeepAliveGeneration(0) {
+          mKeepAliveGeneration(0),
+          mStartupGeneration(0) {
         mNetLooper->setName("rtsp net");
         mNetLooper->start(false /* runOnCallingThread */,
                           false /* canCallJava */,
@@ -175,6 +182,8 @@ struct MyHandler : public AHandler {
 
     void disconnect() {
         (new AMessage('abor', id()))->post();
+        sp<AMessage> timeout = new AMessage('tdto', id());
+        timeout->post(kTearDownTimeoutUs);
     }
 
     void seek(int64_t timeUs) {
@@ -579,24 +588,26 @@ struct MyHandler : public AHandler {
                 }
 
                 if (result != OK) {
-                    if (track) {
-                        if (!track->mUsingInterleavedTCP) {
-                            // Clear the tag
-                            if (mUIDValid) {
-                                HTTPBase::UnRegisterSocketUserTag(track->mRTPSocket);
-                                HTTPBase::UnRegisterSocketUserTag(track->mRTCPSocket);
+                    for (size_t i = 0; i < mTracks.size(); ++i) {
+                        TrackInfo *info = &mTracks.editItemAt(i);
+                        if (info) {
+                            if (!info->mUsingInterleavedTCP) {
+                                // Clear the tag
+                                if (mUIDValid) {
+                                    HTTPBase::UnRegisterSocketUserTag(info->mRTPSocket);
+                                    HTTPBase::UnRegisterSocketUserTag(info->mRTCPSocket);
+                                }
+                                close(info->mRTPSocket);
+                                close(info->mRTCPSocket);
                             }
-
-                            close(track->mRTPSocket);
-                            close(track->mRTCPSocket);
+                            mTracks.removeItemsAt(i);
                         }
-
-                        mTracks.removeItemsAt(trackIndex);
                     }
+                    mSetupTracksSuccessful = false;
                 }
 
                 ++index;
-                if (index < mSessionDesc->countTracks()) {
+                if (index < mSessionDesc->countTracks() && mSetupTracksSuccessful) {
                     setupTrack(index);
                 } else if (mSetupTracksSuccessful) {
                     ++mKeepAliveGeneration;
@@ -641,6 +652,7 @@ struct MyHandler : public AHandler {
                         parsePlayResponse(response);
 
                         sp<AMessage> timeout = new AMessage('tiou', id());
+                        timeout->setInt32("generation", ++mStartupGeneration);
                         timeout->post(kStartupTimeoutUs);
                     }
                 }
@@ -708,16 +720,7 @@ struct MyHandler : public AHandler {
                     }
 
                     if (!info->mUsingInterleavedTCP) {
-                        mRTPConn->removeStream(info->mRTPSocket, info->mRTCPSocket);
-
-                        // Clear the tag
-                        if (mUIDValid) {
-                            HTTPBase::UnRegisterSocketUserTag(info->mRTPSocket);
-                            HTTPBase::UnRegisterSocketUserTag(info->mRTCPSocket);
-                        }
-
-                        close(info->mRTPSocket);
-                        close(info->mRTCPSocket);
+                        mRTPConn->removeStream(info->mRTPSocket, info->mRTCPSocket, mUIDValid);
                     }
                 }
                 mTracks.clear();
@@ -725,12 +728,14 @@ struct MyHandler : public AHandler {
                 mSeekPending = false;
                 mFirstAccessUnit = true;
                 mAllTracksHaveTime = false;
+                mTryFakeRTCP = false;
                 mNTPAnchorUs = -1;
                 mMediaAnchorUs = -1;
                 mNumAccessUnitsReceived = 0;
                 mReceivedFirstRTCPPacket = false;
                 mReceivedFirstRTPPacket = false;
                 mSeekable = false;
+                mFirstAccessUnitMediaTimeValid = true;
 
                 sp<AMessage> reply = new AMessage('tear', id());
 
@@ -753,6 +758,14 @@ struct MyHandler : public AHandler {
                 request.append("\r\n");
 
                 mConn->sendRequest(request.c_str(), reply);
+                break;
+            }
+
+            case 'tdto':
+            {
+                ALOGW("wait for tear down response time out");
+                sp<AMessage> reply = new AMessage('disc', id());
+                mConn->disconnect(reply);
                 break;
             }
 
@@ -819,7 +832,11 @@ struct MyHandler : public AHandler {
                     uint64_t ntpTime;
                     CHECK(msg->findInt32("rtp-time", (int32_t *)&rtpTime));
                     CHECK(msg->findInt64("ntp-time", (int64_t *)&ntpTime));
-
+                    if (mTryFakeRTCP) {
+                       // already use Fake RTCP to calculate time, so don't update track
+                       // mRTPAnchor or mNTPAnchorUs with the later arrived SR
+                       break;
+                    }
                     onTimeUpdate(trackIndex, rtpTime, ntpTime);
                     break;
                 }
@@ -854,6 +871,15 @@ struct MyHandler : public AHandler {
 #if 0
                     track->mPacketSource->signalEOS(ERROR_END_OF_STREAM);
 #endif
+                    // If there are still cached AUs, process them before postQueue EOS;
+                    if (!track->mPackets.empty()) {
+                        ALOGV("still has some cached AU");
+                        List<sp<ABuffer> >::iterator it = --track->mPackets.end();
+                        sp<ABuffer> accessUnit = *it;
+                        track->mPackets.erase(it);
+                        onAccessUnitComplete(trackIndex,accessUnit);
+                    }
+                    postQueueEOS(trackIndex, ERROR_END_OF_STREAM);
                     return;
                 }
 
@@ -928,9 +954,12 @@ struct MyHandler : public AHandler {
 
                     info->mRTPAnchor = 0;
                     info->mNTPAnchorUs = -1;
+                    // clear the cached packets
+                    info->mPackets.clear();
                 }
 
                 mAllTracksHaveTime = false;
+                mTryFakeRTCP = false;
                 mNTPAnchorUs = -1;
 
                 int64_t timeUs;
@@ -978,6 +1007,9 @@ struct MyHandler : public AHandler {
                         result = UNKNOWN_ERROR;
                     } else {
                         parsePlayResponse(response);
+                        sp<AMessage> timeout = new AMessage('tiou', id());
+                        timeout->setInt32("generation", ++mStartupGeneration);
+                        timeout->post(kStartupTimeoutUs);
 
                         ssize_t i = response->mHeaders.indexOfKey("rtp-info");
                         CHECK_GE(i, 0);
@@ -1015,6 +1047,13 @@ struct MyHandler : public AHandler {
 
             case 'tiou':
             {
+                int32_t generation;
+                if (msg->findInt32("generation", &generation)){
+                    if (generation != mStartupGeneration) {
+                        // This is an outdated message. Ignore.
+                        break;
+                    }
+                }
                 if (!mReceivedFirstRTCPPacket) {
                     if (mReceivedFirstRTPPacket && !mTryFakeRTCP) {
                         ALOGW("We received RTP packets but no RTCP packets, "
@@ -1042,6 +1081,7 @@ struct MyHandler : public AHandler {
                         ALOGW("We received some RTCP packets, but time "
                               "could not be established on all tracks, now "
                               "using fake timestamps");
+                        mTryFakeRTCP = true;
 
                         fakeTimestamps();
                     }
@@ -1130,7 +1170,7 @@ struct MyHandler : public AHandler {
 
             size_t trackIndex = 0;
             while (trackIndex < mTracks.size()
-                    && !(val == mTracks.editItemAt(trackIndex).mURL)) {
+                    && (-1 == mTracks.editItemAt(trackIndex).mURL.find(val.c_str(), 0))) {
                 ++trackIndex;
             }
             CHECK_LT(trackIndex, mTracks.size());
@@ -1190,11 +1230,13 @@ private:
         bool mNewSegment;
 
         uint32_t mRTPAnchor;
+        bool mFakeRTPAnchor;
         int64_t mNTPAnchorUs;
         int32_t mTimeScale;
 
         uint32_t mNormalPlayTimeRTP;
         int64_t mNormalPlayTimeUs;
+        bool mFirstAccessUnit;
 
         sp<APacketSource> mPacketSource;
 
@@ -1220,11 +1262,13 @@ private:
     bool mFirstAccessUnit;
 
     bool mAllTracksHaveTime;
+    bool mFirstAccessUnitMediaTimeValid;
     int64_t mNTPAnchorUs;
     int64_t mMediaAnchorUs;
     int64_t mLastMediaTimeUs;
 
     int64_t mNumAccessUnitsReceived;
+    int64_t mFirstAccessUnitMediaTime;
     bool mCheckPending;
     int32_t mCheckGeneration;
     bool mTryTCPInterleaving;
@@ -1234,6 +1278,7 @@ private:
     bool mSeekable;
     int64_t mKeepAliveTimeoutUs;
     int32_t mKeepAliveGeneration;
+    int32_t mStartupGeneration;
 
     Vector<TrackInfo> mTracks;
 
@@ -1268,6 +1313,8 @@ private:
         info->mNTPAnchorUs = -1;
         info->mNormalPlayTimeRTP = 0;
         info->mNormalPlayTimeUs = 0ll;
+        info->mFakeRTPAnchor = false;
+        info->mFirstAccessUnit = false;
 
         unsigned long PT;
         AString formatDesc;
@@ -1368,6 +1415,8 @@ private:
     void fakeTimestamps() {
         mNTPAnchorUs = -1ll;
         for (size_t i = 0; i < mTracks.size(); ++i) {
+            TrackInfo *track = &mTracks.editItemAt(i);
+            track->mFakeRTPAnchor = true;
             onTimeUpdate(i, 0, 0ll);
         }
     }
@@ -1407,8 +1456,25 @@ private:
     void onAccessUnitComplete(
             int32_t trackIndex, const sp<ABuffer> &accessUnit) {
         ALOGV("onAccessUnitComplete track %d", trackIndex);
+        TrackInfo *track = &mTracks.editItemAt(trackIndex);
+        bool alltrackReceAccessUnit = true;
 
-        if (mFirstAccessUnit) {
+        if (track->mFirstAccessUnit == false) {
+            track->mPacketSource->PreProcessAccessUnit(accessUnit->data(),accessUnit->size());
+        }
+        track->mFirstAccessUnit = true;
+        if ( mFirstAccessUnit ) {
+            // check if all track receive the first unit;
+            for (size_t i = 0; i < mTracks.size(); ++i) {
+                TrackInfo *trackinfo = &mTracks.editItemAt(i);
+                if(trackinfo->mFirstAccessUnit == false) {
+                    alltrackReceAccessUnit = false;
+                    break;
+                }
+            }
+        }
+
+        if (mFirstAccessUnit && alltrackReceAccessUnit) {
             sp<AMessage> msg = mNotify->dup();
             msg->setInt32("what", kWhatConnected);
             msg->post();
@@ -1426,12 +1492,26 @@ private:
             mFirstAccessUnit = false;
         }
 
-        TrackInfo *track = &mTracks.editItemAt(trackIndex);
+        // when connection is not finished yet, hold postQueueAccessUnit
+        if (mFirstAccessUnit) {
+            LOGV("connection has not finished yet");
+            track->mPackets.push_back(accessUnit);
+            return;
+        }
 
         if (!mAllTracksHaveTime) {
             ALOGV("storing accessUnit, no time established yet");
             track->mPackets.push_back(accessUnit);
             return;
+        }
+
+        if (track->mFakeRTPAnchor && !track->mPackets.empty()) {
+            sp<ABuffer> accessUnit = *track->mPackets.begin();
+            uint32_t rtpTime;
+            CHECK(accessUnit->meta()->findInt32(
+                    "rtp-time", (int32_t *)&rtpTime));
+            track->mFakeRTPAnchor = false;
+            track->mRTPAnchor = rtpTime;
         }
 
         while (!track->mPackets.empty()) {
@@ -1463,13 +1543,22 @@ private:
 
         int64_t mediaTimeUs = mMediaAnchorUs + ntpTimeUs - mNTPAnchorUs;
 
-        if (mediaTimeUs > mLastMediaTimeUs) {
-            mLastMediaTimeUs = mediaTimeUs;
+        // record the first AccessUnit MediaTime to adjust the mediaTime of
+        // access unit arrive then.
+        if (mFirstAccessUnitMediaTimeValid ) {
+            mFirstAccessUnitMediaTime = mediaTimeUs;
+            mFirstAccessUnitMediaTimeValid = false;
         }
 
-        if (mediaTimeUs < 0) {
-            ALOGV("dropping early accessUnit.");
-            return false;
+        if (mediaTimeUs < mFirstAccessUnitMediaTime) {
+            mFirstAccessUnitMediaTime = mediaTimeUs;
+        }
+
+        // adjust the mediaTimeUs according to the mFirstAccessUnitMediaTime
+        // to avoid the drop of the first few accessunit before first SR
+        mediaTimeUs = mediaTimeUs - mFirstAccessUnitMediaTime;
+        if (mediaTimeUs > mLastMediaTimeUs) {
+            mLastMediaTimeUs = mediaTimeUs;
         }
 
         ALOGV("track %d rtpTime=%d mediaTimeUs = %lld us (%.2f secs)",

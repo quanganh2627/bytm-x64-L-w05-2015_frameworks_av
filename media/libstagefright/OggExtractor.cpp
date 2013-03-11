@@ -275,6 +275,11 @@ status_t MyVorbisExtractor::findPrevGranulePosition(
         ALOGV("backing up %lld bytes", pageOffset - prevGuess);
 
         status_t err = findNextPage(prevGuess, &prevPageOffset);
+        // If reaches EOF, try to find again.
+        if (prevGuess != 0 && err == ERROR_END_OF_STREAM) {
+            continue;
+        }
+        // Some unknown error. So break the loop.
         if (err != OK) {
             return err;
         }
@@ -451,7 +456,7 @@ status_t MyVorbisExtractor::readNextPacket(MediaBuffer **out) {
     *out = NULL;
 
     MediaBuffer *buffer = NULL;
-    int64_t timeUs = -1;
+    int64_t timeUs = -1ll;
 
     for (;;) {
         size_t i;
@@ -489,7 +494,7 @@ status_t MyVorbisExtractor::readNextPacket(MediaBuffer **out) {
                 // this packet, we also stamp every packet in this page
                 // with the same time. This needs fixing later.
 
-                if (mVi.rate) {
+                if (mVi.rate && ((int64_t)mCurrentPage.mGranulePosition >= 0)) {
                     // Rate may not have been initialized yet if we're currently
                     // reading the configuration packets...
                     // Fortunately, the timestamp doesn't matter for those.
@@ -499,6 +504,20 @@ status_t MyVorbisExtractor::readNextPacket(MediaBuffer **out) {
             }
             buffer = tmp;
 
+            if (timeUs > 0) {
+                int64_t durationUs = 0;
+                if (mMeta->findInt64(kKeyDuration, &durationUs)) {
+                    if (durationUs < timeUs && durationUs > 0) {
+                        LOGV("Reached End of File");
+                        if (tmp) {
+                            tmp->release();
+                            tmp = NULL;
+                        }
+                        return ERROR_END_OF_STREAM;
+                    }
+                }
+            }
+
             ssize_t n = mSource->readAt(
                     dataOffset,
                     (uint8_t *)buffer->data() + buffer->range_length(),
@@ -507,6 +526,10 @@ status_t MyVorbisExtractor::readNextPacket(MediaBuffer **out) {
             if (n < (ssize_t)packetSize) {
                 ALOGV("failed to read %d bytes at 0x%016llx, got %ld bytes",
                      packetSize, dataOffset, n);
+                if (tmp) {
+                    tmp->release();
+                    tmp = NULL;
+                }
                 return ERROR_IO;
             }
 

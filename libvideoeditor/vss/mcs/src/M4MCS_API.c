@@ -78,6 +78,11 @@ FILE *file_pcm_encoder = NULL;
 #define M4MCS_VERSION_MINOR 4
 #define M4MCS_VERSION_REVISION  3
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+#include "VideoEditorToolsNV12.h"
+#include "M4MCS_NV12.h"
+#endif
+
 /**
  ********************************************************************
  * Static local functions
@@ -753,6 +758,7 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
     M4OSA_UInt32 nal_size_low16, nal_size_high16;
     M4OSA_UInt32 frame_size = 0;
     M4OSA_UInt32 temp = 0;
+    M4OSA_UInt8 *buff;
 
     // StageFright encoder does not provide the size in the first 4 bytes of the AU, add it
     M4OSA_Int8 *pTmpBuff1 = M4OSA_NULL;
@@ -807,14 +813,15 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
         mask_bits = 0xFFFFFFFF;
         p_bs->Buffer = (M4OSA_UInt8 *)(inbuff + frame_size);
 
-        // Use unsigned value to fix errors due to bit sign extension, this fix should be generic
-
-        nal_size_high16 = ( ( (M4OSA_UInt8 *)p_bs->Buffer)[0] << 8)
-            + ((M4OSA_UInt8 *)p_bs->Buffer)[1];
-        nal_size_low16 = ( ( (M4OSA_UInt8 *)p_bs->Buffer)[2] << 8)
-            + ((M4OSA_UInt8 *)p_bs->Buffer)[3];
-
         nalu_info = (unsigned char)p_bs->Buffer[4];
+
+        if (frame_size > 0)
+        {
+            outbuff[outbuffpos++] = 0x00;
+            outbuff[outbuffpos++] = 0x00;
+            outbuff[outbuffpos++] = 0x00;
+            outbuff[outbuffpos++] = 0x01;
+        }
 
         outbuff[outbuffpos] = p_bs->Buffer[4];
 
@@ -832,7 +839,25 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
 
         H264MCS_getBits(p_bs, 0);
 
-        nal_size = ( nal_size_high16 << 16) + nal_size_low16;
+        nal_size = inbuf_size - frame_size - 4;
+        buff = inbuff + frame_size + 4;
+
+        while( nal_size > 4 )
+        {
+            if( ( buff[0] == 0x00) && (buff[1] == 0x00) && (buff[2] == 0x00)
+                && (buff[3] == 0x01) )
+            {
+                break;
+            }
+            buff = buff + 1;
+            nal_size = nal_size - 1;
+        }
+
+        if( nal_size <= 4 )
+        {
+            nal_size = 0;
+        }
+        nal_size = ( inbuf_size - frame_size - 4) - nal_size;
 
         frame_size += nal_size + 4;
 
@@ -1445,14 +1470,14 @@ M4OSA_ERR H264MCS_ProcessSPS_PPS( NSWAVC_MCS_t *instance, M4OSA_UInt8 *inbuff,
         if( nal_unit_type == 8 )
         {
             M4OSA_TRACE1_0("H264MCS_ProcessSPS_PPS() Error: PPS");
-            return err;
+            break;
         }
 
         if( nal_unit_type == 7 )
         {
             /*SPS Packet */
             M4OSA_TRACE1_0("H264MCS_ProcessSPS_PPS() Error: SPS");
-            return err;
+            break;
         }
 
         if( ( nal_unit_type == 1) || (nal_unit_type == 5) )
@@ -1849,6 +1874,7 @@ M4OSA_ERR H264MCS_ProcessNALU( NSWAVC_MCS_t *ainstance, M4OSA_UInt8 *inbuff,
         if( nal_unit_type == 8 )
         {
             M4OSA_TRACE1_0("H264MCS_ProcessNALU() Error: PPS");
+            instance->is_done = 1;
             return err;
         }
 
@@ -1856,6 +1882,7 @@ M4OSA_ERR H264MCS_ProcessNALU( NSWAVC_MCS_t *ainstance, M4OSA_UInt8 *inbuff,
         {
             /*SPS Packet */
             M4OSA_TRACE1_0("H264MCS_ProcessNALU() Error: SPS");
+            instance->is_done = 1;
             return 0;
         }
 
@@ -3346,11 +3373,13 @@ M4OSA_ERR M4MCS_cleanUp( M4MCS_Context pContext )
             pC->pPreResizeFrame[1].pac_data = M4OSA_NULL;
         }
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
         if( M4OSA_NULL != pC->pPreResizeFrame[2].pac_data )
         {
             free(pC->pPreResizeFrame[2].pac_data);
             pC->pPreResizeFrame[2].pac_data = M4OSA_NULL;
         }
+#endif
         free(pC->pPreResizeFrame);
         pC->pPreResizeFrame = M4OSA_NULL;
     }
@@ -3749,6 +3778,11 @@ M4OSA_ERR M4MCS_setOutputParams( M4MCS_Context pContext,
             // multiple of 16.
             // Ensure encoding width and height are multiple of 16
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            // Optimization for 1080p encode in Intel Platform
+            if (pC->EncodingWidth != M4ENCODER_1920_1080_Width &&
+                pC->EncodingHeight != M4ENCODER_1920_1080_Height) {
+#endif
             uint32_t remainder = pC->EncodingWidth % 16;
             if (remainder != 0) {
                 if (remainder >= 8) {
@@ -3777,6 +3811,9 @@ M4OSA_ERR M4MCS_setOutputParams( M4MCS_Context pContext,
                 uiFrameHeight = pC->EncodingHeight;
             }
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            }
+#endif
         }
         else
         {
@@ -5645,8 +5682,13 @@ static M4OSA_ERR M4MCS_intPrepareVideoDecoder( M4MCS_InternalContext *pC )
 
         if( M4VIDEOEDITING_kH264 == pC->InputFileProperties.VideoStreamType )
         {
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            FilterOption.m_pFilterFunction =
+                (M4OSA_Void *) &M4VIFI_ResizeBilinearNV12toNV12;
+#else
             FilterOption.m_pFilterFunction =
                 (M4OSA_Void *) &M4VIFI_ResizeBilinearYUV420toYUV420;
+#endif
             FilterOption.m_pFilterUserData = M4OSA_NULL;
             err = pC->m_pVideoDecoder->m_pFctSetOption(pC->pViDecCtxt,
                 M4DECODER_kOptionID_OutputFilter,
@@ -5864,10 +5906,17 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
 
     /**
     * Create video encoder */
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    err = pC->pVideoEncoderGlobalFcts->pFctInit(&pC->pViEncCtxt,
+        pC->pWriterDataFcts, \
+        M4MCS_intApplyVPP_NV12, pC, pC->pCurrentVideoEncoderExternalAPI, \
+        pC->pCurrentVideoEncoderUserData);
+#else
     err = pC->pVideoEncoderGlobalFcts->pFctInit(&pC->pViEncCtxt,
         pC->pWriterDataFcts, \
         M4MCS_intApplyVPP, pC, pC->pCurrentVideoEncoderExternalAPI, \
         pC->pCurrentVideoEncoderUserData);
+#endif
 
     /**< We put the MCS context in place of the VPP context */
     if( M4NO_ERROR != err )
@@ -5986,8 +6035,12 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
         /**
         * Allocate the U plane */
         pC->pPreResizeFrame[1].u_topleft = 0;
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+        pC->pPreResizeFrame[1].u_width = pC->pPreResizeFrame[0].u_width;
+#else
         pC->pPreResizeFrame[1].u_width = pC->pPreResizeFrame[0].u_width
             >> 1; /**< U width is half the Y width */
+#endif
         pC->pPreResizeFrame[1].u_height = pC->pPreResizeFrame[0].u_height
             >> 1; /**< U height is half the Y height */
         pC->pPreResizeFrame[1].u_stride = pC->
@@ -6006,6 +6059,7 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
             return M4ERR_ALLOC;
         }
 
+#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
         /**
         * Allocate the V plane */
         pC->pPreResizeFrame[2].u_topleft = 0;
@@ -6028,6 +6082,7 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
                  unable to allocate m_pPreResizeFrame[2].pac_data, returning M4ERR_ALLOC");
             return M4ERR_ALLOC;
         }
+#endif
     }
 
     /**

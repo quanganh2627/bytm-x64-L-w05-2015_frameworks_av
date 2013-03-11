@@ -40,6 +40,10 @@
 
 #include "AudioMixer.h"
 
+#ifdef USE_INTEL_SRC
+#include "AudioResamplerIA.h"
+#endif
+
 namespace android {
 
 // ----------------------------------------------------------------------------
@@ -538,7 +542,18 @@ bool AudioMixer::track_t::setResampler(uint32_t value, uint32_t devSampleRate)
     if (value != devSampleRate || resampler != NULL) {
         if (sampleRate != value) {
             sampleRate = value;
+
+            uint8_t channels = downmixerBufferProvider != NULL ? MAX_NUM_CHANNELS : channelCount;
+
             if (resampler == NULL) {
+#ifdef USE_INTEL_SRC
+                if (AudioResamplerIA::sampleRateSupported(sampleRate, devSampleRate)) {
+                    resampler = AudioResampler::create(format, channels,
+                                devSampleRate, AudioResampler::INTEL_HIGH_QUALITY);
+                } else {
+                    resampler = AudioResampler::create(format, channels, devSampleRate);
+                }
+#else
                 ALOGV("creating resampler from track %d Hz to device %d Hz", value, devSampleRate);
                 AudioResampler::src_quality quality;
                 // force lowest quality level resampler if use case isn't music or video
@@ -552,12 +567,22 @@ bool AudioMixer::track_t::setResampler(uint32_t value, uint32_t devSampleRate)
                     quality = AudioResampler::DEFAULT_QUALITY;
                 }
                 resampler = AudioResampler::create(
-                        format,
-                        // the resampler sees the number of channels after the downmixer, if any
-                        downmixerBufferProvider != NULL ? MAX_NUM_CHANNELS : channelCount,
+                        format, channels,
                         devSampleRate, quality);
                 resampler->setLocalTimeFreq(localTimeFreq);
+#endif
             }
+#ifdef USE_INTEL_SRC
+            else {
+                if (resampler->mResType == AudioResampler::INTEL_SRC &&
+                    !AudioResamplerIA::sampleRateSupported(sampleRate, devSampleRate)) {
+                    delete resampler;
+                    resampler = AudioResampler::create(format, channels, devSampleRate);
+                    resampler->setLocalTimeFreq(localTimeFreq);
+                }
+            }
+#endif
+
             return true;
         }
     }
@@ -1070,16 +1095,16 @@ void AudioMixer::process__nop(state_t* state, int64_t pts)
         while (e1) {
             i = 31 - __builtin_clz(e1);
             e1 &= ~(1<<i);
-            t1 = state->tracks[i];
+            track_t& t = state->tracks[i];
             size_t outFrames = state->frameCount;
             while (outFrames) {
-                t1.buffer.frameCount = outFrames;
+                t.buffer.frameCount = outFrames;
                 int64_t outputPTS = calculateOutputPTS(
-                    t1, pts, state->frameCount - outFrames);
-                t1.bufferProvider->getNextBuffer(&t1.buffer, outputPTS);
-                if (t1.buffer.raw == NULL) break;
-                outFrames -= t1.buffer.frameCount;
-                t1.bufferProvider->releaseBuffer(&t1.buffer);
+                    t, pts, state->frameCount - outFrames);
+                t.bufferProvider->getNextBuffer(&t.buffer, outputPTS);
+                if (t.buffer.raw == NULL) break;
+                outFrames -= t.buffer.frameCount;
+                t.bufferProvider->releaseBuffer(&t.buffer);
             }
         }
     }
@@ -1098,6 +1123,12 @@ void AudioMixer::process__genericNoResampling(state_t* state, int64_t pts)
         e0 &= ~(1<<i);
         track_t& t = state->tracks[i];
         t.buffer.frameCount = state->frameCount;
+        int valid = t.bufferProvider->getValid();
+        if (valid != AudioBufferProvider::kValid) {
+            ALOGE("invalid bufferProvider=%p name=%d frameCount=%d valid=%#x enabledTracks=%#x",
+                    t.bufferProvider, i, t.buffer.frameCount, valid, enabledTracks);
+            // expect to crash
+        }
         t.bufferProvider->getNextBuffer(&t.buffer, pts);
         t.frameCount = t.buffer.frameCount;
         t.in = t.buffer.raw;

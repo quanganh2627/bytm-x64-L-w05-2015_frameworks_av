@@ -27,6 +27,7 @@
 #include <media/stagefright/MediaErrors.h>
 #include <media/stagefright/MediaSource.h>
 #include <media/stagefright/MetaData.h>
+#include <media/stagefright/Utils.h>
 
 #include "include/AwesomePlayer.h"
 
@@ -56,6 +57,46 @@ AudioPlayer::AudioPlayer(
       mAllowDeepBuffering(allowDeepBuffering),
       mObserver(observer),
       mPinnedTimeUs(-1ll) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+      mOffload = false;
+      mOffloadFormat = AUDIO_FORMAT_PCM_16_BIT;
+      mStartPos = 0;
+      mOffloadPostEOSPending = false;
+#endif
+}
+
+AudioPlayer::AudioPlayer(
+        audio_format_t audioFormat,
+        const sp<MediaPlayerBase::AudioSink> &audioSink,
+        uint32_t flags,
+        AwesomePlayer *observer)
+    : mAudioTrack(NULL),
+      mInputBuffer(NULL),
+      mSampleRate(0),
+      mLatencyUs(0),
+      mFrameSize(0),
+      mNumFramesPlayed(0),
+      mNumFramesPlayedSysTimeUs(ALooper::GetNowUs()),
+      mPositionTimeMediaUs(-1),
+      mPositionTimeRealUs(-1),
+      mSeeking(false),
+      mReachedEOS(false),
+      mFinalStatus(OK),
+      mStarted(false),
+      mIsFirstBuffer(false),
+      mFirstBufferResult(OK),
+      mFirstBuffer(NULL),
+      mAudioSink(audioSink),
+      mAllowDeepBuffering(flags & ALLOW_DEEP_BUFFERING),
+      mObserver(observer),
+      mPinnedTimeUs(-1ll)
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+      mOffload = flags & USE_OFFLOAD;
+      mOffloadFormat = audioFormat;
+      mStartPos = 0;
+      mOffloadPostEOSPending = false;
+#endif
 }
 
 AudioPlayer::~AudioPlayer() {
@@ -110,7 +151,12 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
     const char *mime;
     bool success = format->findCString(kKeyMIMEType, &mime);
     CHECK(success);
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    CHECK( mOffload || (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) );
+#else
     CHECK(!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW));
+#endif
 
     success = format->findInt32(kKeySampleRate, &mSampleRate);
     CHECK(success);
@@ -126,8 +172,32 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
         channelMask = CHANNEL_MASK_USE_CHANNEL_ORDER;
     }
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    int avgBitRate = -1;
+    success = format->findInt32(kKeyBitRate, &avgBitRate);
     if (mAudioSink.get() != NULL) {
-
+        if (mOffload) {
+            ALOGV("Opening compress offload sink");
+            err = mAudioSink->open(
+                mSampleRate, numChannels, channelMask,
+                avgBitRate,
+                mOffloadFormat,
+                DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                &AudioPlayer::AudioSinkCallback,
+                this,
+                AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD);
+        } else {
+           err = mAudioSink->open(
+                mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+                DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                &AudioPlayer::AudioSinkCallback,
+                this,
+                (mAllowDeepBuffering ?
+                            AUDIO_OUTPUT_FLAG_DEEP_BUFFER :
+                            AUDIO_OUTPUT_FLAG_NONE));
+        }
+#else
+    if (mAudioSink.get() != NULL) {
         status_t err = mAudioSink->open(
                 mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
                 DEFAULT_AUDIOSINK_BUFFERCOUNT,
@@ -136,6 +206,8 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
                 (mAllowDeepBuffering ?
                             AUDIO_OUTPUT_FLAG_DEEP_BUFFER :
                             AUDIO_OUTPUT_FLAG_NONE));
+
+#endif
         if (err != OK) {
             if (mFirstBuffer != NULL) {
                 mFirstBuffer->release();
@@ -152,6 +224,12 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
         mLatencyUs = (int64_t)mAudioSink->latency() * 1000;
         mFrameSize = mAudioSink->frameSize();
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mOffload) {
+            sendMetaDataToHal(mAudioSink, format);
+        }
+#endif
+
         mAudioSink->start();
     } else {
         // playing to an AudioTrack, set up mask if necessary
@@ -161,10 +239,22 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
             return BAD_VALUE;
         }
 
-        mAudioTrack = new AudioTrack(
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mOffload) {
+            mAudioTrack = new AudioTrack(
+                AUDIO_STREAM_MUSIC, avgBitRate, mSampleRate, mOffloadFormat, audioMask,
+                0, AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD, &AudioCallback, this, 0, 0);
+        } else {
+            mAudioTrack = new AudioTrack(
                 AUDIO_STREAM_MUSIC, mSampleRate, AUDIO_FORMAT_PCM_16_BIT, audioMask,
                 0, AUDIO_OUTPUT_FLAG_NONE, &AudioCallback, this, 0);
 
+        }
+#else
+        mAudioTrack = new AudioTrack(
+                AUDIO_STREAM_MUSIC, mSampleRate, AUDIO_FORMAT_PCM_16_BIT, audioMask,
+                0, AUDIO_OUTPUT_FLAG_NONE, &AudioCallback, this, 0);
+#endif
         if ((err = mAudioTrack->initCheck()) != OK) {
             delete mAudioTrack;
             mAudioTrack = NULL;
@@ -190,6 +280,7 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
     mStarted = true;
     mPinnedTimeUs = -1ll;
 
+    mOffloadPostEOSPending = false;
     return OK;
 }
 
@@ -274,6 +365,11 @@ void AudioPlayer::reset() {
     mReachedEOS = false;
     mFinalStatus = OK;
     mStarted = false;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    mStartPos = 0;
+    mOffload = false;
+    mOffloadPostEOSPending = false;
+#endif
 }
 
 // static
@@ -304,16 +400,70 @@ status_t AudioPlayer::setPlaybackRatePermille(int32_t ratePermille) {
     }
 }
 
+void AudioPlayer::notifyAudioEOS() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mObserver != NULL) {
+        mObserver->postAudioEOS(NULL);
+        ALOGV("Notified observer about end of stream! ");
+    }
+#endif
+}
+
 // static
 size_t AudioPlayer::AudioSinkCallback(
         MediaPlayerBase::AudioSink *audioSink,
         void *buffer, size_t size, void *cookie) {
     AudioPlayer *me = (AudioPlayer *)cookie;
-
     return me->fillBuffer(buffer, size);
 }
 
+// static
+size_t AudioPlayer::AudioSinkCallback(
+        MediaPlayerBase::AudioSink *audioSink,
+        void *buffer, size_t size, void *cookie,
+        MediaPlayerBase::AudioSink::cb_event_t event) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+     AudioPlayer *me = (AudioPlayer *)cookie;
+
+    if(event == MediaPlayerBase::AudioSink::CB_EVENT_FILL_BUFFER) {
+        return me->fillBuffer(buffer, size);
+    } else if( event == MediaPlayerBase::AudioSink::CB_EVENT_STREAM_END ) {
+        ALOGV("AudioSinkCallback: stream end");
+        me->mReachedEOS = true;
+        me->mOffloadPostEOSPending = false;
+        me->notifyAudioEOS();
+    } else if( event ==  MediaPlayerBase::AudioSink::CB_EVENT_TEAR_DOWN ) {
+        ALOGV("AudioSinkCallback: Tear down event");
+        me->mObserver->postAudioOffloadTearDown();
+    }
+    return 0;
+#endif
+    return 0;
+}
+
 void AudioPlayer::AudioCallback(int event, void *info) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    switch (event) {
+    case AudioTrack::EVENT_MORE_DATA:
+    {
+        AudioTrack::Buffer *buffer = (AudioTrack::Buffer *)info;
+        size_t numBytesWritten = fillBuffer(buffer->raw, buffer->size);
+
+        buffer->size = numBytesWritten;
+    } break;
+    case AudioTrack::EVENT_STREAM_END:
+    {
+        if (mOffload) {
+            mReachedEOS = true;
+            mOffloadPostEOSPending = false;
+            notifyAudioEOS();
+        }
+    }   break;
+    default:
+        ALOGE("received unknown event type: %d inside CallbackWrapper !", event);
+        break;
+    }
+#else
     if (event != AudioTrack::EVENT_MORE_DATA) {
         return;
     }
@@ -322,6 +472,8 @@ void AudioPlayer::AudioCallback(int event, void *info) {
     size_t numBytesWritten = fillBuffer(buffer->raw, buffer->size);
 
     buffer->size = numBytesWritten;
+
+#endif
 }
 
 uint32_t AudioPlayer::getNumFramesPendingPlayout() const {
@@ -408,40 +560,54 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
 
             if (err != OK) {
                 if (mObserver && !mReachedEOS) {
-                    // We don't want to post EOS right away but only
-                    // after all frames have actually been played out.
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+                    if (mOffload) {
+                        ALOGV("fillBuffer: mOffload ReachedEOS");
+                        mOffloadPostEOSPending = true;
+                        if (mAudioSink != NULL) {
+                            mAudioSink->setOffloadEOSReached(mOffloadPostEOSPending);
+                        } else {
+                            mAudioTrack->setOffloadEOSReached(mOffloadPostEOSPending);
+                        }
+                    } else {
+#endif
 
-                    // These are the number of frames submitted to the
-                    // AudioTrack that you haven't heard yet.
-                    uint32_t numFramesPendingPlayout =
-                        getNumFramesPendingPlayout();
+                        // We don't want to post EOS right away but only
+                        // after all frames have actually been played out.
+                        // These are the number of frames submitted to the
+                        // AudioTrack that you haven't heard yet.
+                        uint32_t numFramesPendingPlayout =
+                            getNumFramesPendingPlayout();
 
-                    // These are the number of frames we're going to
-                    // submit to the AudioTrack by returning from this
-                    // callback.
-                    uint32_t numAdditionalFrames = size_done / mFrameSize;
+                        // These are the number of frames we're going to
+                        // submit to the AudioTrack by returning from this
+                        // callback.
+                        uint32_t numAdditionalFrames = size_done / mFrameSize;
 
-                    numFramesPendingPlayout += numAdditionalFrames;
+                        numFramesPendingPlayout += numAdditionalFrames;
 
-                    int64_t timeToCompletionUs =
-                        (1000000ll * numFramesPendingPlayout) / mSampleRate;
+                        int64_t timeToCompletionUs =
+                            (1000000ll * numFramesPendingPlayout) / mSampleRate;
 
-                    ALOGV("total number of frames played: %lld (%lld us)",
+                        ALOGV("total number of frames played: %lld (%lld us)",
                             (mNumFramesPlayed + numAdditionalFrames),
                             1000000ll * (mNumFramesPlayed + numAdditionalFrames)
                                 / mSampleRate);
 
-                    ALOGV("%d frames left to play, %lld us (%.2f secs)",
-                         numFramesPendingPlayout,
-                         timeToCompletionUs, timeToCompletionUs / 1E6);
+                        ALOGV("%d frames left to play, %lld us (%.2f secs)",
+                             numFramesPendingPlayout,
+                             timeToCompletionUs, timeToCompletionUs / 1E6);
 
-                    postEOS = true;
-                    if (mAudioSink->needsTrailingPadding()) {
-                        postEOSDelayUs = timeToCompletionUs + mLatencyUs;
-                    } else {
-                        postEOSDelayUs = 0;
-                    }
-                }
+                        postEOS = true;
+                        if (mAudioSink->needsTrailingPadding()) {
+                            postEOSDelayUs = timeToCompletionUs + mLatencyUs;
+                        } else {
+                            postEOSDelayUs = 0;
+                        }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+                   }
+#endif
+              }
 
                 mReachedEOS = true;
                 mFinalStatus = err;
@@ -454,9 +620,12 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
                 mLatencyUs = (int64_t)mAudioTrack->latency() * 1000;
             }
 
-            CHECK(mInputBuffer->meta_data()->findInt64(
-                        kKeyTime, &mPositionTimeMediaUs));
+            if(mInputBuffer->range_length() != 0) {
+               //check for non zero buffer
+               CHECK(mInputBuffer->meta_data()->findInt64(
+                           kKeyTime, &mPositionTimeMediaUs));
 
+            }
             mPositionTimeRealUs =
                 ((mNumFramesPlayed + size_done / mFrameSize) * 1000000)
                     / mSampleRate;
@@ -465,6 +634,20 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
                  "mPositionTimeMediaUs=%.2f mPositionTimeRealUs=%.2f",
                  mInputBuffer->range_length(),
                  mPositionTimeMediaUs / 1E6, mPositionTimeRealUs / 1E6);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+             // need to adjust the mStartPos for offload decoding since parser
+            // might not be able to get the exact seek time requested.
+            if (mSeeking && mOffload) {
+                mSeeking = false;
+                if (mObserver) {
+                    ALOGV("fillBuffer is going to post SEEK_COMPLETE");
+                    mObserver->postAudioSeekComplete();
+                }
+
+                mStartPos = mPositionTimeMediaUs;
+                ALOGV("adjust seek time to: %.2f", mStartPos/ 1E6);
+            }
+#endif
         }
 
         if (mInputBuffer->range_length() == 0) {
@@ -548,7 +731,22 @@ int64_t AudioPlayer::getMediaTimeUs() {
 
         return 0;
     }
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mOffload) {
+        // For Offload as the bufferSizes are huge, query the timestamp
+        // from HAL. This is used for updating the progress bar.
+        int64_t  renderedDuration = 0;
+        uint32_t mediaPosition = 0;
+        if (mAudioSink != NULL) {
+            mAudioSink->getPosition(&mediaPosition);
+        } else {
+            mAudioTrack->getPosition(&mediaPosition);
+        }
+        renderedDuration = 1000 * (int64_t) mediaPosition;
+        renderedDuration += mStartPos;
+        return renderedDuration;
+    }
+#endif
     int64_t realTimeOffset = getRealTimeUsLocked() - mPositionTimeRealUs;
     if (realTimeOffset < 0) {
         realTimeOffset = 0;
@@ -574,6 +772,10 @@ status_t AudioPlayer::seekTo(int64_t time_us) {
     mPositionTimeRealUs = mPositionTimeMediaUs = -1;
     mReachedEOS = false;
     mSeekTimeUs = time_us;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mOffload)
+        mStartPos = time_us;
+#endif
 
     // Flush resets the number of played frames
     mNumFramesPlayed = 0;

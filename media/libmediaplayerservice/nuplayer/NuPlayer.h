@@ -21,6 +21,9 @@
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/foundation/AHandler.h>
 #include <media/stagefright/NativeWindowWrapper.h>
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayClient.h>
+#endif
 
 namespace android {
 
@@ -57,6 +60,9 @@ struct NuPlayer : public AHandler {
 
     status_t setVideoScalingMode(int32_t mode);
 
+    // Will notify the driver through "notifyPrepareComplete" once finished.
+    void prepareAsync();
+
 protected:
     virtual ~NuPlayer();
 
@@ -88,6 +94,8 @@ private:
         kWhatSeek                       = 'seek',
         kWhatPause                      = 'paus',
         kWhatResume                     = 'rsme',
+        kWhatPrepare                    = 'prep',
+        kWhatWaitPrepareDone            = 'preD',
     };
 
     wp<NuPlayerDriver> mDriver;
@@ -104,8 +112,16 @@ private:
     bool mAudioEOS;
     bool mVideoEOS;
 
+    bool mAudioEosPending;
+    bool mVideoEosPending;
+    int32_t mAudioEosErr;
+    int32_t mVideoEosErr;
+
     bool mScanSourcesPending;
     int32_t mScanSourcesGeneration;
+
+    bool mPreparePending;
+    bool mSourceAlreadyStart;
 
     enum FlushStatus {
         NONE,
@@ -131,6 +147,11 @@ private:
 
     int64_t mVideoLateByUs;
     int64_t mNumFramesTotal, mNumFramesDropped;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    MultiDisplayClient* mMDClient;
+    sp<ANativeWindow> mANativeWindow;
+    void setDisplaySource(bool isplaying);
+#endif
 
     int32_t mVideoScalingMode;
 
@@ -147,7 +168,9 @@ private:
 
     static bool IsFlushingState(FlushStatus state, bool *needShutdown = NULL);
 
+    void finishPrepare();
     void finishReset();
+    void postWaitPrepare();
     void postScanSources();
 
     DISALLOW_EVIL_CONSTRUCTORS(NuPlayer);

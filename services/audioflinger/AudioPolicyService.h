@@ -59,6 +59,7 @@ public:
                                                                 audio_devices_t device,
                                                                 const char *device_address);
     virtual status_t setPhoneState(audio_mode_t state);
+    virtual status_t setFmRxState(int state);
     virtual status_t setForceUse(audio_policy_force_use_t usage, audio_policy_forced_cfg_t config);
     virtual audio_policy_forced_cfg_t getForceUse(audio_policy_force_use_t usage);
     virtual audio_io_handle_t getOutput(audio_stream_type_t stream,
@@ -134,6 +135,14 @@ public:
     virtual status_t startTone(audio_policy_tone_t tone, audio_stream_type_t stream);
     virtual status_t stopTone();
     virtual status_t setVoiceVolume(float volume, int delayMs = 0);
+    virtual status_t setFmRxVolume(float volume, int delayMs = 0);
+    virtual bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    bool isVideo = false,
+                                    bool isStreaming = false) const;
 
 private:
                         AudioPolicyService();
@@ -157,7 +166,8 @@ private:
             STOP_TONE,
             SET_VOLUME,
             SET_PARAMETERS,
-            SET_VOICE_VOLUME
+            SET_VOICE_VOLUME,
+            SET_FM_RX_VOLUME
         };
 
         AudioCommandThread (String8 name);
@@ -178,6 +188,7 @@ private:
                     status_t    parametersCommand(audio_io_handle_t ioHandle,
                                             const char *keyValuePairs, int delayMs = 0);
                     status_t    voiceVolumeCommand(float volume, int delayMs = 0);
+                    status_t    fmRxVolumeCommand(float volume, int delayMs = 0);
                     void        insertCommand_l(AudioCommand *command, int delayMs = 0);
 
     private:
@@ -218,6 +229,11 @@ private:
         };
 
         class VoiceVolumeData {
+        public:
+            float mVolume;
+        };
+
+        class FmRxVolumeData {
         public:
             float mVolume;
         };

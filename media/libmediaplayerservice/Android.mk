@@ -6,6 +6,10 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES:=               \
     ActivityManager.cpp         \
     Crypto.cpp                  \
@@ -48,6 +52,25 @@ LOCAL_C_INCLUDES :=                                                 \
     $(TOP)/frameworks/av/media/libstagefright/wifi-display          \
     $(TOP)/frameworks/native/include/media/openmax                  \
     $(TOP)/external/tremolo/Tremolo                                 \
+
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
+ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
+    LOCAL_SHARED_LIBRARIES += libmultidisplay
+    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+endif
+
+#VPP support on MRFLD only
+ifeq ($(TARGET_HAS_VPP), true)
+    LOCAL_CFLAGS += -DGFX_BUF_EXT
+endif
+
+ifeq ($(INTEL_WIDI), true)
+LOCAL_CFLAGS += -DINTEL_WIDI
+endif
 
 LOCAL_MODULE:= libmediaplayerservice
 

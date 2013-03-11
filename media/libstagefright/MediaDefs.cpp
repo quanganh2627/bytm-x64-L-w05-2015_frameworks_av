@@ -40,6 +40,7 @@ const char *MEDIA_MIMETYPE_AUDIO_G711_MLAW = "audio/g711-mlaw";
 const char *MEDIA_MIMETYPE_AUDIO_RAW = "audio/raw";
 const char *MEDIA_MIMETYPE_AUDIO_FLAC = "audio/flac";
 const char *MEDIA_MIMETYPE_AUDIO_AAC_ADTS = "audio/aac-adts";
+const char *MEDIA_MIMETYPE_AUDIO_ALAC = "audio/alac";
 
 const char *MEDIA_MIMETYPE_CONTAINER_MPEG4 = "video/mp4";
 const char *MEDIA_MIMETYPE_CONTAINER_WAV = "audio/x-wav";
@@ -53,5 +54,7 @@ const char *MEDIA_MIMETYPE_CONTAINER_WVM = "video/wvm";
 
 const char *MEDIA_MIMETYPE_TEXT_3GPP = "text/3gpp-tt";
 const char *MEDIA_MIMETYPE_TEXT_SUBRIP = "application/x-subrip";
-
+#ifdef USE_INTEL_MDP
+const char *MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED = "audio/mp4a-aacextended"; //For Audio Object Type > 31
+#endif
 }  // namespace android

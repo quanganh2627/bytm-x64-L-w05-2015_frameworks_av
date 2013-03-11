@@ -42,6 +42,8 @@ struct NuPlayer::HTTPLiveSource : public NuPlayer::Source {
     virtual status_t getDuration(int64_t *durationUs);
     virtual status_t seekTo(int64_t seekTimeUs);
     virtual bool isSeekable();
+    virtual bool isStreamValid(bool audio);
+    virtual void stop();
 
 protected:
     virtual ~HTTPLiveSource();

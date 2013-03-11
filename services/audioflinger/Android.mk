@@ -2,6 +2,10 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES := \
     ISchedulingPolicyService.cpp \
     SchedulingPolicyService.cpp
@@ -13,16 +17,48 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
+LOCAL_SRC_FILES := \
+    AudioBufferProviderSource.cpp   \
+    AudioStreamOutSink.cpp          \
+    AudioStreamInSource.cpp         \
+    NBAIO.cpp                       \
+    MonoPipe.cpp                    \
+    MonoPipeReader.cpp              \
+    Pipe.cpp                        \
+    PipeReader.cpp                  \
+    roundup.c                       \
+    SourceAudioBufferProvider.cpp
+
+# libsndfile license is incompatible; uncomment to use for local debug only
+#LOCAL_SRC_FILES += LibsndfileSink.cpp LibsndfileSource.cpp
+#LOCAL_C_INCLUDES += path/to/libsndfile/src
+#LOCAL_STATIC_LIBRARIES += libsndfile
+
+# uncomment for systrace
+# LOCAL_CFLAGS += -DATRACE_TAG=ATRACE_TAG_AUDIO
+
+LOCAL_MODULE := libnbaio
+
+include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES:=               \
     AudioFlinger.cpp            \
     AudioMixer.cpp.arm          \
     AudioResampler.cpp.arm      \
     AudioPolicyService.cpp      \
     ServiceUtilities.cpp        \
+	AudioResamplerCubic.cpp.arm \
     AudioResamplerSinc.cpp.arm
-
-# uncomment to enable AudioResampler::MED_QUALITY
-# LOCAL_SRC_FILES += AudioResamplerCubic.cpp.arm
 
 LOCAL_SRC_FILES += StateQueue.cpp
 
@@ -54,6 +90,10 @@ LOCAL_STATIC_LIBRARIES := \
     libcpustats \
     libmedia_helper
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_MODULE:= libaudioflinger
 
 LOCAL_SRC_FILES += FastMixer.cpp FastMixerState.cpp
@@ -78,6 +118,37 @@ LOCAL_CFLAGS += -UFAST_TRACKS_AT_NON_NATIVE_SAMPLE_RATE
 # LOCAL_SRC_FILES += AudioWatchdog.cpp
 # LOCAL_CFLAGS += -DAUDIO_WATCHDOG
 
+ifeq ($(USE_INTEL_SRC),true)
+  LOCAL_CFLAGS += -DUSE_INTEL_SRC
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
+  LOCAL_SRC_FILES += AudioResamplerIA.cpp
+  LOCAL_SHARED_LIBRARIES += libaudioresample
+endif
+
+
 include $(BUILD_SHARED_LIBRARY)
+
+#
+# build audio resampler test tool
+#
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:=               \
+	test-resample.cpp 			\
+    AudioResampler.cpp.arm      \
+	AudioResamplerCubic.cpp.arm \
+    AudioResamplerSinc.cpp.arm
+
+LOCAL_SHARED_LIBRARIES := \
+	libdl \
+    libcutils \
+    libutils
+
+LOCAL_MODULE:= test-resample
+
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_EXECUTABLE)
+
 
 include $(call all-makefiles-under,$(LOCAL_PATH))

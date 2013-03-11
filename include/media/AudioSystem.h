@@ -67,6 +67,9 @@ public:
     // set audio mode in audio hardware
     static status_t setMode(audio_mode_t mode);
 
+    // set FM RX mode ON/OFF
+    static status_t setFmRxMode(int mode);
+
     // returns true in *state if tracks are active on the specified stream or has been active
     // in the past inPastMs milliseconds
     static status_t isStreamActive(audio_stream_type_t stream, bool *state, uint32_t inPastMs = 0);
@@ -116,6 +119,7 @@ public:
         audio_channel_mask_t channelMask, size_t* buffSize);
 
     static status_t setVoiceVolume(float volume);
+    static status_t setFmRxVolume(float volume);
 
     // return the number of audio frames written by AudioFlinger to audio HAL and
     // audio dsp to DAC since the output on which the specified stream is playing
@@ -126,6 +130,9 @@ public:
     // - BAD_VALUE: invalid parameter
     // NOTE: this feature is not supported on all hardware platforms and it is
     // necessary to check returned status before using the returned values.
+    static status_t getRenderPosition(audio_io_handle_t ioHandle,
+                                      uint32_t *halFrames, uint32_t *dspFrames,
+                                      audio_stream_type_t stream = AUDIO_STREAM_DEFAULT);
     static status_t getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames, audio_stream_type_t stream = AUDIO_STREAM_DEFAULT);
 
     // return the number of input frames lost by HAL implementation, or 0 if the handle is invalid
@@ -186,6 +193,7 @@ public:
     static status_t setDeviceConnectionState(audio_devices_t device, audio_policy_dev_state_t state, const char *device_address);
     static audio_policy_dev_state_t getDeviceConnectionState(audio_devices_t device, const char *device_address);
     static status_t setPhoneState(audio_mode_t state);
+    static status_t setFmRxState(int state);
     static status_t setForceUse(audio_policy_force_use_t usage, audio_policy_forced_cfg_t config);
     static audio_policy_forced_cfg_t getForceUse(audio_policy_force_use_t usage);
     static audio_io_handle_t getOutput(audio_stream_type_t stream,
@@ -236,12 +244,19 @@ public:
 
     static const sp<IAudioPolicyService>& get_audio_policy_service();
 
+    static bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    bool hasVideo = false,
+                                    bool hasStreaming = false);
+
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     static int32_t getPrimaryOutputSamplingRate();
     static int32_t getPrimaryOutputFrameCount();
 
     // ----------------------------------------------------------------------------
-
 private:
 
     class AudioFlingerClient: public IBinder::DeathRecipient, public BnAudioFlingerClient

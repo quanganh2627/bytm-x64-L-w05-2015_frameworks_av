@@ -42,6 +42,7 @@ extern const char *MEDIA_MIMETYPE_AUDIO_G711_MLAW;
 extern const char *MEDIA_MIMETYPE_AUDIO_RAW;
 extern const char *MEDIA_MIMETYPE_AUDIO_FLAC;
 extern const char *MEDIA_MIMETYPE_AUDIO_AAC_ADTS;
+extern const char *MEDIA_MIMETYPE_AUDIO_ALAC;
 
 extern const char *MEDIA_MIMETYPE_CONTAINER_MPEG4;
 extern const char *MEDIA_MIMETYPE_CONTAINER_WAV;
@@ -55,7 +56,9 @@ extern const char *MEDIA_MIMETYPE_CONTAINER_WVM;
 
 extern const char *MEDIA_MIMETYPE_TEXT_3GPP;
 extern const char *MEDIA_MIMETYPE_TEXT_SUBRIP;
-
+#ifdef USE_INTEL_MDP
+extern const char *MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED;
+#endif
 }  // namespace android
 
 #endif  // MEDIA_DEFS_H_

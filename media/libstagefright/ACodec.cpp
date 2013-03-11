@@ -336,6 +336,7 @@ ACodec::ACodec()
     : mQuirks(0),
       mNode(NULL),
       mSentFormat(false),
+      mFirstFrame(true),
       mIsEncoder(false),
       mShutdownInProgress(false),
       mEncoderDelay(0),
@@ -571,6 +572,14 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         return err;
     }
 
+    // XXX: should hold extra two buffers in surface texture back end.
+    // Currently, intel hw overlay need always hold output buffer until
+    // flip to another buffer. So we should hold more buffers to avoid
+    // buffer overwrite by decoder.
+    if (mQuirks & OMXCodec::kRequiresHoldExtraBuffers) {
+        minUndequeuedBufs += 2;
+    }
+
     // XXX: Is this the right logic to use?  It's not clear to me what the OMX
     // buffer counts refer to - how do they account for the renderer holding on
     // to buffers?
@@ -713,7 +722,8 @@ status_t ACodec::freeOutputBuffersNotOwnedByComponent() {
             &mBuffers[kPortIndexOutput].editItemAt(i);
 
         if (info->mStatus !=
-                BufferInfo::OWNED_BY_COMPONENT) {
+                BufferInfo::OWNED_BY_COMPONENT && info->mStatus !=
+                BufferInfo::OWNED_BY_DOWNSTREAM) {
             // We shouldn't have sent out any buffers to the client at this
             // point.
             CHECK_NE((int)info->mStatus, (int)BufferInfo::OWNED_BY_DOWNSTREAM);
@@ -921,6 +931,23 @@ status_t ACodec::configureCodec(
             } else {
                 err = setupVideoDecoder(mime, width, height);
             }
+
+            if (mQuirks & OMXCodec::kRequiresSetProfileLevel) {
+                int32_t level;
+                status_t err;
+                if (msg->findInt32("avc_level", &level)) {
+                    OMX_VIDEO_PARAM_AVCTYPE avcVideoParams;
+                    InitOMXParams(&avcVideoParams);
+                    avcVideoParams.nPortIndex = kPortIndexInput;
+                    err = mOMX->getParameter(
+                        mNode, OMX_IndexParamVideoAvc, &avcVideoParams, sizeof(avcVideoParams));
+                    CHECK_EQ(err, (status_t)OK);
+                    avcVideoParams.eLevel = (OMX_VIDEO_AVCLEVELTYPE)level;
+                    err = mOMX->setParameter(
+                        mNode, OMX_IndexParamVideoAvc, &avcVideoParams, sizeof(avcVideoParams));
+                    CHECK_EQ(err, (status_t)OK);
+               }
+            }
         }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
         int32_t numChannels, sampleRate;
@@ -937,7 +964,8 @@ status_t ACodec::configureCodec(
             }
 
             err = setupAACCodec(
-                    encoder, numChannels, sampleRate, bitRate, aacProfile, isADTS != 0);
+                    encoder, numChannels, sampleRate, bitRate, aacProfile,
+                    isADTS != 0);
         }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_NB)) {
         err = setupAMRCodec(encoder, false /* isWAMR */, bitRate);
@@ -984,6 +1012,10 @@ status_t ACodec::configureCodec(
         } else {
             err = setupRawAudioFormat(kPortIndexInput, sampleRate, numChannels);
         }
+    }
+
+    if (err != OK) {
+        return err;
     }
 
     if (!msg->findInt32("encoder-delay", &mEncoderDelay)) {
@@ -1625,6 +1657,43 @@ status_t ACodec::setupVideoEncoder(const char *mime, const sp<AMessage> &msg) {
     return err;
 }
 
+status_t ACodec::setCyclicIntraMacroblockRefresh(const sp<AMessage> &msg, int32_t mode) {
+    OMX_VIDEO_PARAM_INTRAREFRESHTYPE params;
+    InitOMXParams(&params);
+    params.nPortIndex = kPortIndexOutput;
+
+    params.eRefreshMode = static_cast<OMX_VIDEO_INTRAREFRESHTYPE>(mode);
+
+    if (params.eRefreshMode == OMX_VIDEO_IntraRefreshCyclic ||
+            params.eRefreshMode == OMX_VIDEO_IntraRefreshBoth) {
+        int32_t mbs;
+        if (!msg->findInt32("intra-refresh-CIR-mbs", &mbs)) {
+            return INVALID_OPERATION;
+        }
+        params.nCirMBs = mbs;
+    }
+
+    if (params.eRefreshMode == OMX_VIDEO_IntraRefreshAdaptive ||
+            params.eRefreshMode == OMX_VIDEO_IntraRefreshBoth) {
+        int32_t mbs;
+        if (!msg->findInt32("intra-refresh-AIR-mbs", &mbs)) {
+            return INVALID_OPERATION;
+        }
+        params.nAirMBs = mbs;
+
+        int32_t ref;
+        if (!msg->findInt32("intra-refresh-AIR-ref", &ref)) {
+            return INVALID_OPERATION;
+        }
+        params.nAirRef = ref;
+    }
+
+    status_t err = mOMX->setParameter(
+            mNode, OMX_IndexParamVideoIntraRefresh,
+            &params, sizeof(params));
+    return err;
+}
+
 static OMX_U32 setPFramesSpacing(int32_t iFramesInterval, int32_t frameRate) {
     if (iFramesInterval < 0) {
         return 0xFFFFFFFF;
@@ -1820,11 +1889,22 @@ status_t ACodec::setupAVCEncoderParameters(const sp<AMessage> &msg) {
         frameRate = (float)tmp;
     }
 
+    status_t err = OK;
+    int32_t intraRefreshMode = 0;
+    if (msg->findInt32("intra-refresh-mode", &intraRefreshMode)) {
+        err = setCyclicIntraMacroblockRefresh(msg, intraRefreshMode);
+        if (err != OK) {
+            ALOGE("Setting intra macroblock refresh mode (%d) failed: 0x%x",
+                    err, intraRefreshMode);
+            return err;
+        }
+    }
+
     OMX_VIDEO_PARAM_AVCTYPE h264type;
     InitOMXParams(&h264type);
     h264type.nPortIndex = kPortIndexOutput;
 
-    status_t err = mOMX->getParameter(
+    err = mOMX->getParameter(
             mNode, OMX_IndexParamVideoAvc, &h264type, sizeof(h264type));
 
     if (err != OK) {
@@ -2011,6 +2091,22 @@ status_t ACodec::setVideoFormatOnPort(
 
 status_t ACodec::initNativeWindow() {
     if (mNativeWindow != NULL) {
+        if (mOMX->livesLocally(mNode,getpid())){
+            OMX_PARAM_PORTDEFINITIONTYPE def;
+            OMX_VIDEO_PORTDEFINITIONTYPE *video_def = &def.format.video;
+
+            InitOMXParams(&def);
+            def.nPortIndex = kPortIndexInput;
+
+            status_t err = mOMX->getParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            CHECK_EQ(err, (status_t)OK);
+
+            ALOGD("set NativeWindow = %p",mNativeWindow.get());
+            video_def->pNativeWindow = mNativeWindow.get();
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+        }
         return mOMX->enableGraphicBuffers(mNode, kPortIndexOutput, OMX_TRUE);
     }
 
@@ -2112,8 +2208,6 @@ void ACodec::sendFormatChange() {
             CHECK_GE(rect.nTop, 0);
             CHECK_GE(rect.nWidth, 0u);
             CHECK_GE(rect.nHeight, 0u);
-            CHECK_LE(rect.nLeft + rect.nWidth - 1, videoDef->nFrameWidth);
-            CHECK_LE(rect.nTop + rect.nHeight - 1, videoDef->nFrameHeight);
 
             notify->setRect(
                     "crop",
@@ -2803,7 +2897,8 @@ bool ACodec::BaseState::onOMXFillBufferDone(
                 break;
             }
 
-            if (!mCodec->mIsEncoder && !mCodec->mSentFormat) {
+            if (!mCodec->mIsEncoder && !mCodec->mSentFormat
+                && mCodec->mNativeWindow == NULL) {
                 mCodec->sendFormatChange();
             }
 
@@ -2832,6 +2927,24 @@ bool ACodec::BaseState::onOMXFillBufferDone(
                 new AMessage(kWhatOutputBufferDrained, mCodec->id());
 
             reply->setPointer("buffer-id", info->mBufferID);
+
+            if (!mCodec->mIsEncoder && !mCodec->mSentFormat) {
+                ALOGV("Applying format change firstFrame=%d", mCodec->mFirstFrame);
+                // Do cropping for the first frame before
+                // the frame is send out. For the subsequent frames
+                // the cropping has to be done AFTER the frame is send
+                if (mCodec->mFirstFrame) {
+                    mCodec->sendFormatChange();
+                } else {
+                    reply->setInt32("sent-format", mCodec->mSentFormat);
+                    mCodec->mSentFormat = true;
+                }
+            }
+
+            if (mCodec->mNativeWindow != NULL && rangeLength == 0) {
+                reply->setInt32("hide",true);
+            }
+            mCodec->mFirstFrame = false;
 
             notify->setMessage("reply", reply);
 
@@ -2875,8 +2988,20 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
     CHECK_EQ((int)info->mStatus, (int)BufferInfo::OWNED_BY_DOWNSTREAM);
 
     int32_t render;
+    // The client may choose not to render a buffer but we will
+    // need to apply the format change regardless as we would get
+    // only one format change call, associated with a buffer.
+    int32_t sentformat;
+    int32_t hide;
+    if (msg->findInt32("sent-format", &sentformat)) {
+        if (!sentformat) {
+            mCodec->sendFormatChange();
+        }
+    }
+
     if (mCodec->mNativeWindow != NULL
-            && msg->findInt32("render", &render) && render != 0) {
+            && msg->findInt32("render", &render) && render != 0
+            && !msg->findInt32("hide", &hide)) {
         // The client wants this buffer to be rendered.
 
         status_t err;
@@ -3222,15 +3347,17 @@ bool ACodec::LoadedState::onConfigureComponent(
 
     sp<RefBase> obj;
     if (msg->findObject("native-window", &obj)
-            && strncmp("OMX.google.", mCodec->mComponentName.c_str(), 11)) {
+            && strncmp("OMX.google.", mCodec->mComponentName.c_str(), 11)
+            && !strncasecmp(mime.c_str(), "video/", 6)) {
         sp<NativeWindowWrapper> nativeWindow(
                 static_cast<NativeWindowWrapper *>(obj.get()));
         CHECK(nativeWindow != NULL);
         mCodec->mNativeWindow = nativeWindow->getNativeWindow();
-
-        native_window_set_scaling_mode(
-                mCodec->mNativeWindow.get(),
-                NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW);
+        if (mCodec->mNativeWindow != NULL) {
+            native_window_set_scaling_mode(
+                    mCodec->mNativeWindow.get(),
+                    NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW);
+        }
     }
     CHECK_EQ((status_t)OK, mCodec->initNativeWindow());
 
@@ -3245,11 +3372,11 @@ bool ACodec::LoadedState::onConfigureComponent(
 
 void ACodec::LoadedState::onStart() {
     ALOGV("onStart");
-
-    CHECK_EQ(mCodec->mOMX->sendCommand(
-                mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),
-             (status_t)OK);
-
+    if (!(mCodec->mQuirks & OMXCodec::kRequiresLoadedToIdleAfterAllocation)) {
+        CHECK_EQ(mCodec->mOMX->sendCommand(
+                    mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),
+                 (status_t)OK);
+    }
     mCodec->changeState(mCodec->mLoadedToIdleState);
 }
 
@@ -3271,6 +3398,10 @@ void ACodec::LoadedToIdleState::stateEntered() {
         mCodec->signalError(OMX_ErrorUndefined, err);
 
         mCodec->changeState(mCodec->mLoadedState);
+    } else if (mCodec->mQuirks & OMXCodec::kRequiresLoadedToIdleAfterAllocation) {
+        CHECK_EQ(mCodec->mOMX->sendCommand(
+                    mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),
+                 (status_t)OK);
     }
 }
 
@@ -3286,6 +3417,7 @@ status_t ACodec::LoadedToIdleState::allocateBuffers() {
 
 bool ACodec::LoadedToIdleState::onMessageReceived(const sp<AMessage> &msg) {
     switch (msg->what()) {
+        case kWhatFlush:
         case kWhatShutdown:
         {
             mCodec->deferMessage(msg);
@@ -3331,6 +3463,10 @@ void ACodec::IdleToExecutingState::stateEntered() {
 
 bool ACodec::IdleToExecutingState::onMessageReceived(const sp<AMessage> &msg) {
     switch (msg->what()) {
+        case kWhatFlush:
+        {
+            ALOGV("[%s] IdleToExecutingState flushing now ", mCodec->mComponentName.c_str());
+        }
         case kWhatShutdown:
         {
             mCodec->deferMessage(msg);
