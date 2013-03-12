@@ -2772,6 +2772,7 @@ status_t AwesomePlayer::finishSetDataSource_l() {
     }
 
     AString sniffedMIME;
+    sp<MediaExtractor> extractorTemp = NULL;
 
     if (!strncasecmp("http://", mUri.string(), 7)
             || !strncasecmp("https://", mUri.string(), 8)
@@ -2886,7 +2887,15 @@ status_t AwesomePlayer::finishSetDataSource_l() {
 
                     usleep(200000);
                 }
-
+                extractorTemp = MediaExtractor::Create(
+                        dataSource, sniffedMIME.empty() ? NULL : sniffedMIME.c_str());
+                if (extractorTemp != NULL) {
+                    // ensure get the metadata
+                    extractorTemp->countTracks();
+                } else {
+                    mLock.lock();
+                    return UNKNOWN_ERROR;
+                }
                 mLock.lock();
             }
 
@@ -2929,9 +2938,12 @@ status_t AwesomePlayer::finishSetDataSource_l() {
             mWVMExtractor->setUID(mUID);
         extractor = mWVMExtractor;
     } else {
-        extractor = MediaExtractor::Create(
-                dataSource, sniffedMIME.empty() ? NULL : sniffedMIME.c_str());
-
+        if (extractorTemp != NULL) {
+            extractor = extractorTemp;
+        } else {
+            extractor = MediaExtractor::Create(
+                    dataSource, sniffedMIME.empty() ? NULL : sniffedMIME.c_str());
+        }
         if (extractor == NULL) {
             return UNKNOWN_ERROR;
         }
