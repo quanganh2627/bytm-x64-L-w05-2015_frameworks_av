@@ -2845,9 +2845,20 @@ status_t AwesomePlayer::finishSetDataSource_l() {
             mWVMExtractor->setUID(mUID);
         extractor = mWVMExtractor;
     } else {
-        extractor = MediaExtractor::Create(
-                dataSource, sniffedMIME.empty() ? NULL : sniffedMIME.c_str());
-
+        if (mCachedSource != NULL) {
+            // It's an HTTP stream, create extractor here may be blocked potentially.
+            // we should do it without mLock held.
+            mLock.unlock();
+            extractor = MediaExtractor::Create(
+                    dataSource, sniffedMIME.empty() ? NULL : sniffedMIME.c_str());
+            if (extractor != NULL) {
+                // ensure get the metadata
+                extractor->countTracks();
+            }
+            mLock.lock();
+        } else {
+            extractor = MediaExtractor::Create(dataSource, NULL);
+        }
         if (extractor == NULL) {
             return UNKNOWN_ERROR;
         }
