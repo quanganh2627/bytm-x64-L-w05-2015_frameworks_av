@@ -101,6 +101,9 @@ private:
                                     // playback but implies high latency
     AwesomePlayer *mObserver;
     int64_t mPinnedTimeUs;
+#ifdef BGM_ENABLED
+    bool mAllowBackgroundPlayback;
+#endif
 
     static void AudioCallback(int event, void *user, void *info);
     void AudioCallback(int event, void *info);
