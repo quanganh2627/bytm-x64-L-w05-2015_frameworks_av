@@ -307,6 +307,9 @@ void NuPlayer::setVideoSurfaceTextureAsync(
 
     msg->post();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (mVideoDecoder != NULL) {
+        setDisplaySource(false);
+    }
     mANativeWindow = surfaceTextureClient;
 #endif
 }
