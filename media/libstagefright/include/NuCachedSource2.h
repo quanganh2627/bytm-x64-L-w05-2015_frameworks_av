@@ -51,7 +51,8 @@ struct NuCachedSource2 : public DataSource {
     size_t cachedSize();
     size_t approxDataRemaining(status_t *finalStatus) const;
 
-    void stop();
+    void interrupt(bool stop = true);
+
     void resumeFetchingIfNecessary();
 
     // The following methods are supported only if the

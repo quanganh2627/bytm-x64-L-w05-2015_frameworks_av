@@ -593,13 +593,6 @@ status_t AwesomePlayer::setDataSource_l(const sp<MediaExtractor> &extractor) {
 }
 
 void AwesomePlayer::reset() {
-    if (mCachedSource != NULL) {
-        mCachedSource->stop();
-    }
-    if (mConnectingDataSource != NULL) {
-        ALOGI("interrupting the connection process in reset");
-        mConnectingDataSource->disconnect();
-    }
     Mutex::Autolock autoLock(mLock);
     reset_l();
 }
@@ -627,6 +620,10 @@ void AwesomePlayer::reset_l() {
             params |= IMediaPlayerService::kBatteryDataTrackVideo;
         }
         addBatteryData(params);
+    }
+
+    if (mCachedSource != NULL) {
+        mCachedSource->interrupt(true);
     }
 
     if (mFlags & PREPARING) {
@@ -1618,7 +1615,7 @@ status_t AwesomePlayer::setNativeWindow_l(const sp<ANativeWindow> &native) {
 
     if (mCachedSource != NULL) {
         // interrupt the retrying
-        mCachedSource->stop();
+        mCachedSource->interrupt(true);
     }
     if (mConnectingDataSource != NULL) {
         ALOGI("interrupting the connection process in setNativeWindow_l");
@@ -1626,6 +1623,11 @@ status_t AwesomePlayer::setNativeWindow_l(const sp<ANativeWindow> &native) {
     }
 
     shutdownVideoDecoder_l();
+
+    if (mCachedSource != NULL) {
+       // resume the caching
+       mCachedSource->interrupt(false);
+    }
 
     status_t err = initVideoDecoder();
 

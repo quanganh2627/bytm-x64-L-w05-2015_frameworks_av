@@ -564,9 +564,6 @@ ssize_t NuCachedSource2::readInternal(off64_t offset, void *data, size_t size) {
     size_t delta = offset - mCacheOffset;
 
     if (mFinalStatus != OK && (mNumRetriesLeft == 0 || mForceStop)) {
-        if (mForceStop) {
-            mForceStop = false;
-        }
         if (delta >= mCache->totalSize()) {
             return mFinalStatus;
         }
@@ -716,9 +713,9 @@ void NuCachedSource2::RemoveCacheSpecificHeaders(
     }
 }
 
-void NuCachedSource2::stop() {
+void NuCachedSource2::interrupt(bool stop) {
     Mutex::Autolock autolock(mLock);
-    mForceStop = true;
+    mForceStop = stop;
 }
 
 }  // namespace android
