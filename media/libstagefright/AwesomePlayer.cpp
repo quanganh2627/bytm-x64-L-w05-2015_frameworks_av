@@ -201,7 +201,13 @@ AwesomePlayer::AwesomePlayer()
       mVideoBuffer(NULL),
       mDecryptHandle(NULL),
       mLastVideoTimeUs(-1),
-      mTextDriver(NULL) {
+      mTextDriver(NULL)
+#ifdef BGM_ENABLED
+      ,
+      mRemoteBGMsuspend(false),
+      mBGMEnabled(false)
+#endif
+      {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
     DataSource::RegisterDefaultSniffers();
@@ -874,6 +880,19 @@ void AwesomePlayer::onStreamDone() {
 
 status_t AwesomePlayer::play() {
     ATRACE_CALL();
+#ifdef BGM_ENABLED
+    status_t err = UNKNOWN_ERROR;
+    // If BGM is enabled, then the output associated with the
+    // active track needs to be de-associated, so that it gets
+    // multitasked to other available audio outputs
+    err = remoteBGMSuspend();
+    if((mRemoteBGMsuspend) && (err == OK)) {
+       err = remoteBGMResume();
+       if(err != OK)
+         ALOGW("[BGMUSIC] .. oops!! behaviour undefined");
+       mRemoteBGMsuspend = false;
+    }
+#endif //BGM_ENABLED
 
     Mutex::Autolock autoLock(mLock);
 
@@ -2783,5 +2802,64 @@ void AwesomePlayer::modifyFlags(unsigned value, FlagMode mode) {
         mStats.mFlags = mFlags;
     }
 }
+
+#ifdef BGM_ENABLED
+status_t AwesomePlayer::remoteBGMSuspend() {
+
+    // If BGM is enabled or enabled previouslt and exited then the
+    // track/ sink needs to be closed and recreated again so that
+    // music is heard on active output and not on multitasked output
+    if(mFlags & AUDIOPLAYER_STARTED) {
+       ALOGD("[BGMUSIC] %s :: reset the audio player",__func__);
+       // Store the current status and use it while starting for IA decoding
+       // Terminate the active stream by calling reset_l()
+       Stats stats;
+       uint32_t extractorFlags;
+       stats.mURI = mUri;
+       stats.mUriHeaders = mUriHeaders;
+       stats.mFileSource = mFileSource;
+       stats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
+       getPosition(&stats.mPositionUs);
+       mOffloadPauseUs = stats.mPositionUs;
+       extractorFlags = mExtractorFlags;
+       mExtractorFlags = extractorFlags;
+       mStats = stats;
+       reset_l();
+       mRemoteBGMsuspend = true;
+    }
+
+    return OK;
+}
+status_t AwesomePlayer::remoteBGMResume() {
+
+    Mutex::Autolock autoLock(mLock);
+
+    Stats stats = mStats;
+
+    status_t err;
+    if (stats.mFileSource != NULL) {
+        err = setDataSource_l(stats.mFileSource);
+
+        if (err == OK) {
+            mFileSource = stats.mFileSource;
+        }
+    } else {
+        err = setDataSource_l(stats.mURI, &stats.mUriHeaders);
+    }
+
+    if (err != OK) {
+        return err;
+    }
+
+    seekTo_l(stats.mPositionUs);
+    mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
+
+    // Update the flag
+    mStats.mFlags = mFlags;
+
+    ALOGD("[BGMUSIC] audio track/sink recreated successfully");
+    return OK;
+}
+#endif //BGM_ENABLED
 
 }  // namespace android

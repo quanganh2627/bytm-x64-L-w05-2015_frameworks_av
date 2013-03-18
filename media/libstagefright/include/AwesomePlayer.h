@@ -107,6 +107,10 @@ struct AwesomePlayer {
 
     status_t dump(int fd, const Vector<String16> &args) const;
 
+#ifdef BGM_ENABLED
+    status_t remoteBGMSuspend();
+    status_t remoteBGMResume();
+#endif
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -345,6 +349,10 @@ private:
 
     AwesomePlayer(const AwesomePlayer &);
     AwesomePlayer &operator=(const AwesomePlayer &);
+#ifdef BGM_ENABLED
+    bool mRemoteBGMsuspend;
+    bool mBGMEnabled;
+#endif
 
 #ifdef LVSE
     sp<LVAudioSource> mLVAudioSource;
