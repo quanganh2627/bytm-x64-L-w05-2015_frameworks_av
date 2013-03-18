@@ -203,7 +203,11 @@ bool AnotherPacketSource::hasBufferAvailable(status_t *finalResult) {
     return false;
 }
 
+#ifndef TARGET_HAS_VPP
 int64_t AnotherPacketSource::getBufferedDurationUs(status_t *finalResult) {
+#else
+int64_t AnotherPacketSource::getBufferedDurationUs(status_t *finalResult, size_t *sampleCount) {
+#endif
     Mutex::Autolock autoLock(mLock);
 
     *finalResult = mEOSResult;
@@ -233,6 +237,12 @@ int64_t AnotherPacketSource::getBufferedDurationUs(status_t *finalResult) {
 
         ++it;
     }
+
+#ifdef TARGET_HAS_VPP
+    if (sampleCount != NULL) {
+        *sampleCount = mBuffers.size();
+    }
+#endif
 
     return time2 - time1;
 }
