@@ -38,6 +38,8 @@ struct NuPlayer::StreamingSource : public NuPlayer::Source {
         return true;
     }
 
+    virtual uint32_t flags() const;
+
 protected:
     virtual ~StreamingSource();
 

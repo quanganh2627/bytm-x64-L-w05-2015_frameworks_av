@@ -2338,12 +2338,10 @@ uint32_t AudioFlinger::PlaybackThread::hasAudioSession(int sessionId) const
 
 void AudioFlinger::PlaybackThread::getEffectSessionIds(Vector<int> &sessionIds)
 {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     size_t size = mEffectChains.size();
     for (size_t i=0; i < size; i++) {
         sessionIds.add(mEffectChains[i]->sessionId());
     }
-#endif
 }
 
 uint32_t AudioFlinger::PlaybackThread::getStrategyForSession_l(int sessionId)
@@ -3714,6 +3712,8 @@ bool AudioFlinger::MixerThread::checkForNewParameters_l()
         String8 keyValuePair = mNewParameters[0];
         AudioParameter param = AudioParameter(keyValuePair);
         int value;
+
+        ALOGD("reconfig due to o/p flag ?");
 
         if (param.getInt(String8(AudioParameter::keySamplingRate), value) == NO_ERROR) {
             reconfig = true;
@@ -7755,6 +7755,7 @@ status_t AudioFlinger::closeOutput_nonvirtual(audio_io_handle_t output)
     sp<PlaybackThread> thread;
     {
         Mutex::Autolock _l(mLock);
+        Vector<int> sessionIds;
         thread = checkPlaybackThread_l(output);
         if (thread == NULL) {
             return BAD_VALUE;
@@ -7770,28 +7771,24 @@ status_t AudioFlinger::closeOutput_nonvirtual(audio_io_handle_t output)
                 }
             }
         }
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (thread->isOffloadTrack()) {
-            Vector<int> sessionIds;
 
-            thread->getEffectSessionIds(sessionIds);
-            ALOGV("closeOutput: EffectSessionIds vector size: %d", sessionIds.size());
-            // save all audio effects created in the offload thread to the default thread
-            for (size_t i=0; i < sessionIds.size(); i++) {
-                int output=0;
-                if (mPlaybackThreads.size()) {
-                    output = mPlaybackThreads.keyAt(0);
-                    ALOGV("closeOutput: Target new output=%d", output);
-                    PlaybackThread *dstThread = checkPlaybackThread_l(output);
-                    PlaybackThread *srcThread = (PlaybackThread *) thread.get();
+        thread->getEffectSessionIds(sessionIds);
+        ALOGV("closeOutput: EffectSessionIds vector size: %d", sessionIds.size());
+        // save all audio effects created in the offload thread to the default thread
+        for (size_t i=0; i < sessionIds.size(); i++) {
+            int output=0;
+            if (mPlaybackThreads.size()) {
+                output = mPlaybackThreads.keyAt(0);
+                ALOGV("closeOutput: Target new output=%d", output);
+                PlaybackThread *dstThread = checkPlaybackThread_l(output);
+                PlaybackThread *srcThread = (PlaybackThread *) thread.get();
 
-                    Mutex::Autolock _dl(dstThread->mLock);
-                    Mutex::Autolock _sl(srcThread->mLock);
-                    moveEffectChain_l(sessionIds[i], srcThread, dstThread, true);
-                }
+                Mutex::Autolock _dl(dstThread->mLock);
+                Mutex::Autolock _sl(srcThread->mLock);
+                moveEffectChain_l(sessionIds[i], srcThread, dstThread, true);
             }
         }
-#endif
+
         audioConfigChanged_l(AudioSystem::OUTPUT_CLOSED, output, NULL);
         mPlaybackThreads.removeItem(output);
     }

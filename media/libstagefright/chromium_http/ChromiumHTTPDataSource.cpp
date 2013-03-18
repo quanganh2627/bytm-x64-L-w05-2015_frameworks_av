@@ -66,7 +66,10 @@ status_t ChromiumHTTPDataSource::connect(
     if (getUID(&uid)) {
         mDelegate->setUID(uid);
     }
+
+#if defined(LOG_NDEBUG) && !LOG_NDEBUG
     LOG_PRI(ANDROID_LOG_VERBOSE, LOG_TAG, "connect on behalf of uid %d", uid);
+#endif
 
     return connect_l(uri, headers, offset);
 }
@@ -79,14 +82,16 @@ status_t ChromiumHTTPDataSource::connect_l(
         disconnect_l();
     }
 
+#if defined(LOG_NDEBUG) && !LOG_NDEBUG
+    LOG_PRI(ANDROID_LOG_VERBOSE, LOG_TAG,
+                "connect to <URL suppressed> @%lld", offset);
+#endif
+
     if (mDisconnectExternal) {
         LOG_PRI(ANDROID_LOG_INFO, LOG_TAG,
                 "should not connect when disconnect is already called in another thread");
         return mIOResult;
     }
-    LOG_PRI(ANDROID_LOG_INFO, LOG_TAG,
-                "connect to <URL suppressed> @%lld", offset);
-
     mURI = uri;
     mContentType = String8("application/octet-stream");
 

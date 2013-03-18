@@ -125,6 +125,7 @@ struct AwesomePlayer {
     bool mOffloadCalAudioEOS;
     bool mOffloadPostAudioEOS;
     void postAudioOffloadTearDown();
+    status_t tearDownToNonDeepBufferAudio();
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -404,6 +405,9 @@ private:
     sp<TimedEventQueue::Event> mAudioOffloadTearDownEvent;
     bool mAudioOffloadTearDownEventPending;
     bool mOffloadSinkCreationError;
+
+    bool mDeepBufferAudio;
+    bool mDeepBufferTearDown;
 
 #ifdef LVSE
     sp<LVAudioSource> mLVAudioSource;

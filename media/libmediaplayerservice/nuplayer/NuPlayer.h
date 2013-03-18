@@ -93,9 +93,10 @@ private:
         kWhatReset                      = 'rset',
         kWhatSeek                       = 'seek',
         kWhatPause                      = 'paus',
-        kWhatResume                     = 'rsme',
         kWhatPrepare                    = 'prep',
         kWhatWaitPrepareDone            = 'preD',
+        kWhatResume                     = 'rsme',
+        kWhatPollDuration               = 'polD',
     };
 
     wp<NuPlayerDriver> mDriver;
@@ -117,11 +118,13 @@ private:
     int32_t mAudioEosErr;
     int32_t mVideoEosErr;
 
+    bool mPreparePending;
+    bool mSourceAlreadyStart;
+
     bool mScanSourcesPending;
     int32_t mScanSourcesGeneration;
 
-    bool mPreparePending;
-    bool mSourceAlreadyStart;
+    int32_t mPollDurationGeneration;
 
     enum FlushStatus {
         NONE,
@@ -172,6 +175,9 @@ private:
     void finishReset();
     void postWaitPrepare();
     void postScanSources();
+
+    void schedulePollDuration();
+    void cancelPollDuration();
 
     DISALLOW_EVIL_CONSTRUCTORS(NuPlayer);
 };
