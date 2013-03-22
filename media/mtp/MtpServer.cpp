@@ -737,9 +737,11 @@ MtpResponseCode MtpServer::doGetObject() {
     mfr.transaction_id = mRequest.getTransactionID();
 
     // then transfer the file
+    mDatabase->transferStarted();
     int ret = ioctl(mFD, MTP_SEND_FILE_WITH_HEADER, (unsigned long)&mfr);
     ALOGV("MTP_SEND_FILE_WITH_HEADER returned %d\n", ret);
     close(mfr.fd);
+    mDatabase->transferEnded();
     if (ret < 0) {
         if (errno == ECANCELED)
             return MTP_RESPONSE_TRANSACTION_CANCELLED;
