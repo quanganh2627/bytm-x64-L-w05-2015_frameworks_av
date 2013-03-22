@@ -172,6 +172,18 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
         channelMask = CHANNEL_MASK_USE_CHANNEL_ORDER;
     }
 
+#ifdef BGM_ENABLED
+    String8 reply;
+    char* bgmKVpair;
+
+    reply =  AudioSystem::getParameters(0,String8(AudioParameter::keyBGMState));
+    bgmKVpair = strpbrk((char *)reply.string(), "=");
+    ALOGV("%s [BGMUSIC] bgmKVpair = %s",__func__,bgmKVpair);
+    ++bgmKVpair;
+    mAllowBackgroundPlayback = strcmp(bgmKVpair,"true") ? false : true;
+    ALOGD("%s [BGMUSIC] mAllowBackgroundPlayback = %d",__func__,mAllowBackgroundPlayback);
+#endif
+
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     int avgBitRate = -1;
     success = format->findInt32(kKeyBitRate, &avgBitRate);
@@ -187,25 +199,55 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
                 this,
                 AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD);
         } else {
-           err = mAudioSink->open(
-                mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
-                DEFAULT_AUDIOSINK_BUFFERCOUNT,
-                &AudioPlayer::AudioSinkCallback,
-                this,
-                (mAllowDeepBuffering ?
+#ifdef BGM_ENABLED
+           if((mAllowBackgroundPlayback) &&(!mAllowDeepBuffering)) {
+              err = mAudioSink->open(
+                  mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+                  DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                  &AudioPlayer::AudioSinkCallback,
+                  this,
+                  (mAllowBackgroundPlayback ?
+                            AUDIO_OUTPUT_FLAG_REMOTE_BGM :
+                            AUDIO_OUTPUT_FLAG_NONE));
+           } else {
+#endif
+              err = mAudioSink->open(
+                  mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+                  DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                  &AudioPlayer::AudioSinkCallback,
+                  this,
+                  (mAllowDeepBuffering ?
                             AUDIO_OUTPUT_FLAG_DEEP_BUFFER :
                             AUDIO_OUTPUT_FLAG_NONE));
+#ifdef BGM_ENABLED
+          }
+#endif
         }
 #else
     if (mAudioSink.get() != NULL) {
-        status_t err = mAudioSink->open(
-                mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
-                DEFAULT_AUDIOSINK_BUFFERCOUNT,
-                &AudioPlayer::AudioSinkCallback,
-                this,
-                (mAllowDeepBuffering ?
+#ifdef BGM_ENABLED
+       if((mAllowBackgroundPlayback) &&(!mAllowDeepBuffering)) {
+          status_t  err = mAudioSink->open(
+                        mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+                        DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                        &AudioPlayer::AudioSinkCallback,
+                        this,
+                        (mAllowBackgroundPlayback ?
+                            AUDIO_OUTPUT_FLAG_REMOTE_BGM :
+                            AUDIO_OUTPUT_FLAG_NONE));
+       } else {
+#endif
+           status_t err = mAudioSink->open(
+                        mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+                        DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                        &AudioPlayer::AudioSinkCallback,
+                        this,
+                        (mAllowDeepBuffering ?
                             AUDIO_OUTPUT_FLAG_DEEP_BUFFER :
                             AUDIO_OUTPUT_FLAG_NONE));
+#ifdef BGM_ENABLED
+       }
+#endif
 
 #endif
         if (err != OK) {

@@ -225,6 +225,9 @@ void NuPlayer::setVideoSurfaceTexture(const sp<ISurfaceTexture> &surfaceTexture)
     msg->setObject("native-window", new NativeWindowWrapper(surfaceTextureClient));
     msg->post();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (mVideoDecoder != NULL) {
+        setDisplaySource(false);
+    }
     mANativeWindow = surfaceTextureClient;
 #endif
 }

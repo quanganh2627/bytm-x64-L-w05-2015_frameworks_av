@@ -118,6 +118,9 @@ private:
                                     // playback but implies high latency
     AwesomePlayer *mObserver;
     int64_t mPinnedTimeUs;
+#ifdef BGM_ENABLED
+    bool mAllowBackgroundPlayback;
+#endif
 
     // for compressed playback support
     int mBitRate;
