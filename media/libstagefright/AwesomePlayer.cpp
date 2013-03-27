@@ -121,13 +121,13 @@ struct AwesomeLocalRenderer : public AwesomeRenderer {
         : mTarget(new SoftwareRenderer(nativeWindow, meta)) {
     }
 
-    virtual void render(MediaBuffer *buffer) {
+    virtual void render(MediaBuffer *buffer, void *platformPrivate) {
         render((const uint8_t *)buffer->data() + buffer->range_offset(),
-               buffer->range_length());
+               buffer->range_length(), platformPrivate);
     }
 
-    void render(const void *data, size_t size) {
-        mTarget->render(data, size, NULL);
+    void render(const void *data, size_t size, void *platformPrivate) {
+        mTarget->render(data, size, platformPrivate);
     }
 
 protected:
@@ -151,7 +151,7 @@ struct AwesomeNativeWindowRenderer : public AwesomeRenderer {
         applyRotation(rotationDegrees);
     }
 
-    virtual void render(MediaBuffer *buffer) {
+    virtual void render(MediaBuffer *buffer, void *platformPrivate) {
         ATRACE_CALL();
         int64_t timeUs;
         CHECK(buffer->meta_data()->findInt64(kKeyTime, &timeUs));
@@ -2577,17 +2577,31 @@ void AwesomePlayer::onVideoEvent() {
             // Number of frames to set private flags after seeking
             mFramesToDirty = fps > 0 ? fps : 30;
         }
+
+        struct IntelPlatformPrivate *platformPrivate = NULL;
+
         // Put a speicial flag
         if (mFramesToDirty-- > 0) {
             struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
             if (anwBuff != NULL) {
                 anwBuff->usage |= GRALLOC_USAGE_PRIVATE_2;
                 ALOGV("Add private usage:%x", anwBuff->usage);
+            } else {
+                platformPrivate = (struct IntelPlatformPrivate *)
+                    malloc(sizeof(struct IntelPlatformPrivate));
+                platformPrivate->usage = GRALLOC_USAGE_PRIVATE_2;
             }
         }
+
+        mVideoRenderer->render(mVideoBuffer, platformPrivate);
+        if (platformPrivate != NULL) {
+            free(platformPrivate);
+            platformPrivate = NULL;
+        }
         mRenderedFrames++;
-#endif
+#else
         mVideoRenderer->render(mVideoBuffer);
+#endif
         if (!mVideoRenderingStarted) {
             mVideoRenderingStarted = true;
             notifyListener_l(MEDIA_INFO, MEDIA_INFO_RENDERING_START);
