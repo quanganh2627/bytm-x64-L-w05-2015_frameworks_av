@@ -358,7 +358,7 @@ private:
         KeyedVector<String8, String8> mUriHeaders;
         sp<DataSource> mFileSource;
         int64_t mPositionUs;
-
+        int64_t mDurationUs; /* store the file duration */
         // FIXME:
         // These two indices are just 0 or 1 for now
         // They are not representing the actual track
