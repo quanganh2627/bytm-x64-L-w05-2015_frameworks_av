@@ -3105,6 +3105,7 @@ status_t AwesomePlayer::offloadSuspend() {
     stats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
     getPosition(&stats.mPositionUs);
     mOffloadPauseUs = stats.mPositionUs;
+    stats.mDurationUs = mDurationUs; /* store the file duration */
     extractorFlags = mExtractorFlags;
     if (mOffload && ((mFlags & PLAYING) == 0)) {
          ALOGV("offloadSuspend(): Deleting timer");
@@ -3116,7 +3117,7 @@ status_t AwesomePlayer::offloadSuspend() {
     }
 
     reset_l();
-
+    mDurationUs = stats.mDurationUs; /* restore the duration */
     mExtractorFlags = extractorFlags;
     mStats = stats;
     return OK;
