@@ -826,6 +826,7 @@ private:
             virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
 
                     bool        isOffloaded() const { return mFlags & IAudioFlinger::TRACK_OFFLOAD; }
+                    bool        isDeepBuffer() const { return mFlags & IAudioFlinger::TRACK_DEEPBUFFER; }
 
         protected:
             // for numerous

@@ -50,6 +50,7 @@ public:
         TRACK_TIMED   = 1,  // client requests a TimedAudioTrack
         TRACK_FAST    = 2,  // client requests a fast AudioTrack
         TRACK_OFFLOAD = 4,  // client requests a offload AudioTrack
+        TRACK_DEEPBUFFER = 8,  // client requests a deepbuffer AudioTrack
     };
     typedef uint32_t track_flags_t;
 
