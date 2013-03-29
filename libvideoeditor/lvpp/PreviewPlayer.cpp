@@ -1743,7 +1743,7 @@ status_t PreviewPlayer::pause_l(bool at_eos) {
         return OK;
     }
 
-    cancelPlayerEvents_l();
+    cancelPlayerEvents_l(true);
 
     if (mAudioPlayer != NULL && (mFlags & AUDIO_RUNNING)) {
         if (at_eos) {
