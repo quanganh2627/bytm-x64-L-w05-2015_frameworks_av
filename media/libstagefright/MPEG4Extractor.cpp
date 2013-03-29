@@ -1351,6 +1351,10 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
                 return ERROR_IO;
             }
 
+            // configurationVersion should be 1
+            if (buffer[0] != 1)
+                return ERROR_MALFORMED;
+
             mLastTrack->meta->setData(
                     kKeyAVCC, kTypeAVCC, buffer, chunk_data_size);
 

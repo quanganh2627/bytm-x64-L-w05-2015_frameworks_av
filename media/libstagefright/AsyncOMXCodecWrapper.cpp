@@ -110,9 +110,6 @@ status_t AsyncOMXCodecWrapper::read(
 
     status_t err;
     CHECK(mAsyncResult->findInt32("result", &err));
-    if (err == -ETIMEDOUT) {
-        err = -EWOULDBLOCK;
-    }
     MediaBuffer *mediaBuffer = NULL;
     CHECK(mAsyncResult->findPointer("data", (void**)&mediaBuffer));
 

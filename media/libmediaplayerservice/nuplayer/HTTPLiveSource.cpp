@@ -92,6 +92,23 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
         return NULL;
     }
 
+#ifdef TARGET_HAS_VPP
+    if (!audio) {
+       static const int64_t kMinDurationUs = 1000000ll;
+       sp<MetaData> format = source->getFormat();
+       size_t sampleCount = 0;
+       status_t err;
+       int64_t duration = source->getBufferedDurationUs(&err,&sampleCount);
+       if (err == OK && duration < kMinDurationUs) {
+           return NULL;
+       } else if (format != NULL && duration != 0) {
+           int32_t framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
+           format->setInt32(kKeyFrameRate, framerate);
+           return format;
+       }
+    }
+#endif
+
     return source->getFormat();
 }
 
