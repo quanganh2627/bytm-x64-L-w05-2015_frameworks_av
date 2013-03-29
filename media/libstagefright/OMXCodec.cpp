@@ -2445,7 +2445,9 @@ void OMXCodec::on_message(const omx_message &msg) {
 
             CHECK(i < buffers->size());
             BufferInfo *info = &buffers->editItemAt(i);
-
+#ifdef TARGET_HAS_VPP
+            info->mFlags = flags;
+#endif
             if (info->mStatus != OWNED_BY_COMPONENT) {
                 ALOGW("We already own output buffer %p, yet received "
                      "a FILL_BUFFER_DONE.", buffer);

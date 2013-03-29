@@ -192,6 +192,9 @@ private:
         size_t mSize;
         void *mData;
         MediaBuffer *mMediaBuffer;
+#ifdef TARGET_HAS_VPP
+        uint32_t mFlags;
+#endif
     };
 
     struct CodecSpecificData {
