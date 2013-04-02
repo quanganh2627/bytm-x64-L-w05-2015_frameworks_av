@@ -1,5 +1,8 @@
 LOCAL_PATH:= $(call my-dir)
 
+# Build for helper target
+#########################
+
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
@@ -8,6 +11,21 @@ LOCAL_MODULE:= libmedia_helper
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_STATIC_LIBRARY)
+
+# Build for helper host test
+############################
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:= \
+    AudioParameter.cpp
+LOCAL_MODULE:= libmedia_helper_host
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_HOST_STATIC_LIBRARY)
+
+# Build for main lib target
+###########################
 
 include $(CLEAR_VARS)
 
