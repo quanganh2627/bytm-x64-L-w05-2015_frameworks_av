@@ -1957,6 +1957,10 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
 #ifdef TARGET_HAS_VPP
 VPPProcessor* AwesomePlayer::createVppProcessor_l() {
     VPPProcessor* processor = NULL;
+
+    if (mNativeWindow == NULL)
+        return processor;
+
     if (VPPProcessor::isVppOn()) {
         VPPVideoInfo info;
         sp<MetaData> meta = NULL;
