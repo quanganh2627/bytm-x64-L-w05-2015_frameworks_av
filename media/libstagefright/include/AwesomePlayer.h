@@ -64,12 +64,18 @@ struct WVMExtractor;
 struct AwesomeRenderer : public RefBase {
     AwesomeRenderer() {}
 
-    virtual void render(MediaBuffer *buffer) = 0;
+    virtual void render(MediaBuffer *buffer, void *platformPrivate = NULL) = 0;
 
 private:
     AwesomeRenderer(const AwesomeRenderer &);
     AwesomeRenderer &operator=(const AwesomeRenderer &);
 };
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+struct IntelPlatformPrivate {
+    int usage;
+};
+#endif
 
 struct AwesomePlayer {
     AwesomePlayer();
@@ -230,6 +236,8 @@ private:
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
     sp<ANativeWindow> mDefaultNativeWindow;
+    int mFramesToDirty;
+    uint32_t mRenderedFrames;
 #endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
@@ -356,7 +364,7 @@ private:
         KeyedVector<String8, String8> mUriHeaders;
         sp<DataSource> mFileSource;
         int64_t mPositionUs;
-
+        int64_t mDurationUs; /* store the file duration */
         // FIXME:
         // These two indices are just 0 or 1 for now
         // They are not representing the actual track

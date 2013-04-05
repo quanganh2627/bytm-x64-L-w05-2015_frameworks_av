@@ -45,7 +45,6 @@ enum {
     STREAM_VOLUME,
     STREAM_MUTE,
     SET_MODE,
-    SET_FMRX_MODE,
     SET_MIC_MUTE,
     GET_MIC_MUTE,
     SET_PARAMETERS,
@@ -61,7 +60,6 @@ enum {
     CLOSE_INPUT,
     SET_STREAM_OUTPUT,
     SET_VOICE_VOLUME,
-    SET_FM_RX_VOLUME,
     GET_RENDER_POSITION,
     GET_INPUT_FRAMES_LOST,
     NEW_AUDIO_SESSION_ID,
@@ -321,15 +319,6 @@ public:
         return (( audio_mode_t)reply.readInt32());
     }
 
-    virtual status_t setFmRxMode(int mode)
-    {
-        Parcel data, reply;
-        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
-        data.writeInt32(mode);
-        remote()->transact(SET_FMRX_MODE, data, &reply);
-        return reply.readInt32();
-    }
-
     virtual status_t setMicMute(bool state)
     {
         Parcel data, reply;
@@ -520,15 +509,6 @@ public:
         data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
         data.writeFloat(volume);
         remote()->transact(SET_VOICE_VOLUME, data, &reply);
-        return reply.readInt32();
-    }
-
-    virtual status_t setFmRxVolume(float volume)
-    {
-        Parcel data, reply;
-        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
-        data.writeFloat(volume);
-        remote()->transact(SET_FM_RX_VOLUME, data, &reply);
         return reply.readInt32();
     }
 
@@ -1028,12 +1008,6 @@ status_t BnAudioFlinger::onTransact(
             CHECK_INTERFACE(IAudioFlinger, data, reply);
             float volume = data.readFloat();
             reply->writeInt32( setVoiceVolume(volume) );
-            return NO_ERROR;
-        } break;
-        case SET_FM_RX_VOLUME: {
-            CHECK_INTERFACE(IAudioFlinger, data, reply);
-            float volume = data.readFloat();
-            reply->writeInt32( setFmRxVolume(volume) );
             return NO_ERROR;
         } break;
         case GET_RENDER_POSITION: {

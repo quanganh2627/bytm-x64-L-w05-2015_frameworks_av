@@ -166,14 +166,6 @@ status_t AudioSystem::setMode(audio_mode_t mode)
     return af->setMode(mode);
 }
 
-status_t AudioSystem::setFmRxMode(int mode)
-{
-    if (mode >= AUDIO_MODE_FM_CNT) return BAD_VALUE;
-    const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
-    if (af == 0) return PERMISSION_DENIED;
-    return af->setFmRxMode(mode);
-}
-
 status_t AudioSystem::setParameters(audio_io_handle_t ioHandle, const String8& keyValuePairs) {
     const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
     if (af == 0) return PERMISSION_DENIED;
@@ -375,13 +367,6 @@ status_t AudioSystem::setVoiceVolume(float value)
     const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
     if (af == 0) return PERMISSION_DENIED;
     return af->setVoiceVolume(value);
-}
-
-status_t AudioSystem::setFmRxVolume(float value)
-{
-    const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
-    if (af == 0) return PERMISSION_DENIED;
-    return af->setFmRxVolume(value);
 }
 
 status_t AudioSystem::getRenderPosition(audio_io_handle_t ioHandle, uint32_t *halFrames,
@@ -599,14 +584,6 @@ status_t AudioSystem::setPhoneState(audio_mode_t state)
     if (aps == 0) return PERMISSION_DENIED;
 
     return aps->setPhoneState(state);
-}
-
-status_t AudioSystem::setFmRxState(int state)
-{
-    const sp<IAudioPolicyService>& aps = AudioSystem::get_audio_policy_service();
-    if (aps == 0) return PERMISSION_DENIED;
-
-    return aps->setFmRxState(state);
 }
 
 status_t AudioSystem::setForceUse(audio_policy_force_use_t usage, audio_policy_forced_cfg_t config)

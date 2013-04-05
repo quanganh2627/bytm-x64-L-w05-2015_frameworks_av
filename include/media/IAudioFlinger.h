@@ -119,8 +119,6 @@ public:
     virtual     status_t    setMode(audio_mode_t mode) = 0;
     // get audio mode
     virtual audio_mode_t   getMode() const  = 0;
-    // set FM RX mode
-    virtual     status_t    setFmRxMode(int mode) = 0;
 
     // mic mute/state
     virtual     status_t    setMicMute(bool state) = 0;
@@ -160,7 +158,6 @@ public:
     virtual status_t setStreamOutput(audio_stream_type_t stream, audio_io_handle_t output) = 0;
 
     virtual status_t setVoiceVolume(float volume) = 0;
-    virtual status_t setFmRxVolume(float volume) = 0;
 
     virtual status_t getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames,
                                     audio_io_handle_t output) const = 0;

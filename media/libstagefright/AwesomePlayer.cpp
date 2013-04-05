@@ -121,13 +121,13 @@ struct AwesomeLocalRenderer : public AwesomeRenderer {
         : mTarget(new SoftwareRenderer(nativeWindow, meta)) {
     }
 
-    virtual void render(MediaBuffer *buffer) {
+    virtual void render(MediaBuffer *buffer, void *platformPrivate) {
         render((const uint8_t *)buffer->data() + buffer->range_offset(),
-               buffer->range_length());
+               buffer->range_length(), platformPrivate);
     }
 
-    void render(const void *data, size_t size) {
-        mTarget->render(data, size, NULL);
+    void render(const void *data, size_t size, void *platformPrivate) {
+        mTarget->render(data, size, platformPrivate);
     }
 
 protected:
@@ -151,7 +151,7 @@ struct AwesomeNativeWindowRenderer : public AwesomeRenderer {
         applyRotation(rotationDegrees);
     }
 
-    virtual void render(MediaBuffer *buffer) {
+    virtual void render(MediaBuffer *buffer, void *platformPrivate) {
         ATRACE_CALL();
         int64_t timeUs;
         CHECK(buffer->meta_data()->findInt64(kKeyTime, &timeUs));
@@ -224,6 +224,8 @@ AwesomePlayer::AwesomePlayer()
       mDeepBufferTearDown(false),
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDClient(NULL),
+      mFramesToDirty(0),
+      mRenderedFrames(0),
 #endif
       mLastVideoTimeUs(-1),
 #ifdef TARGET_HAS_VPP
@@ -472,6 +474,7 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
            mMDClient->updateVideoInfo(&info);
            delete mMDClient;
            mMDClient = NULL;
+           mFramesToDirty = 0;
         }
     }
 }
@@ -1582,6 +1585,7 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
     if (mDefaultNativeWindow == NULL) {
         setDisplaySource_l(false);
     }
+    mRenderedFrames = 0;
 #endif
 
     mVideoSource->stop();
@@ -1686,7 +1690,7 @@ status_t AwesomePlayer::getPosition(int64_t *positionUs) {
             && (mAudioPlayer == NULL || !(mFlags & VIDEO_AT_EOS))) {
         Mutex::Autolock autoLock(mMiscStateLock);
         *positionUs = mVideoTimeUs;
-    } else if (mAudioPlayer != NULL) {
+    } else if (mAudioPlayer != NULL && !(mFlags & AT_EOS)) {
         *positionUs = mAudioPlayer->getMediaTimeUs();
     } else {
         *positionUs = 0;
@@ -1953,6 +1957,10 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
 #ifdef TARGET_HAS_VPP
 VPPProcessor* AwesomePlayer::createVppProcessor_l() {
     VPPProcessor* processor = NULL;
+
+    if (mNativeWindow == NULL)
+        return processor;
+
     if (VPPProcessor::isVppOn()) {
         VPPVideoInfo info;
         sp<MetaData> meta = NULL;
@@ -2555,7 +2563,49 @@ void AwesomePlayer::onVideoEvent() {
 
     if (mVideoRenderer != NULL) {
         mSinceLastDropped++;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+        // Only check the seek after the player start rendering.
+        // Some player will seek to the last exit position in
+        // the beginning automatically, but is not done by the user.
+        // Use a counter for the rendered frames to check this case.
+        if (mRenderedFrames > 0 && wasSeeking == SEEK) {
+            int fps = 0;
+            if (mVideoTrack != NULL) {
+                sp<MetaData> meta = mVideoTrack->getFormat();
+                if (meta != NULL && !meta->findInt32(kKeyFrameRate, &fps)) {
+                    ALOGW("No frame rate info found.");
+                    fps = 0;
+                }
+            }
+
+            // Number of frames to set private flags after seeking
+            mFramesToDirty = fps > 0 ? fps : 30;
+        }
+
+        struct IntelPlatformPrivate *platformPrivate = NULL;
+
+        // Put a speicial flag
+        if (mFramesToDirty-- > 0) {
+            struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
+            if (anwBuff != NULL) {
+                anwBuff->usage |= GRALLOC_USAGE_PRIVATE_2;
+                ALOGV("Add private usage:%x", anwBuff->usage);
+            } else {
+                platformPrivate = (struct IntelPlatformPrivate *)
+                    malloc(sizeof(struct IntelPlatformPrivate));
+                platformPrivate->usage = GRALLOC_USAGE_PRIVATE_2;
+            }
+        }
+
+        mVideoRenderer->render(mVideoBuffer, platformPrivate);
+        if (platformPrivate != NULL) {
+            free(platformPrivate);
+            platformPrivate = NULL;
+        }
+        mRenderedFrames++;
+#else
         mVideoRenderer->render(mVideoBuffer);
+#endif
         if (!mVideoRenderingStarted) {
             mVideoRenderingStarted = true;
             notifyListener_l(MEDIA_INFO, MEDIA_INFO_RENDERING_START);
@@ -3463,6 +3513,7 @@ status_t AwesomePlayer::offloadSuspend() {
     stats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
     getPosition(&stats.mPositionUs);
     mOffloadPauseUs = stats.mPositionUs;
+    stats.mDurationUs = mDurationUs; /* store the file duration */
     extractorFlags = mExtractorFlags;
     if (mOffload && ((mFlags & PLAYING) == 0)) {
          ALOGV("offloadSuspend(): Deleting timer");
@@ -3474,7 +3525,7 @@ status_t AwesomePlayer::offloadSuspend() {
     }
 
     reset_l();
-
+    mDurationUs = stats.mDurationUs; /* restore the duration */
     mExtractorFlags = extractorFlags;
     mStats = stats;
     return OK;
