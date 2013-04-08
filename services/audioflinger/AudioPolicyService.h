@@ -138,6 +138,7 @@ public:
     virtual status_t stopTone();
     virtual status_t setVoiceVolume(float volume, int delayMs = 0);
     virtual bool isOffloadSupported(const audio_offload_info_t &config);
+    virtual status_t setParameters(const String8 &keyValuePairs);
 
             status_t doStopOutput(audio_io_handle_t output,
                                   audio_stream_type_t stream,
