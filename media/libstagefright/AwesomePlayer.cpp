@@ -1865,6 +1865,7 @@ status_t AwesomePlayer::initAudioDecoder() {
                 sampleRate,
                 avgBitRate,
                 mDurationUs,
+                mAudioSink->getSessionId(),
                 (mVideoTrack != NULL && mVideoSource != NULL),
                 isStreamingHTTP()) && !(isAudioEffectEnabled())) )
     {

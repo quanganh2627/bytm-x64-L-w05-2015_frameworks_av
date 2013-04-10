@@ -1053,6 +1053,7 @@ bool AudioPolicyService::isOffloadSupported(uint32_t format,
                                     uint32_t samplingRate,
                                     uint32_t bitRate,
                                     int64_t duration,
+                                    int sessionId,
                                     bool isVideo,
                                     bool isStreaming) const
 {
@@ -1067,6 +1068,7 @@ bool AudioPolicyService::isOffloadSupported(uint32_t format,
                                                samplingRate,
                                                bitRate,
                                                duration,
+                                               sessionId,
                                                isVideo,
                                                isStreaming);
 #endif
