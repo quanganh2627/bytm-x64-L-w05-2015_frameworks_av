@@ -101,6 +101,7 @@ public:
                                     uint32_t samplingRate,
                                     uint32_t bitRate,
                                     int64_t duration,
+                                    int sessionId,
                                     bool hasVideo = false,
                                     bool hasStreaming = false) const = 0;
 };
