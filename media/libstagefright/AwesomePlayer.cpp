@@ -2016,7 +2016,20 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
             mVPPProcessor = NULL;
         }
         mVPPProcessor = createVppProcessor_l();
-        OMXCodec* omxCodec = (OMXCodec*) (mVideoSource.get());
+        OMXCodec* omxCodec;
+        if (mCachedSource != NULL) {
+#if 1
+            // FIXME: Disable VPP/FRC for http streaming so far
+            if (mVPPProcessor != NULL) {
+                delete mVPPProcessor;
+                mVPPProcessor = NULL;
+            }
+#else
+            AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
+            omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
+#endif
+        } else
+            omxCodec = (OMXCodec*) (mVideoSource.get());
         if (mVPPProcessor != NULL)
             omxCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
 #endif
