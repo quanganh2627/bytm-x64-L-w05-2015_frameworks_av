@@ -20,6 +20,9 @@
 
 #include <binder/IPCThreadState.h>
 #include <media/AudioTrack.h>
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+#include <media/AudioTrackOffload.h>
+#endif
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/foundation/ALooper.h>
 #include <media/stagefright/AudioPlayer.h>
@@ -257,7 +260,7 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         if (mOffload) {
-            mAudioTrack = new AudioTrack(
+            mAudioTrack = new AudioTrackOffload(
                 AUDIO_STREAM_MUSIC, avgBitRate, mSampleRate, mOffloadFormat, audioMask,
                 0, AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD, &AudioCallback, this, 0, 0);
         } else {
@@ -467,7 +470,7 @@ void AudioPlayer::AudioCallback(int event, void *info) {
 
         buffer->size = numBytesWritten;
     } break;
-    case AudioTrack::EVENT_STREAM_END:
+    case AudioTrackOffload::EVENT_STREAM_END:
     {
         if (mOffload) {
             mReachedEOS = true;
@@ -499,7 +502,15 @@ uint32_t AudioPlayer::getNumFramesPendingPlayout() const {
     if (mAudioSink != NULL) {
         err = mAudioSink->getPosition(&numFramesPlayedOut);
     } else {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mOffload) {
+            err = static_cast<AudioTrackOffload*>(mAudioTrack)->getPosition(&numFramesPlayedOut);
+        } else {
+            err = mAudioTrack->getPosition(&numFramesPlayedOut);
+        }
+#else
         err = mAudioTrack->getPosition(&numFramesPlayedOut);
+#endif
     }
 
     if (err != OK || mNumFramesPlayed < numFramesPlayedOut) {
@@ -583,7 +594,7 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
                         if (mAudioSink != NULL) {
                             mAudioSink->setOffloadEOSReached(mOffloadPostEOSPending);
                         } else {
-                            mAudioTrack->setOffloadEOSReached(mOffloadPostEOSPending);
+                            static_cast<AudioTrackOffload*>(mAudioTrack)->setOffloadEOSReached(mOffloadPostEOSPending);
                         }
                     } else {
 #endif
@@ -756,7 +767,7 @@ int64_t AudioPlayer::getMediaTimeUs() {
         if (mAudioSink != NULL) {
             mAudioSink->getPosition(&mediaPosition);
         } else {
-            mAudioTrack->getPosition(&mediaPosition);
+            static_cast<AudioTrackOffload*>(mAudioTrack)->getPosition(&mediaPosition);
         }
         renderedDuration = 1000 * (int64_t) mediaPosition;
         renderedDuration += mStartPos;
