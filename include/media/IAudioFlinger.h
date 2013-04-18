@@ -115,8 +115,6 @@ public:
 
     // set audio mode
     virtual     status_t    setMode(audio_mode_t mode) = 0;
-    // get audio mode
-    virtual audio_mode_t   getMode() const  = 0;
 
     // mic mute/state
     virtual     status_t    setMicMute(bool state) = 0;
@@ -193,8 +191,12 @@ public:
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     // FIXME move these APIs to AudioPolicy to permit a more accurate implementation
     // that looks on primary device for a stream with fast flag, primary flag, or first one.
-    virtual uint32_t getPrimaryOutputSamplingRate() = 0;
-    virtual size_t getPrimaryOutputFrameCount() = 0;
+    virtual int32_t getPrimaryOutputSamplingRate() = 0;
+    virtual int32_t getPrimaryOutputFrameCount() = 0;
+
+    // get audio mode
+    virtual audio_mode_t   getMode() const  = 0;
+
     virtual bool isAudioEffectEnabled(int sessionId) const = 0;
 
     virtual size_t getOffloadBufferSize(
@@ -202,7 +204,6 @@ public:
             uint32_t sampleRate,
             uint32_t channel,
             int output) = 0;
-
 };
 
 
