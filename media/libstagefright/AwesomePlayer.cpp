@@ -1096,7 +1096,7 @@ status_t AwesomePlayer::play() {
     mBGMEnabled = strcmp(bgmKVpair,"true") ? false : true;
     ALOGD("%s [BGMUSIC] mBGMEnabled = %d",__func__,mBGMEnabled);
 
-    if((mBGMEnabled) || (mDeepBufferAudio)) {
+    if(mBGMEnabled) {
        status_t err = UNKNOWN_ERROR;
        // If BGM is enabled, then the output associated with the
        // active track needs to be de-associated, so that it gets
