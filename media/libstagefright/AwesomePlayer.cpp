@@ -272,6 +272,7 @@ AwesomePlayer::~AwesomePlayer() {
     mClient.disconnect();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     setDisplaySource_l(false);
+    notifyMDSPlayerStatus_l(MDS_VIDEO_UNPREPARED);
 #endif
 }
 
@@ -410,6 +411,23 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
 }
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+void AwesomePlayer::notifyMDSPlayerStatus_l(int status) {
+    if (mMDClient == NULL) {
+        mMDClient = new MultiDisplayClient();
+    }
+
+    if (mMDClient != NULL) {
+        mMDClient->prepareForVideo(status);
+
+        if (status == MDS_VIDEO_UNPREPARED) {
+            delete mMDClient;
+            mMDClient = NULL;
+        }
+    } else {
+        LOGI("NULL MDClient in AwesomePlayer!");
+    }
+}
+
 void AwesomePlayer::setDisplaySource_l(bool isplaying) {
     MDSVideoInfo info;
     if (isplaying) {
@@ -444,8 +462,6 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
            info.isplaying = false;
            info.isprotected = false;
            mMDClient->updateVideoInfo(&info);
-           delete mMDClient;
-           mMDClient = NULL;
            mFramesToDirty = 0;
         }
     }
@@ -1496,6 +1512,10 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
 
     mVideoSource->stop();
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    notifyMDSPlayerStatus_l(MDS_VIDEO_UNPREPARED);
+#endif
+
     // The following hack is necessary to ensure that the OMX
     // component is completely released by the time we may try
     // to instantiate it again.
@@ -1932,6 +1952,9 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
     }
 
     if (mVideoSource != NULL) {
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+        notifyMDSPlayerStatus_l(MDS_VIDEO_PREPARING);
+#endif
         int64_t durationUs;
         if (mVideoTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
             Mutex::Autolock autoLock(mMiscStateLock);
