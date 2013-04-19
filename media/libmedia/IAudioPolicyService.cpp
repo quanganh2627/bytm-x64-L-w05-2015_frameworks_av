@@ -370,6 +370,7 @@ public:
                                     uint32_t samplingRate,
                                     uint32_t bitRate,
                                     int64_t duration,
+                                    int sessionId,
                                     bool isVideo,
                                     bool isStreaming) const
     {
@@ -381,6 +382,7 @@ public:
         data.writeInt32(static_cast <uint32_t>(samplingRate));
         data.writeInt32(static_cast <uint32_t>(bitRate));
         data.writeInt64(static_cast <int64_t>(duration));
+        data.writeInt32(sessionId);
         data.writeInt32(isVideo);
         data.writeInt32(isStreaming);
         remote()->transact(IS_OFFLOAD_SUPPORTED, data, &reply);
@@ -666,10 +668,11 @@ status_t BnAudioPolicyService::onTransact(
             uint32_t samplingRate = data.readInt32();
            uint32_t bitRate = data.readInt32();
             int64_t duration = data.readInt64();
+            int sessionId = data.readInt32();
             bool isVideo = data.readInt32();
             bool isStreaming = data.readInt32();
             bool isSupported = isOffloadSupported(format, stream, samplingRate,
-                                   bitRate, duration, isVideo, isStreaming);
+                                   bitRate, duration, sessionId, isVideo, isStreaming);
             reply->writeInt32(isSupported);
 #endif
             return NO_ERROR;

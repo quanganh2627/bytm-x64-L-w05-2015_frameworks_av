@@ -1,5 +1,8 @@
 LOCAL_PATH:= $(call my-dir)
 
+# Build for helper target
+#########################
+
 include $(CLEAR_VARS)
 
 ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
@@ -12,6 +15,25 @@ LOCAL_MODULE:= libmedia_helper
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_STATIC_LIBRARY)
+
+# Build for helper host test
+############################
+
+include $(CLEAR_VARS)
+
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
+LOCAL_SRC_FILES:= \
+    AudioParameter.cpp
+LOCAL_MODULE:= libmedia_helper_host
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_HOST_STATIC_LIBRARY)
+
+# Build for main lib target
+###########################
 
 include $(CLEAR_VARS)
 
@@ -60,9 +82,9 @@ LOCAL_SRC_FILES:= \
     SoundPoolThread.cpp
 
 LOCAL_SHARED_LIBRARIES := \
-	libui libcutils libutils libbinder libsonivox libicuuc libexpat \
-        libcamera_client libstagefright_foundation \
-        libgui libdl libaudioutils libmedia_native
+    libui libcutils libutils libbinder libsonivox libicuuc libexpat \
+    libcamera_client libstagefright_foundation \
+    libgui libdl libaudioutils libmedia_native
 
 LOCAL_WHOLE_STATIC_LIBRARY := libmedia_helper
 

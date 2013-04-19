@@ -786,6 +786,7 @@ bool AudioSystem::isOffloadSupported(uint32_t format,
                                     uint32_t samplingRate,
                                     uint32_t bitRate,
                                     int64_t duration,
+                                    int sessionId,
                                     bool isVideo,
                                     bool isStreaming)
 {
@@ -798,7 +799,7 @@ bool AudioSystem::isOffloadSupported(uint32_t format,
     }
 
     return aps->isOffloadSupported(format, stream, samplingRate, bitRate,
-                duration, isVideo, isStreaming);
+                duration, sessionId, isVideo, isStreaming);
 #else
     ALOGI("isOffloadSupported is not supported");
     return false;
