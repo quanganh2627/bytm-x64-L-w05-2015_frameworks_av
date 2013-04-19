@@ -777,6 +777,7 @@ status_t AudioTrack::createTrack_l(
         audio_io_handle_t output)
 {
     status_t status;
+
     const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
     if (audioFlinger == 0) {
         ALOGE("Could not get audioflinger");
@@ -857,10 +858,16 @@ status_t AudioTrack::createTrack_l(
         }
 
         // Ensure that buffer depth covers at least audio hardware latency
-        uint32_t minBufCount = afLatency / ((1000 * afFrameCount)/afSampleRate);
+        uint32_t minBufCount = 0;
+        if (( afFrameCount != 0) && (afSampleRate != 0)) {
+            minBufCount = afLatency / ((1000 * afFrameCount)/afSampleRate);
+        }
         if (minBufCount < 2) minBufCount = 2;
 
-        size_t minFrameCount = (afFrameCount*sampleRate*minBufCount)/afSampleRate;
+        size_t minFrameCount = 0;
+        if (afSampleRate != 0) {
+            minFrameCount = (afFrameCount*sampleRate*minBufCount)/afSampleRate;
+        }
         ALOGV("minFrameCount: %u, afFrameCount=%d, minBufCount=%d, sampleRate=%u, afSampleRate=%u"
                 ", afLatency=%d",
                 minFrameCount, afFrameCount, minBufCount, sampleRate, afSampleRate, afLatency);
@@ -1455,13 +1462,20 @@ status_t AudioTrack::restoreTrack_l(audio_track_cblk_t*& refCblk, bool fromStart
     // if the new IAudioTrack is created, createTrack_l() will modify the
     // following member variables: mAudioTrack, mCblkMemory and mCblk.
     // It will also delete the strong references on previous IAudioTrack and IMemory
+    audio_io_handle_t output = getOutput_l();
+
+        if (output == 0) {
+            ALOGE("Could not get audio output");
+            return BAD_VALUE;
+        }
+
     result = createTrack_l(mStreamType,
                            mSampleRate,
                            mFormat,
                            mReqFrameCount,  // so that frame count never goes down
                            mFlags,
                            mSharedBuffer,
-                           getOutput_l());
+                           output);
 
     if (result == NO_ERROR) {
         uint32_t user = cblk->user;
