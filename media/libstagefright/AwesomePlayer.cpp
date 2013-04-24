@@ -245,8 +245,9 @@ AwesomePlayer::AwesomePlayer()
 #ifdef BGM_ENABLED
       ,
       mRemoteBGMsuspend(false),
-      mBGMEnabled(false)
-#endif
+      mBGMEnabled(false),
+      mBGMAudioAvailable(true)
+#endif //BGM_ENABLED
       {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
@@ -270,6 +271,17 @@ AwesomePlayer::AwesomePlayer()
                               &AwesomePlayer::onAudioOffloadTearDownEvent);
     mAudioOffloadTearDownEventPending = false;
 #endif
+#ifdef BGM_ENABLED
+    String8 reply;
+    char* bgmKVpair;
+
+    reply =  AudioSystem::getParameters(0,String8(AudioParameter::keyBGMState));
+    bgmKVpair = strpbrk((char *)reply.string(), "=");
+    ++bgmKVpair;
+    mBGMEnabled = strcmp(bgmKVpair,"true") ? false : true;
+    ALOGV("%s [BGMUSIC] mBGMEnabled = %d",__func__,mBGMEnabled);
+#endif // BGM_ENABLED
+
     reset();
 }
 
@@ -1110,7 +1122,7 @@ status_t AwesomePlayer::play() {
     bgmKVpair = strpbrk((char *)reply.string(), "=");
     ++bgmKVpair;
     mBGMEnabled = strcmp(bgmKVpair,"true") ? false : true;
-    ALOGD("%s [BGMUSIC] mBGMEnabled = %d",__func__,mBGMEnabled);
+    ALOGV("%s [BGMUSIC] mBGMEnabled = %d",__func__,mBGMEnabled);
 
     if(mBGMEnabled) {
        status_t err = UNKNOWN_ERROR;
@@ -1124,7 +1136,7 @@ status_t AwesomePlayer::play() {
             ALOGW("[BGMUSIC] .. oops!! behaviour undefined");
           mRemoteBGMsuspend = false;
        }
-     } //(mBGMEnabled) || (mDeepBufferAudio)
+     } //(mBGMEnabled)
 #endif //BGM_ENABLED
 
     {
@@ -1280,6 +1292,23 @@ status_t AwesomePlayer::play_l() {
         }
     }
 
+#ifdef BGM_ENABLED
+    if(mBGMEnabled) {
+      if ((mAudioSource == NULL) && (mVideoSource != NULL)) {
+           ALOGD("[BGMUSIC] video only clip started in BGM ");
+           AudioParameter param = AudioParameter();
+           status_t status = NO_ERROR;
+           // no audio stream found in this clip, update BGM sink
+           mBGMAudioAvailable = false;
+           param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO), mBGMAudioAvailable);
+           status = AudioSystem::setParameters(0, param.toString());
+           if (status != NO_ERROR) {
+              ALOGE("error setting bgm params - mBGMAudioAvailable");
+              return status;
+           }
+      }
+    }
+#endif //BGM_ENABLED
     if (mTimeSource == NULL && mAudioPlayer == NULL) {
         mTimeSource = &mSystemTimeSource;
     }
@@ -1485,6 +1514,23 @@ status_t AwesomePlayer::pause() {
         offloadPauseStartTimer(OFFLOAD_PAUSED_TIMEOUT_DURATION, true);
     }
 #endif
+
+#ifdef BGM_ENABLED
+    if ((mAudioSource == NULL) && (mVideoSource != NULL)) {
+         ALOGD("[BGMUSIC] remote player paused/stopped in BGM ");
+         AudioParameter param = AudioParameter();
+         status_t status = NO_ERROR;
+         // video only clip stopped/paused, update BGM sink
+         // set audio availability in BGM to true by default
+         mBGMAudioAvailable = true;
+         param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO), mBGMAudioAvailable);
+         status = AudioSystem::setParameters(0, param.toString());
+         if (status != NO_ERROR) {
+            ALOGE("error setting bgm params - mBGMAudioAvailable");
+            return status;
+         }
+    }
+#endif //BGM_ENABLED
 
     return pause_l();
 }

@@ -425,6 +425,7 @@ private:
 #ifdef BGM_ENABLED
     bool mRemoteBGMsuspend;
     bool mBGMEnabled;
+    bool mBGMAudioAvailable;
 #endif
 
 #ifdef LVSE
