@@ -298,10 +298,6 @@ AwesomePlayer::~AwesomePlayer() {
 
     mClient.disconnect();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    if (mDefaultNativeWindow != NULL) {
-        mDefaultNativeWindow.clear();
-        mMDClient->destroyVideoSurface();
-    }
     setDisplaySource_l(false);
     notifyMDSPlayerStatus_l(MDS_VIDEO_UNPREPARED);
 #endif
@@ -465,19 +461,6 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
         if (mVideoSource != NULL) {
             if (mMDClient == NULL) {
                 mMDClient = new MultiDisplayClient();
-            }
-            if (mNativeWindow == NULL) {
-                LOGV("create a new surface in AwesomePlayer");
-                // If no native window is set from app, create one in MDS.
-                // MDS will return a new surface only if play in background
-                // feature is enabled by Application.
-                // Else it returns Null
-                mDefaultNativeWindow =
-                    mMDClient->createNewVideoSurface(DEFAULT_SURFACE_WIDTH, DEFAULT_SURFACE_HEIGHT,
-                        DEFAULT_SURFACE_PIXEL_FORMAT, (int)this);
-                if (mDefaultNativeWindow != NULL) {
-                    setNativeWindow_l(mDefaultNativeWindow);
-                }
             }
             int wcom = 0;
             if (mNativeWindow != NULL)
@@ -1672,11 +1655,7 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer = NULL;
     }
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    // Destroy MDS client only if default native window is not created by MDS.
-    // MDS client will be destroyed in AwesomePlayer destructor.
-    if (mDefaultNativeWindow == NULL) {
-        setDisplaySource_l(false);
-    }
+    setDisplaySource_l(false);
     mRenderedFrames = 0;
 #endif
 
