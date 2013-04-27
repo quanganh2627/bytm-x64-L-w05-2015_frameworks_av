@@ -43,6 +43,9 @@ endif
 
 LOCAL_SRC_FILES:= \
     AudioTrack.cpp \
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true) \
+    AudioTrackOffload.cpp \
+endif \
     IAudioFlinger.cpp \
     IAudioFlingerClient.cpp \
     IAudioTrack.cpp \

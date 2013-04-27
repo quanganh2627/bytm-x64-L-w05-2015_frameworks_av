@@ -1096,7 +1096,7 @@ status_t AwesomePlayer::play() {
     mBGMEnabled = strcmp(bgmKVpair,"true") ? false : true;
     ALOGD("%s [BGMUSIC] mBGMEnabled = %d",__func__,mBGMEnabled);
 
-    if((mBGMEnabled) || (mDeepBufferAudio)) {
+    if(mBGMEnabled) {
        status_t err = UNKNOWN_ERROR;
        // If BGM is enabled, then the output associated with the
        // active track needs to be de-associated, so that it gets
@@ -1982,7 +1982,8 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l() {
         info.fps = fps;
         info.width = width;
         info.height = height;
-        processor = new VPPProcessor(mNativeWindow, &info);
+        OMXCodec* omxCodec = (OMXCodec*) (mVideoSource.get());
+        processor = new VPPProcessor(mNativeWindow, omxCodec, &info);
     }
     return processor;
 }
@@ -2092,7 +2093,6 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         if (mVPPProcessor != NULL) {
             bool success = omxCodec->isVppBufferAvail();
             if (success) {
-                status_t err = mVPPProcessor->init((OMXCodec *)(mVideoSource.get()));
                 if(err != VPP_OK) {
                     delete mVPPProcessor;
                     mVPPProcessor = NULL;

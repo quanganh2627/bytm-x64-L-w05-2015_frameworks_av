@@ -56,6 +56,9 @@
 #include <media/MediaMetadataRetrieverInterface.h>
 #include <media/Metadata.h>
 #include <media/AudioTrack.h>
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+#include <media/AudioTrackOffload.h>
+#endif
 #include <media/MemoryLeakTrackUtil.h>
 #include <media/stagefright/MediaErrors.h>
 
@@ -1405,6 +1408,11 @@ float MediaPlayerService::AudioOutput::msecsPerFrame() const
 status_t MediaPlayerService::AudioOutput::getPosition(uint32_t *position) const
 {
     if (mTrack == 0) return NO_INIT;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+        return static_cast<AudioTrackOffload*>(mTrack)->getPosition(position);
+    }
+#endif
     return mTrack->getPosition(position);
 }
 
@@ -1420,7 +1428,7 @@ status_t MediaPlayerService::AudioOutput::setOffloadEOSReached(bool value)
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mTrack == 0) return NO_INIT;
     ALOGV("setOffloadEOSReached");
-    return mTrack->setOffloadEOSReached(value);
+    return static_cast<AudioTrackOffload*>(mTrack)->setOffloadEOSReached(value);
 #else
     return OK;
 #endif
@@ -1430,7 +1438,7 @@ status_t MediaPlayerService::AudioOutput::setParameters(const String8& keyValueP
 {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mTrack == 0) return NO_INIT;
-    return mTrack->setParameters(keyValuePairs);
+    return static_cast<AudioTrackOffload*>(mTrack)->setParameters(keyValuePairs);
 #else
     return OK;
 #endif
@@ -1511,7 +1519,7 @@ status_t MediaPlayerService::AudioOutput::open(
     if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
        if (mCallback2 != NULL) {
             newcbd = new CallbackData(this);
-            t = new AudioTrack(
+            t = new AudioTrackOffload(
                 mStreamType,
                 mBitRate,
                 sampleRate,
@@ -1524,7 +1532,7 @@ status_t MediaPlayerService::AudioOutput::open(
                 0,  // notification frames
                 mSessionId);
         } else {
-            t = new AudioTrack(
+            t = new AudioTrackOffload(
                 mStreamType,
                 mBitRate,
                 sampleRate,
@@ -1646,10 +1654,22 @@ status_t MediaPlayerService::AudioOutput::open(
     mFlags = flags;
     mMsecsPerFrame = mPlaybackRatePermille / (float) sampleRate;
     uint32_t pos;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+        if (static_cast<AudioTrackOffload*>(t)->getPosition(&pos) == OK) {
+            mBytesWritten = uint64_t(pos) * t->frameSize();
+        }
+    } else {
+        if (t->getPosition(&pos) == OK) {
+            mBytesWritten = uint64_t(pos) * t->frameSize();
+        }
+    }
+#else
     if (t->getPosition(&pos) == OK) {
         mBytesWritten = uint64_t(pos) * t->frameSize();
     }
-    mTrack = t;
+#endif
+   mTrack = t;
 
     status_t res = t->setSampleRate(mPlaybackRatePermille * mSampleRateHz / 1000);
     if (res != NO_ERROR) {
@@ -1798,7 +1818,7 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
     }
 
     switch(event) {
-    case AudioTrack::EVENT_TEAR_DOWN:
+    case AudioTrackOffload::EVENT_TEAR_DOWN:
     {
         // For AudioTrack events of Tear down  just call
         // registered call back function and pass the event
@@ -1826,7 +1846,7 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
         }
         buffer->size = actualSize;
     } break;
-    case AudioTrack::EVENT_STREAM_END:
+    case AudioTrackOffload::EVENT_STREAM_END:
     {
         ALOGV("STREAM_END received");
         if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
