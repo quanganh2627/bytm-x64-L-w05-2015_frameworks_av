@@ -2389,6 +2389,22 @@ status_t ACodec::setVideoFormatOnPort(
 
 status_t ACodec::initNativeWindow() {
     if (mNativeWindow != NULL) {
+        if (mOMX->livesLocally(mNode,getpid())){
+            OMX_PARAM_PORTDEFINITIONTYPE def;
+            OMX_VIDEO_PORTDEFINITIONTYPE *video_def = &def.format.video;
+
+            InitOMXParams(&def);
+            def.nPortIndex = kPortIndexInput;
+
+            status_t err = mOMX->getParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            CHECK_EQ(err, (status_t)OK);
+
+            ALOGD("set NativeWindow = %p",mNativeWindow.get());
+            video_def->pNativeWindow = mNativeWindow.get();
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+        }
         return mOMX->enableGraphicBuffers(mNode, kPortIndexOutput, OMX_TRUE);
     }
 
