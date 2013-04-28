@@ -1362,6 +1362,42 @@ status_t OMXCodec::setVideoOutputFormat(
     err = mOMX->setParameter(
             mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
 
+    if (!strncmp(mComponentName, "OMX.Intel.VideoDecoder", 22)) {
+        sp<MetaData> meta = mSource->getFormat();
+
+        int32_t rotationDegrees;
+        if (!meta->findInt32(kKeyRotation, &rotationDegrees)) {
+            rotationDegrees = 0;
+        }
+        // set rotation for decoder
+        OMX_INDEXTYPE index;
+
+        status_t error =
+            mOMX->getExtensionIndex(
+                mNode,
+                "OMX.Intel.index.rotation",
+                &index);
+        if (error == OK) {
+            error = mOMX->setParameter(mNode, index, (void*)&rotationDegrees, sizeof(int32_t));
+        } else {
+            // ingore this error
+            ALOGW("Set decode rotation failed");
+        }
+
+        if (mNativeWindow != NULL && mOMX->livesLocally(mNode,getpid())){
+            InitOMXParams(&def);
+            def.nPortIndex = kPortIndexInput;
+
+            err = mOMX->getParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            CHECK_EQ(err, (status_t)OK);
+
+            ALOGD("set NativeWindow = %p",mNativeWindow.get());
+            video_def->pNativeWindow = mNativeWindow.get();
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+        }
+    }
     return err;
 }
 
