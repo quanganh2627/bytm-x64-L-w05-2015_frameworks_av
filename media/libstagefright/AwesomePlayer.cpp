@@ -1288,8 +1288,27 @@ status_t AwesomePlayer::setSurfaceTexture(const sp<IGraphicBufferProducer> &buff
     Mutex::Autolock autoLock(mLock);
 
     status_t err;
+
     if (bufferProducer != NULL) {
-        err = setNativeWindow_l(new Surface(bufferProducer));
+        sp<ANativeWindow> anw = new Surface(bufferProducer);
+        //NOTES: we must re-connect api here because we need to get right
+        //infomation from surface texture's back end. Otherwise, we only get
+        //uninitlized mTransformHint, mDefaultWidth, mDefaultHeight, etc.
+        status_t err = native_window_api_disconnect(anw.get(),
+                NATIVE_WINDOW_API_MEDIA);
+        if (err != OK) {
+            ALOGE("setSurfaceTexture: api disconnect failed: %d", err);
+            return err;
+        }
+
+        err = native_window_api_connect(anw.get(),
+                NATIVE_WINDOW_API_MEDIA);
+        if (err != OK) {
+            ALOGE("setSurfaceTexture: api connect failed: %d", err);
+            return err;
+        }
+
+        err = setNativeWindow_l(anw);
     } else {
         err = setNativeWindow_l(NULL);
     }
