@@ -774,12 +774,14 @@ void CameraClient::dataCallbackTimestamp(nsecs_t timestamp,
 void CameraClient::handleShutter(void) {
     CameraParameters params(mHardware->getParameters());
     if (mPlayShutterSound) {
-        if ((params.get("burst-length") == NULL) ||
-            (params.getInt("burst-length") <= 1) ||
-            (params.getInt("burst-start-index") != 0))
-            mCameraService->playSound(CameraService::SOUND_SHUTTER);
-        else
+        if ((params.getInt("burst-start-index") == 0) &&
+            ((params.get("burst-length") != NULL) &&
+             (params.getInt("burst-length") > 1)) ||
+            ((params.get("burst-continuous") != NULL) &&
+             (strcmp(params.get("burst-continuous"),"true") == 0)))
             mCameraService->playSound(CameraService::SOUND_BURST);
+        else
+            mCameraService->playSound(CameraService::SOUND_SHUTTER);
     }
 
     sp<ICameraClient> c = mCameraClient;
@@ -789,6 +791,8 @@ void CameraClient::handleShutter(void) {
         if (!lockIfMessageWanted(CAMERA_MSG_SHUTTER)) return;
     }
 
+    // not disable sound if burst capture,
+    // but disable in normal and continous capture
     if ((params.get("burst-length") == NULL) ||
         (params.getInt("burst-length") <= 1) ||
         (params.getInt("burst-start-index") != 0))
