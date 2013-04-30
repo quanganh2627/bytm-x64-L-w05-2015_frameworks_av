@@ -358,6 +358,7 @@ ACodec::ACodec()
     : mQuirks(0),
       mNode(NULL),
       mSentFormat(false),
+      mFirstFrame(true),
       mIsEncoder(false),
       mShutdownInProgress(false),
       mEncoderDelay(0),
@@ -2299,8 +2300,6 @@ void ACodec::sendFormatChange(const sp<AMessage> &reply) {
                 CHECK_GE(rect.nTop, 0);
                 CHECK_GE(rect.nWidth, 0u);
                 CHECK_GE(rect.nHeight, 0u);
-                CHECK_LE(rect.nLeft + rect.nWidth - 1, videoDef->nFrameWidth);
-                CHECK_LE(rect.nTop + rect.nHeight - 1, videoDef->nFrameHeight);
 
                 notify->setRect(
                         "crop",
@@ -3074,7 +3073,8 @@ bool ACodec::BaseState::onOMXFillBufferDone(
             sp<AMessage> reply =
                 new AMessage(kWhatOutputBufferDrained, mCodec->id());
 
-            if (!mCodec->mSentFormat) {
+            if (!mCodec->mIsEncoder && !mCodec->mSentFormat
+                && mCodec->mNativeWindow == NULL) {
                 mCodec->sendFormatChange(reply);
             }
 
@@ -3099,6 +3099,20 @@ bool ACodec::BaseState::onOMXFillBufferDone(
             notify->setInt32("flags", flags);
 
             reply->setPointer("buffer-id", info->mBufferID);
+
+            if (!mCodec->mIsEncoder && !mCodec->mSentFormat) {
+                ALOGV("Applying format change firstFrame=%d", mCodec->mFirstFrame);
+                // Do cropping for the first frame before
+                // the frame is send out. For the subsequent frames
+                // the cropping has to be done AFTER the frame is send
+                if (mCodec->mFirstFrame) {
+                    mCodec->sendFormatChange(reply);
+                } else {
+                    reply->setInt32("sent-format", mCodec->mSentFormat);
+                    mCodec->mSentFormat = true;
+                }
+            }
+            mCodec->mFirstFrame = false;
 
             notify->setMessage("reply", reply);
 
@@ -3149,6 +3163,19 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
     }
 
     int32_t render;
+    // The client may choose not to render a buffer but we will
+    // need to apply the format change regardless as we would get
+    // only one format change call, associated with a buffer.
+    int32_t sentformat;
+    sp<AMessage> reply =
+        new AMessage(kWhatOutputBufferDrained, mCodec->id());
+
+    if (msg->findInt32("sent-format", &sentformat)) {
+        if (!sentformat) {
+            mCodec->sendFormatChange(reply);
+        }
+    }
+
     if (mCodec->mNativeWindow != NULL
             && msg->findInt32("render", &render) && render != 0
             && (info->mData == NULL || info->mData->size() != 0)) {
