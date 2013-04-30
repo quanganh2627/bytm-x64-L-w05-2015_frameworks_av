@@ -1933,7 +1933,10 @@ void AwesomePlayer::onVideoEvent() {
                 mSeeking = SEEK_VIDEO_ONLY;
                 mSeekTimeUs = mediaTimeUs;
 
-                postVideoEvent_l();
+                // the next video event scheduling will occur after 100us so that
+                // any attempts to cancel future video events could take effect within
+                // this 100us interval
+                postVideoEvent_l(100);
                 return;
             } else {
                 // The widevine extractor doesn't deal well with seeking
@@ -1964,7 +1967,7 @@ void AwesomePlayer::onVideoEvent() {
                     ++mStats.mNumVideoFramesDropped;
                 }
 
-                postVideoEvent_l(0);
+                postVideoEvent_l(100);
                 return;
             }
         }
