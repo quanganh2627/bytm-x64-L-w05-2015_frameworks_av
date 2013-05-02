@@ -2324,7 +2324,10 @@ void AwesomePlayer::onVideoEvent() {
             } else {
                 platformPrivate = (struct IntelPlatformPrivate *)
                     malloc(sizeof(struct IntelPlatformPrivate));
-                platformPrivate->usage = GRALLOC_USAGE_PRIVATE_2;
+                if (platformPrivate != NULL)
+                    platformPrivate->usage = GRALLOC_USAGE_PRIVATE_2;
+                else
+                    ALOGE("Memory allocate failed!");
             }
         }
 
