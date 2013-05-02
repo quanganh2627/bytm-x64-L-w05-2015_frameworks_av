@@ -3112,6 +3112,10 @@ bool ACodec::BaseState::onOMXFillBufferDone(
                     mCodec->mSentFormat = true;
                 }
             }
+
+            if (mCodec->mNativeWindow != NULL && rangeLength == 0) {
+                reply->setInt32("hide",true);
+            }
             mCodec->mFirstFrame = false;
 
             notify->setMessage("reply", reply);
@@ -3167,6 +3171,7 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
     // need to apply the format change regardless as we would get
     // only one format change call, associated with a buffer.
     int32_t sentformat;
+    int32_t hide;
     sp<AMessage> reply =
         new AMessage(kWhatOutputBufferDrained, mCodec->id());
 
@@ -3178,7 +3183,8 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
 
     if (mCodec->mNativeWindow != NULL
             && msg->findInt32("render", &render) && render != 0
-            && (info->mData == NULL || info->mData->size() != 0)) {
+            && (info->mData == NULL || info->mData->size() != 0)
+            && !msg->findInt32("hide", &hide)) {
         // The client wants this buffer to be rendered.
 
         status_t err;
