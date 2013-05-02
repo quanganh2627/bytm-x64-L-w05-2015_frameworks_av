@@ -31,6 +31,7 @@
 #include "include/ThrottledSource.h"
 #include "include/MPEG2TSExtractor.h"
 #include "include/WVMExtractor.h"
+#include "include/ThreadedSource.h"
 
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
@@ -55,6 +56,11 @@
 #include <media/stagefright/foundation/AMessage.h>
 
 #include <cutils/properties.h>
+
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#include "MetaDataExt.h"
+#endif
 
 #define USE_SURFACE_ALLOC 1
 #define FRAME_DROP_FREQ 0
@@ -1638,11 +1644,26 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         flags |= OMXCodec::kEnableGrallocUsageProtected;
     }
 #endif
+
+    sp<MetaData> meta = mExtractor->getMetaData();
+    const char *mime;
+    CHECK(meta->findCString(kKeyMIMEType, &mime));
+    bool isPrefetchSupported = false;
+    if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG4)
+        || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MATROSKA)
+        || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_AVI)
+#ifdef USE_INTEL_ASF_EXTRACTOR
+        || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)
+#endif
+    ) {
+        isPrefetchSupported = true;
+    }
+
     ALOGV("initVideoDecoder flags=0x%x", flags);
     mVideoSource = OMXCodec::Create(
             mClient.interface(), mVideoTrack->getFormat(),
             false, // createEncoder
-            mVideoTrack,
+            isPrefetchSupported ? new ThreadedSource(mVideoTrack, MediaSource::kMaxMediaBufferSize) : mVideoTrack,
             NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
 
     if (mVideoSource != NULL) {
