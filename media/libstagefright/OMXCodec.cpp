@@ -77,6 +77,16 @@ static sp<MediaSource> Make##name(const sp<MediaSource> &source, const sp<MetaDa
 
 #ifdef USE_INTEL_MDP
 FACTORY_CREATE_DECL(CIPVP8Decoder)
+
+FACTORY_CREATE_DECL(CIPMP3Decoder)
+FACTORY_CREATE_DECL(CIPAACDecoder)
+FACTORY_CREATE_ENCODER_DECL(CIPAACEncoder)
+FACTORY_CREATE_DECL(CIPAMRNBDecoder)
+FACTORY_CREATE_ENCODER_DECL(CIPAMRNBEncoder)
+FACTORY_CREATE_DECL(CIPAMRWBDecoder)
+FACTORY_CREATE_ENCODER_DECL(CIPAMRWBEncoder)
+FACTORY_CREATE_DECL(CIPVorbisDecoder)
+FACTORY_CREATE_DECL(CIPWMADecoder)
 #endif
 
 #define FACTORY_REF(name) { #name, Make##name },
@@ -90,8 +100,20 @@ static sp<MediaSource> InstantiateSoftwareEncoder(
         const char *name;
         sp<MediaSource> (*CreateFunc)(const sp<MediaSource> &, const sp<MetaData> &);
     };
+    if (!strncmp(name, "CIPAACEncoder", 13)) {
+        int32_t aacProfile;
+        meta->findInt32(kKeyAACProfile, &aacProfile);
+        if(aacProfile != OMX_AUDIO_AACObjectLC) {
+           return NULL; //Use Google AAC encoder for all AAC profiles except AAC_LC.
+        }
+    }
 
     static const FactoryInfo kFactoryInfo[] = {
+#ifdef USE_INTEL_MDP
+        FACTORY_REF(CIPAMRNBEncoder)
+        FACTORY_REF(CIPAMRWBEncoder)
+        FACTORY_REF(CIPAACEncoder)
+#endif // #ifdef USE_INTEL_MDP
         FACTORY_REF(AACEncoder)
     };
     for (size_t i = 0;
@@ -103,6 +125,36 @@ static sp<MediaSource> InstantiateSoftwareEncoder(
 
     return NULL;
 }
+
+#ifdef USE_INTEL_MDP
+/* for SF decoders plug-ins */
+static sp<MediaSource> InstantiateSoftwareCodec(
+        const char *name, const sp<MediaSource> &source) {
+    struct FactoryInfo {
+        const char *name;
+        sp<MediaSource> (*CreateFunc)(const sp<MediaSource> &);
+    };
+
+    static const FactoryInfo kFactoryInfo[] = {
+
+        FACTORY_REF(CIPMP3Decoder)
+        FACTORY_REF(CIPAACDecoder)
+        FACTORY_REF(CIPAMRNBDecoder)
+        FACTORY_REF(CIPAMRWBDecoder)
+        FACTORY_REF(CIPVorbisDecoder)
+        FACTORY_REF(CIPWMADecoder)
+    };
+    for (size_t i = 0;
+         i < sizeof(kFactoryInfo) / sizeof(kFactoryInfo[0]); ++i) {
+        if (!strcmp(name, kFactoryInfo[i].name)) {
+           return (*kFactoryInfo[i].CreateFunc)(source);
+        }
+    }
+
+    return NULL;
+}
+#endif // #ifdef USE_INTEL_MDP
+
 
 #undef FACTORY_CREATE_ENCODER
 #undef FACTORY_REF
@@ -354,16 +406,29 @@ sp<MediaSource> OMXCodec::Create(
         }
 #endif
 
+#ifndef USE_INTEL_MDP
         if (createEncoder) {
             sp<MediaSource> softwareCodec =
                 InstantiateSoftwareEncoder(componentName, source, meta);
+
+            if (softwareCodec != NULL) {
+
+                ALOGV("Successfully allocated software codec '%s'", componentName);
+
+                return softwareCodec;
+            }
+        }
+#else
+        sp<MediaSource> softwareCodec = (createEncoder)?
+            InstantiateSoftwareEncoder(componentName, source, meta):
+            InstantiateSoftwareCodec(componentName, source);
 
             if (softwareCodec != NULL) {
                 ALOGV("Successfully allocated software codec '%s'", componentName);
 
                 return softwareCodec;
             }
-        }
+#endif
 
         ALOGV("Attempting to allocate OMX node '%s'", componentName);
 

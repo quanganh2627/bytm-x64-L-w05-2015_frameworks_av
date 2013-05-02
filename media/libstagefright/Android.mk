@@ -142,6 +142,35 @@ LOCAL_SHARED_LIBRARIES += libasfparser
 LOCAL_CPPFLAGS += -DUSE_INTEL_ASF_EXTRACTOR
 endif
 
+ifeq ($(USE_INTEL_MDP),true)
+LOCAL_C_INCLUDES += \
+          $(TARGET_OUT_HEADERS)/media_codecs
+
+LOCAL_STATIC_LIBRARIES += \
+          lib_stagefright_mdp_mp3dec \
+          libmc_mp3_dec \
+          lib_stagefright_mdp_aacdec \
+          libmc_aac_dec \
+          lib_stagefright_mdp_aacenc \
+          libmc_aac_enc \
+          lib_stagefright_mdp_amrnbdec \
+          libmc_gsmamr \
+          lib_stagefright_mdp_amrnbenc \
+          lib_stagefright_mdp_amrwbdec \
+          lib_stagefright_mdp_amrwbenc \
+          libmc_amrwb \
+          libmc_amrcommon \
+          lib_stagefright_mdp_vorbisdec \
+          libmc_vorbis_dec \
+          libmc_codec_common \
+          libmc_core \
+          lib_stagefright_mdp_wmadec \
+          libmc_wma_dec
+
+
+LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
+endif
+
 LOCAL_SHARED_LIBRARIES += libstlport
 include external/stlport/libstlport.mk
 
