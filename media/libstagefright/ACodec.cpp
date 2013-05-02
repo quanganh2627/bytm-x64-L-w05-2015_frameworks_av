@@ -2136,7 +2136,9 @@ status_t ACodec::setVideoFormatOnPort(
 
 status_t ACodec::initNativeWindow() {
     if (mNativeWindow != NULL) {
-        if (mOMX->livesLocally(mNode,getpid())){
+        int wcom = 0;
+        mNativeWindow->query(mNativeWindow.get(),NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER,&wcom);
+        if (mOMX->livesLocally(mNode,getpid()) && (wcom == 1)){
             OMX_PARAM_PORTDEFINITIONTYPE def;
             OMX_VIDEO_PORTDEFINITIONTYPE *video_def = &def.format.video;
 
