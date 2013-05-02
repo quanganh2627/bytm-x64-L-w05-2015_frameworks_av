@@ -27,13 +27,12 @@
 
 namespace android {
 
-static const size_t kMaxQueueSize = 10;
-
-ThreadedSource::ThreadedSource(const sp<MediaSource> &source)
+ThreadedSource::ThreadedSource(const sp<MediaSource> &source, int size)
     : mSource(source),
       mReflector(new AHandlerReflector<ThreadedSource>(this)),
       mLooper(new ALooper),
-      mStarted(false) {
+      mStarted(false),
+      mMaxQueueSize(size) {
     mLooper->registerHandler(mReflector);
 }
 
@@ -54,10 +53,10 @@ status_t ThreadedSource::start(MetaData *params) {
 
     mFinalResult = OK;
     mSeekTimeUs = -1;
-    mDecodePending = false;
+    mReadPending = false;
 
     Mutex::Autolock autoLock(mLock);
-    postDecodeMore_l();
+    postReadMore_l();
 
     CHECK_EQ(mLooper->start(), (status_t)OK);
 
@@ -103,12 +102,18 @@ status_t ThreadedSource::read(
         msg->post();
 
         while (!seekComplete) {
-            mCondition.wait(mLock);
+            status_t err = mCondition.wait(mLock);
+            if (err != OK) {
+                return err;
+            }
         }
     }
 
     while (mQueue.empty() && mFinalResult == OK) {
-        mCondition.wait(mLock);
+        status_t err = mCondition.wait(mLock);
+        if (err != OK) {
+            return err;
+        }
     }
 
     if (!mQueue.empty()) {
@@ -116,7 +121,7 @@ status_t ThreadedSource::read(
         mQueue.erase(mQueue.begin());
 
         if (mFinalResult == OK) {
-            postDecodeMore_l();
+            postReadMore_l();
         }
 
         return OK;
@@ -146,17 +151,17 @@ void ThreadedSource::onMessageReceived(const sp<AMessage> &msg) {
             *seekComplete = 1;
             mCondition.signal();
 
-            postDecodeMore_l();
+            postReadMore_l();
             break;
         }
 
-        case kWhatDecodeMore:
+        case kWhatReadMore:
         {
             {
                 Mutex::Autolock autoLock(mLock);
-                mDecodePending = false;
+                mReadPending = false;
 
-                if (mQueue.size() == kMaxQueueSize) {
+                if (mQueue.size() == mMaxQueueSize) {
                     break;
                 }
             }
@@ -176,8 +181,8 @@ void ThreadedSource::onMessageReceived(const sp<AMessage> &msg) {
             } else {
                 mQueue.push_back(buffer);
 
-                if (mQueue.size() < kMaxQueueSize) {
-                    postDecodeMore_l();
+                if (mQueue.size() < mMaxQueueSize) {
+                    postReadMore_l();
                 }
             }
 
@@ -191,13 +196,13 @@ void ThreadedSource::onMessageReceived(const sp<AMessage> &msg) {
     }
 }
 
-void ThreadedSource::postDecodeMore_l() {
-    if (mDecodePending) {
+void ThreadedSource::postReadMore_l() {
+    if (mReadPending) {
         return;
     }
 
-    mDecodePending = true;
-    (new AMessage(kWhatDecodeMore, mReflector->id()))->post();
+    mReadPending = true;
+    (new AMessage(kWhatReadMore, mReflector->id()))->post();
 }
 
 void ThreadedSource::clearQueue_l() {
