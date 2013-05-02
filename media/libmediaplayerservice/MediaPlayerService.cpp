@@ -1672,11 +1672,21 @@ status_t MediaPlayerService::AudioOutput::open(
    mTrack = t;
 
     status_t res = t->setSampleRate(mPlaybackRatePermille * mSampleRateHz / 1000);
-    if (res != NO_ERROR) {
-        return res;
-    }
+    if (res != NO_ERROR) goto Error_exit;
+
     t->setAuxEffectSendLevel(mSendLevel);
-    return t->attachAuxEffect(mAuxEffectId);;
+
+    res = t->attachAuxEffect(mAuxEffectId);
+    if( res != NO_ERROR ) goto Error_exit;
+
+    return OK;
+
+Error_exit:
+        ALOGV("open: Error happened remove tracks created here.");
+        delete t;
+        delete newcbd;
+        mTrack = NULL;
+        return res;
 }
 
 void MediaPlayerService::AudioOutput::start()
