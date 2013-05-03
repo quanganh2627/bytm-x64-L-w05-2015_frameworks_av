@@ -123,6 +123,8 @@ struct MyHandler : public AHandler {
           mTryFakeRTCP(false),
           mReceivedFirstRTCPPacket(false),
           mReceivedFirstRTPPacket(false),
+          mFirstAccessUnitMediaTimeValid(true),
+          mFirstAccessUnitMediaTime(0),
           mSeekable(true),
           mKeepAliveTimeoutUs(kDefaultKeepAliveTimeoutUs),
           mKeepAliveGeneration(0),
@@ -858,7 +860,7 @@ struct MyHandler : public AHandler {
                 mReceivedFirstRTPPacket = false;
                 mPausing = false;
                 mSeekable = true;
-
+                mFirstAccessUnitMediaTimeValid = true;
                 sp<AMessage> reply = new AMessage('tear', id());
 
                 int32_t reconnect;
@@ -1529,6 +1531,8 @@ private:
     int32_t mKeepAliveGeneration;
     bool mPausing;
     int32_t mPauseGeneration;
+    bool mFirstAccessUnitMediaTimeValid;
+    int64_t mFirstAccessUnitMediaTime;
 
     Vector<TrackInfo> mTracks;
 
@@ -1847,13 +1851,22 @@ private:
 
         int64_t mediaTimeUs = mMediaAnchorUs + ntpTimeUs - mNTPAnchorUs;
 
-        if (mediaTimeUs > mLastMediaTimeUs) {
-            mLastMediaTimeUs = mediaTimeUs;
+        // record the first AccessUnit MediaTime to adjust the mediaTime of
+        // access unit arrive then.
+        if (mFirstAccessUnitMediaTimeValid ) {
+	    mFirstAccessUnitMediaTime = mediaTimeUs;
+            mFirstAccessUnitMediaTimeValid = false;
+	}
+
+        if (mediaTimeUs < mFirstAccessUnitMediaTime) {
+            mFirstAccessUnitMediaTime = mediaTimeUs;
         }
 
-        if (mediaTimeUs < 0) {
-            ALOGV("dropping early accessUnit.");
-            return false;
+        // adjust the mediaTimeUs according to the mFirstAccessUnitMediaTime
+	// to avoid the drop of the first few accessunit before first SR
+        mediaTimeUs = mediaTimeUs - mFirstAccessUnitMediaTime;
+        if (mediaTimeUs > mLastMediaTimeUs) {
+            mLastMediaTimeUs = mediaTimeUs;
         }
 
         ALOGV("track %d rtpTime=%d mediaTimeUs = %lld us (%.2f secs)",
