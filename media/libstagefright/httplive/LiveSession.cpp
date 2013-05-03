@@ -566,6 +566,12 @@ rinse_repeat:
                 ALOGE("failed to load playlist at url '%s'", url.c_str());
                 signalEOS(ERROR_IO);
 
+                if (mSeekTimeUs >= 0) {
+                    mSeekTimeUs = -1;
+                    Mutex::Autolock autoLock(mLock);
+                    mSeekDone = true;
+                    mCondition.broadcast();
+                }
                 return;
             }
         } else {
