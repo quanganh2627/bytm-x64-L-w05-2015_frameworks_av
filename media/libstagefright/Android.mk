@@ -35,6 +35,7 @@ LOCAL_SRC_FILES:=                         \
         MediaExtractor.cpp                \
         MediaMuxer.cpp                    \
         MediaSource.cpp                   \
+        AsyncOMXCodecWrapper.cpp          \
         MetaData.cpp                      \
         NuCachedSource2.cpp               \
         NuMediaExtractor.cpp              \
