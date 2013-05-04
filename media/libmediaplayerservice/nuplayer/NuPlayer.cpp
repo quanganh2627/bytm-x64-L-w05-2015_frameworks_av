@@ -225,24 +225,25 @@ void NuPlayer::setVideoSurfaceTextureAsync(
         msg->setObject("native-window", NULL);
     } else {
         sp<Surface> surface = new Surface(bufferProducer);
-        sp<ANativeWindow> anw = surface;
-        //NOTES: we must re-connect api here because we need to get right
-        //infomation from surface texture's back end. Otherwise, we only get
-        //uninitlized mTransformHint, mDefaultWidth, mDefaultHeight, etc.
-        status_t err = native_window_api_disconnect(anw.get(),
-                NATIVE_WINDOW_API_MEDIA);
-        if (err != OK) {
-            ALOGE("setVideoSurfaceTextureAsync: api disconnect failed: %d", err);
-            return;
-        }
+        if (surface != NULL) {
+            sp<ANativeWindow> anw = surface;
+            //NOTES: we must re-connect api here because we need to get right
+            //infomation from surface texture's back end. Otherwise, we only get
+            //uninitlized mTransformHint, mDefaultWidth, mDefaultHeight, etc.
+            status_t err = native_window_api_disconnect(anw.get(),
+                    NATIVE_WINDOW_API_MEDIA);
+            if (err != OK) {
+                ALOGE("setVideoSurfaceTextureAsync: api disconnect failed: %d", err);
+                return;
+            }
 
-        err = native_window_api_connect(anw.get(),
-                NATIVE_WINDOW_API_MEDIA);
-        if (err != OK) {
-            ALOGE("setVideoSurfaceTextureAsync: api connect failed: %d", err);
-            return;
+            err = native_window_api_connect(anw.get(),
+                    NATIVE_WINDOW_API_MEDIA);
+            if (err != OK) {
+                ALOGE("setVideoSurfaceTextureAsync: api connect failed: %d", err);
+                return;
+            }
         }
-
         msg->setObject(
                 "native-window",
                 new NativeWindowWrapper(surface));
