@@ -46,6 +46,7 @@
 #include <media/stagefright/MediaDefs.h>
 #include <media/stagefright/MediaExtractor.h>
 #include <media/stagefright/MediaSource.h>
+#include "include/AsyncOMXCodecWrapper.h"
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/OMXCodec.h>
 
@@ -1524,27 +1525,33 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         flags |= OMXCodec::kEnableGrallocUsageProtected;
     }
 #endif
-
-    sp<MetaData> meta = mExtractor->getMetaData();
-    const char *mime;
-    CHECK(meta->findCString(kKeyMIMEType, &mime));
-    bool isPrefetchSupported = false;
-    if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG4)
-        || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MATROSKA)
-        || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_AVI)
-#ifdef USE_INTEL_ASF_EXTRACTOR
-        || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)
-#endif
-    ) {
-        isPrefetchSupported = true;
-    }
-
     ALOGV("initVideoDecoder flags=0x%x", flags);
-    mVideoSource = OMXCodec::Create(
-            mClient.interface(), mVideoTrack->getFormat(),
-            false, // createEncoder
-            isPrefetchSupported ? new ThreadedSource(mVideoTrack, MediaSource::kMaxMediaBufferSize) : mVideoTrack,
-            NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+    if (mCachedSource != NULL) {
+        mVideoSource = AsyncOMXCodecWrapper::Create(
+                mClient.interface(), mVideoTrack->getFormat(),
+                false, // createEncoder
+                mVideoTrack,
+                NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+    } else {
+        sp<MetaData> meta = mExtractor->getMetaData();
+        const char *mime;
+        CHECK(meta->findCString(kKeyMIMEType, &mime));
+        bool isPrefetchSupported = false;
+        if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG4)
+            || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MATROSKA)
+            || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_AVI)
+#ifdef USE_INTEL_ASF_EXTRACTOR
+            || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)
+#endif
+      ) {
+            isPrefetchSupported = true;
+        }
+        mVideoSource = OMXCodec::Create(
+                mClient.interface(), mVideoTrack->getFormat(),
+                false, // createEncoder
+                isPrefetchSupported ? new ThreadedSource(mVideoTrack, MediaSource::kMaxMediaBufferSize) : mVideoTrack,
+                NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+    }
 
     if (mVideoSource != NULL) {
         int64_t durationUs;
@@ -1684,8 +1691,10 @@ void AwesomePlayer::onVideoEvent() {
 
             if (err != OK) {
                 CHECK(mVideoBuffer == NULL);
-
-                if (err == INFO_FORMAT_CHANGED) {
+                if (err == -EWOULDBLOCK) {
+                    postVideoEvent_l(10000);
+                    return;
+                } else if (err == INFO_FORMAT_CHANGED) {
                     ALOGV("VideoSource signalled format change.");
 
                     notifyVideoSize_l();
