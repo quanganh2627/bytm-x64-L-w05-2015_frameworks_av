@@ -49,6 +49,7 @@
 #include "include/AsyncOMXCodecWrapper.h"
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/OMXCodec.h>
+#include <media/stagefright/Utils.h>
 
 #include <gui/ISurfaceTexture.h>
 #include <gui/SurfaceTextureClient.h>
@@ -1918,54 +1919,15 @@ status_t AwesomePlayer::initAudioDecoder() {
     CHECK(meta->findCString(kKeyMIMEType, &mime));
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    status_t mimemap;
-    int32_t sampleRate;
-    mimemap = mapMimeToAudioFormat(&mAudioFormat, mime);
-    if (!mAudioTrack->getFormat()->findInt32(kKeySampleRate, &sampleRate)) {
-        return NO_INIT;
-    }
-    int32_t channels;
-    if (!mAudioTrack->getFormat()->findInt32(kKeyChannelCount, &channels)) {
-        return NO_INIT;
-    }
-
-    int avgBitRate = -1;
-    mAudioTrack->getFormat()->findInt32(kKeyBitRate, &avgBitRate);
-    ALOGV("initAudioDecoder: the avgBitrate = %ld", avgBitRate);
-
-    if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
-        ALOGV("initAudioDecoder: MEDIA_MIMETYPE_AUDIO_AAC");
-        uint32_t bitRate = -1;
-        if (setAACParameters(meta, &mAudioFormat, &bitRate) != OK) {
-                ALOGV("Failed to set AAC parameters/Unsupported AAC format, use non-offload");
-                mAudioFormat = AUDIO_FORMAT_PCM_16_BIT;
-        } else {
-                avgBitRate = (int)bitRate;
-        }
-    }
-
-    ALOGV("initAudioDecoder: sampleRate %d, channels %d", sampleRate, channels);
-    int64_t durationUs;
-    if (mAudioTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
-        Mutex::Autolock autoLock(mMiscStateLock);
-        if (mDurationUs < 0 || durationUs > mDurationUs) {
-            mDurationUs = durationUs;
-        }
-    }
+    status_t mimemap = mapMimeToAudioFormat(&mAudioFormat, mime);
 
     ALOGV("initAudioDecoder: Sink creation error value %d", mOffloadSinkCreationError);
-    status_t stat = OK;
-    if ( (!mOffloadSinkCreationError) && (AudioSystem::isOffloadSupported(
-                mAudioFormat,
-                AUDIO_STREAM_MUSIC,
-                sampleRate,
-                avgBitRate,
-                mDurationUs,
-                mAudioSink->getSessionId(),
+    if ( (!mOffloadSinkCreationError) && canOffloadStream( meta,
                 (mVideoTrack != NULL && mVideoSource != NULL),
-                isStreamingHTTP()) && !(isAudioEffectEnabled())) )
+                isStreamingHTTP() && !(isAudioEffectEnabled()),
+                mAudioSink->getSessionId()) )
     {
-        ALOGI("initAudioDecoder: Offload supported, creating AudioPlayer");
+        ALOGI("initAudioDecoder: Offload supported");
         mOffload = true;
         mAudioSource = mAudioTrack;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
@@ -3706,6 +3668,7 @@ void AwesomePlayer::postAudioOffloadTearDownEvent_l() {
 #endif
 }
 
+#if 0
 status_t AwesomePlayer::mapMimeToAudioFormat(audio_format_t *audioFormat, const char *mime) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     status_t val = OK;
@@ -3750,7 +3713,6 @@ status_t AwesomePlayer::mapMimeToAudioFormat(audio_format_t *audioFormat, const 
 #endif
     return OK;
 }
-
 status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFormat, uint32_t *avgBitRate) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     // Get ESDS and check its validity
@@ -3890,6 +3852,7 @@ status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFor
 #endif
     return OK;
 }
+#endif
 /* Function will start a timer, which will expire if resume does not happen
  * in the configured duration. On timer expiry the callback function will
  * be invoked
