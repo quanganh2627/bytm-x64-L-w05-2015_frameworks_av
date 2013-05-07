@@ -100,6 +100,9 @@ AudioPlayer::AudioPlayer(
       mStartPos = 0;
       mOffloadPostEOSPending = false;
 #endif
+#ifdef BGM_ENABLED
+      mAllowBackgroundPlayback = false;
+#endif //BGM_ENABLED
 }
 
 AudioPlayer::~AudioPlayer() {
@@ -176,15 +179,19 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
     }
 
 #ifdef BGM_ENABLED
-    String8 reply;
-    char* bgmKVpair;
+    mAllowBackgroundPlayback = false;
+    if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+       String8 reply;
+       char* bgmKVpair;
 
-    reply =  AudioSystem::getParameters(0,String8(AudioParameter::keyBGMState));
-    bgmKVpair = strpbrk((char *)reply.string(), "=");
-    ALOGV("%s [BGMUSIC] bgmKVpair = %s",__func__,bgmKVpair);
-    ++bgmKVpair;
-    mAllowBackgroundPlayback = strcmp(bgmKVpair,"true") ? false : true;
-    ALOGD("%s [BGMUSIC] mAllowBackgroundPlayback = %d",__func__,mAllowBackgroundPlayback);
+       reply =  AudioSystem::getParameters(0,String8(AudioParameter::keyBGMState));
+       bgmKVpair = strpbrk((char *)reply.string(), "=");
+       ALOGV("%s [BGMUSIC] bgmKVpair = %s",__func__,bgmKVpair);
+       ++bgmKVpair;
+       mAllowBackgroundPlayback = strcmp(bgmKVpair,"true") ? false : true;
+       ALOGD("%s [BGMUSIC] mAllowBackgroundPlayback = %d",__func__,mAllowBackgroundPlayback);
+    }
 #endif
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
@@ -204,6 +211,7 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
         } else {
 #ifdef BGM_ENABLED
            if((mAllowBackgroundPlayback) &&(!mAllowDeepBuffering)) {
+
               err = mAudioSink->open(
                   mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
                   DEFAULT_AUDIOSINK_BUFFERCOUNT,
@@ -230,6 +238,7 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
     if (mAudioSink.get() != NULL) {
 #ifdef BGM_ENABLED
        if((mAllowBackgroundPlayback) &&(!mAllowDeepBuffering)) {
+
           status_t  err = mAudioSink->open(
                         mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
                         DEFAULT_AUDIOSINK_BUFFERCOUNT,
