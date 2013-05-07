@@ -1897,6 +1897,18 @@ sp<AudioFlinger::PlaybackThread::Track> AudioFlinger::PlaybackThread::createTrac
     { // scope for mLock
         Mutex::Autolock _l(mLock);
 
+        for (size_t i = 0; i < mTracks.size(); ++i) {
+             sp<Track> t = mTracks[i];
+             if (t != 0 && t->isOffloaded()) {
+                 /* offload track found */
+                 if (sessionId != t->sessionId()) {
+                     ALOGV("Already offload in progress, use non offload decoding");
+                     lStatus = BAD_VALUE;
+                     goto Exit;
+                 }
+             }
+        }
+
         // all tracks in same audio session must share the same routing strategy otherwise
         // conflicts will happen when tracks are moved from one output to another by audio policy
         // manager
