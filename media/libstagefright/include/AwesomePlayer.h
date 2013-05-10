@@ -289,6 +289,7 @@ private:
     status_t setDataSource_l(const sp<DataSource> &dataSource);
     status_t setDataSource_l(const sp<MediaExtractor> &extractor);
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    void notifyMDSPlayerStatus_l(int status);
     void setDisplaySource_l(bool isplaying);
 #endif
     void reset_l();
@@ -424,6 +425,7 @@ private:
 #ifdef BGM_ENABLED
     bool mRemoteBGMsuspend;
     bool mBGMEnabled;
+    bool mBGMAudioAvailable;
 #endif
 
 #ifdef LVSE
