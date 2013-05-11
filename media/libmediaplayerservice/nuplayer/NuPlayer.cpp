@@ -1222,10 +1222,12 @@ void NuPlayer::performDecoderFlush() {
 
     if (mAudioDecoder != NULL) {
         flushDecoder(true /* audio */, false /* needShutdown */);
+        mAudioEOS = false;
     }
 
     if (mVideoDecoder != NULL) {
         flushDecoder(false /* audio */, false /* needShutdown */);
+        mVideoEOS = false;
     }
 }
 
