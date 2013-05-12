@@ -279,5 +279,11 @@ void NuPlayer::HTTPLiveSource::onSessionNotify(const sp<AMessage> &msg) {
     }
 }
 
+void NuPlayer::HTTPLiveSource::stop() {
+    if (mLiveSession != NULL) {
+        mLiveSession->disconnect();
+    }
+}
+
 }  // namespace android
 

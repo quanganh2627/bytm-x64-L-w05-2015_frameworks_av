@@ -28,6 +28,8 @@
 #include <media/stagefright/MetaData.h>
 
 namespace android {
+// set 4.5 s timeout to avoid block causing ANR
+const static int64_t kTimeOutInNs = 4500000000LL;
 
 NuPlayerDriver::NuPlayerDriver()
     : mState(STATE_IDLE),
@@ -359,7 +361,11 @@ status_t NuPlayerDriver::reset() {
     mPlayer->resetAsync();
 
     while (mState == STATE_RESET_IN_PROGRESS) {
-        mCondition.wait(mLock);
+        status_t err = mCondition.waitRelative(mLock, kTimeOutInNs);
+        if (err != OK) {
+            // in some extreme condition, shouldn't be here
+            ALOGW("reset time out, shouldn't be here");
+        }
     }
 
     mDurationUs = -1;
