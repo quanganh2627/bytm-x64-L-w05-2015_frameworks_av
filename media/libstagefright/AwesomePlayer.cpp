@@ -524,6 +524,10 @@ void AwesomePlayer::reset_l() {
         addBatteryData(params);
     }
 
+    if (mCachedSource != NULL) {
+        mCachedSource->interrupt(true);
+    }
+
     if (mFlags & PREPARING) {
         modifyFlags(PREPARE_CANCELLED, SET);
         if (mConnectingDataSource != NULL) {
@@ -1367,7 +1371,16 @@ status_t AwesomePlayer::setNativeWindow_l(const sp<ANativeWindow> &native) {
     pause_l();
     mVideoRenderer.clear();
 
+    if (mCachedSource != NULL) {
+        // interrupt the retrying
+        mCachedSource->interrupt(true);
+    }
     shutdownVideoDecoder_l();
+
+    if (mCachedSource != NULL) {
+        // resume the caching
+        mCachedSource->interrupt(false);
+    }
 
     status_t err = initVideoDecoder();
 
