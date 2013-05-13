@@ -100,6 +100,17 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
         return NULL;
     }
 
+    // check if the format of the other stream is null,if it's still null
+    // return null for this stream's format to make sure two decoders can
+    // be initialized at the same time
+    ATSParser::SourceType otherType =
+        !audio ? ATSParser::AUDIO : ATSParser::VIDEO;
+    sp<AnotherPacketSource> anotherSource =
+        static_cast<AnotherPacketSource *>(mTSParser->getSource(otherType).get());
+    if (anotherSource != NULL && anotherSource->getFormat() == NULL) {
+        return NULL;
+    }
+
     return source->getFormat();
 }
 
