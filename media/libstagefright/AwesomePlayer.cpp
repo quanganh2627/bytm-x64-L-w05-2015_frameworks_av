@@ -444,7 +444,7 @@ void AwesomePlayer::notifyMDSPlayerStatus_l(int status) {
     }
 
     if (mMDClient != NULL) {
-        mMDClient->prepareForVideo(status);
+        mMDClient->setVideoState((MDS_VIDEO_STATE)status);
 
         if (status == MDS_VIDEO_UNPREPARED) {
             delete mMDClient;
@@ -456,7 +456,9 @@ void AwesomePlayer::notifyMDSPlayerStatus_l(int status) {
 }
 
 void AwesomePlayer::setDisplaySource_l(bool isplaying) {
-    MDSVideoInfo info;
+    MDSVideoSourceInfo info;
+    memset(&info, 0, sizeof(MDSVideoSourceInfo));
+
     if (isplaying) {
         if (mVideoSource != NULL) {
             if (mMDClient == NULL) {
@@ -471,7 +473,6 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
              * directly to the window compositor;
              */
             if (wcom == 1) {
-                memset(&info, 0, sizeof(MDSVideoInfo));
                 info.isplaying = true;
                 info.isprotected = (mDecryptHandle != NULL);
                 {
@@ -480,15 +481,14 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
                     info.displayW = mStats.mVideoWidth;
                     info.displayH = mStats.mVideoHeight;
                 }
-                mMDClient->updateVideoInfo(&info);
+                mMDClient->setVideoSourceInfo(&info);
             }
         }
     } else {
         if (mMDClient != NULL) {
-           memset(&info, 0, sizeof(MDSVideoInfo));
            info.isplaying = false;
            info.isprotected = false;
-           mMDClient->updateVideoInfo(&info);
+           mMDClient->setVideoSourceInfo(&info);
            mFramesToDirty = 0;
         }
     }

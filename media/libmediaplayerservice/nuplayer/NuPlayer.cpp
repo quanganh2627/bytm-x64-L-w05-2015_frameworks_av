@@ -111,7 +111,8 @@ void NuPlayer::setDataSource(const sp<IStreamSource> &source) {
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 void NuPlayer::setDisplaySource(bool isplaying) {
-    MDSVideoInfo info;
+    MDSVideoSourceInfo info;
+    memset(&info, 0 ,sizeof(&info));
     if (isplaying) {
         int wcom = 0;
         if (mANativeWindow != NULL) {
@@ -126,7 +127,6 @@ void NuPlayer::setDisplaySource(bool isplaying) {
             int32_t displayW, displayH, frameRate;
             bool success = false;
             displayW = displayH = frameRate = 0;
-            memset(&info, 0 ,sizeof(&info));
             info.isplaying = true;
             info.isprotected = false;
             msg = mSource->getFormat(false);
@@ -144,14 +144,13 @@ void NuPlayer::setDisplaySource(bool isplaying) {
             info.frameRate = frameRate;
             info.displayW  = displayW;
             info.displayH  = displayH;
-            mMDClient->updateVideoInfo(&info);
+            mMDClient->setVideoSourceInfo(&info);
         }
     } else {
       if (mMDClient != NULL) {
-          memset(&info, 0 ,sizeof(&info));
           info.isplaying = false;
           info.isprotected = false;
-          mMDClient->updateVideoInfo(&info);
+          mMDClient->setVideoSourceInfo(&info);
           delete mMDClient;
           mMDClient = NULL;
       }
