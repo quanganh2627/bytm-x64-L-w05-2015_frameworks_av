@@ -228,12 +228,12 @@ MediaPlayerService::MediaPlayerService()
     MediaPlayerFactory::registerBuiltinFactories();
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-   // Reset video playback status in case media server crashes.
+    // Reset video playback status in case media server crashes.
     MultiDisplayClient* client = new MultiDisplayClient;
     if (client) {
-        MDSVideoInfo info;
-        memset(&info, 0, sizeof(MDSVideoInfo));
-        client->updateVideoInfo(&info);
+        MDSVideoSourceInfo info;
+        memset(&info, 0, sizeof(MDSVideoSourceInfo));
+        client->setVideoSourceInfo(&info);
         delete client;
     }
 #endif
