@@ -1411,12 +1411,14 @@ struct MyHandler : public AHandler {
         AString val;
         CHECK(GetAttribute(range.c_str(), "npt", &val));
 
-        float npt1, npt2;
+        float npt1 = 0;
+        float npt2;
         if (!ASessionDescription::parseNTPRange(val.c_str(), &npt1, &npt2)) {
-            // This is a live stream and therefore not seekable.
-
-            ALOGI("This is a live stream");
-            return;
+            // check whether is it a live stream, live streaming is not seekable
+            if (isLiveStream(mSessionDesc)) {
+                ALOGI("This is a live stream");
+                return;
+            }
         }
 
         i = response->mHeaders.indexOfKey("rtp-info");
