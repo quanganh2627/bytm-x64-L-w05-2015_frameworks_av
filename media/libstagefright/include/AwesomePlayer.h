@@ -419,7 +419,6 @@ private:
     bool mAudioOffloadTearDownEventPending;
     bool mOffloadSinkCreationError;
 
-    bool mIsMusic;
     bool mDeepBufferAudio;
     bool mDeepBufferTearDown;
 
