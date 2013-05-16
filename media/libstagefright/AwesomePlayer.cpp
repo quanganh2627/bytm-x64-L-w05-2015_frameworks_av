@@ -227,7 +227,6 @@ AwesomePlayer::AwesomePlayer()
       mExtractorFlags(0),
       mVideoBuffer(NULL),
       mDecryptHandle(NULL),
-      mIsMusic(true),
       mDeepBufferAudio(false),
       mDeepBufferTearDown(false),
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
@@ -391,10 +390,6 @@ status_t AwesomePlayer::setDataSource_l(
 status_t AwesomePlayer::setDataSource(
         int fd, int64_t offset, int64_t length) {
     Mutex::Autolock autoLock(mLock);
-
-    if (offset > 0) {
-        mIsMusic = false;
-    }
 
     reset_l();
 
@@ -1245,8 +1240,7 @@ status_t AwesomePlayer::play_l() {
                         && (mDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US ||
                         (getCachedDuration_l(&cachedDurationUs, &eos) &&
                         cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))
-                        && !isInCall()
-                        && mIsMusic) {
+                        && !isInCall()) {
                     allowDeepBuffering = true;
                 } else {
                     allowDeepBuffering = false;
