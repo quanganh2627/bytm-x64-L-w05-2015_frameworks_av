@@ -1144,22 +1144,22 @@ M4OSA_ERR M4MP4W_addStream(M4OSA_Context context,
                         PPSLength = DSI[10];
                         memcpy(
                             (void *)mMp4FileDataPtr->videoTrackPtr->DSI,
-                            (void *)((streamDescPtr->
+                            (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+12), 2);
                         memcpy(
                             (void *)((mMp4FileDataPtr->videoTrackPtr->
-                            DSI)+2), (void *)((streamDescPtr->
+                            DSI)+2), (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+28), SPSLength);
 
                         memcpy(
                             (void *)((mMp4FileDataPtr->videoTrackPtr->
                             DSI)+2 + SPSLength),
-                            (void *)((streamDescPtr->
+                            (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+20), 2);
                         memcpy(
                             (void *)((mMp4FileDataPtr->videoTrackPtr->
                             DSI)+4 + SPSLength),
-                            (void *)((streamDescPtr->
+                            (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+28 + SPSLength),
                             PPSLength);
                         /* - H.264 trimming */
