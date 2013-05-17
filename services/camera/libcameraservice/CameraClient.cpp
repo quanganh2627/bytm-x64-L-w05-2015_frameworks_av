@@ -774,11 +774,12 @@ void CameraClient::dataCallbackTimestamp(nsecs_t timestamp,
 void CameraClient::handleShutter(void) {
     CameraParameters params(mHardware->getParameters());
     if (mPlayShutterSound) {
+        const char* burstContinuous = params.get("burst-continuous");
         if ((params.getInt("burst-start-index") == 0) &&
             ((params.get("burst-length") != NULL) &&
              (params.getInt("burst-length") > 1)) ||
-            ((params.get("burst-continuous") != NULL) &&
-             (strcmp(params.get("burst-continuous"),"true") == 0)))
+            (burstContinuous != NULL &&
+             (strcmp(burstContinuous, "true") == 0)))
             mCameraService->playSound(CameraService::SOUND_BURST);
         else
             mCameraService->playSound(CameraService::SOUND_SHUTTER);
