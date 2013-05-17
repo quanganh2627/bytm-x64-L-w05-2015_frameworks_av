@@ -94,13 +94,15 @@ public:
     /* Get offload buffer size based on bit rate, sample rate and channel count
      * for each track
      */
-    size_t     getOffloadBufferSize(uint32_t bitRate,
+    size_t      getOffloadBufferSize(uint32_t bitRate,
                                     uint32_t sampleRate,
                                     uint32_t channel,
                                     audio_io_handle_t output = 0);
 
     /* Set parameters - only possible when using direct output */
-    status_t   setParameters(const String8& keyValuePairs);
+    status_t    setParameters(const String8& keyValuePairs);
+
+    status_t    setVolume(float left, float right);
 
     status_t    getPosition(uint32_t *position);
     status_t    obtainBuffer(Buffer* audioBuffer, int32_t waitCount);
