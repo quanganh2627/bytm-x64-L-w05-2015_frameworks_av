@@ -867,14 +867,14 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
         if( nal_unit_type == 8 )
         {
             M4OSA_TRACE1_0("Error : PPS");
-            return 0;
+            continue;
         }
 
         if( nal_unit_type == 7 )
         {
             /*SPS Packet */
             M4OSA_TRACE1_0("Error : SPS");
-            return 0;
+            continue;
         }
 
         if( (nal_unit_type == 5) )
