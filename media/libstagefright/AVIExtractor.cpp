@@ -189,6 +189,8 @@ status_t AVIExtractor::AVISource::read(
         ssize_t n = mExtractor->mDataSource->readAt(offset, out->data(), size);
 
         if (n < (ssize_t)size) {
+            out->release();
+            out = NULL;
             return n < 0 ? (status_t)n : (status_t)ERROR_MALFORMED;
         }
 
