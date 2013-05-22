@@ -1587,6 +1587,10 @@ M4OSA_ERR VideoEditorVideoDecoder_render(M4OSA_Context context,
     M4_MediaTime candidateTimeStamp = -1;
     M4OSA_Bool bFound = M4OSA_FALSE;
 
+    M4_MediaTime minTimeStampDifference = 100000;
+    M4_MediaTime mTimeStampDifference;
+    M4OSA_UInt32 matchBufferIdx;
+
     ALOGV("VideoEditorVideoDecoder_render begin");
     // Input parameters check
     VIDEOEDITOR_CHECK(M4OSA_NULL != context, M4ERR_PARAMETER);
@@ -1629,8 +1633,31 @@ M4OSA_ERR VideoEditorVideoDecoder_render(M4OSA_Context context,
         }
     }
     if (M4OSA_FALSE == bFound) {
-        err = M4WAR_VIDEORENDERER_NO_NEW_FRAME;
-        goto cleanUp;
+            // Sometimes the nearest cts is larger than *pTime
+        for (i=0; i < pDecShellContext->m_pDecBufferPool->NB; i++) {
+            pTmpVIDEOEDITORBuffer = &pDecShellContext->m_pDecBufferPool->pNXPBuffer[i];
+            if (pTmpVIDEOEDITORBuffer->state == VIDEOEDITOR_BUFFER_kFilled) {
+                mTimeStampDifference = abs(pTmpVIDEOEDITORBuffer->buffCTS - *pTime);
+                if (minTimeStampDifference > mTimeStampDifference)
+                {
+                    minTimeStampDifference = mTimeStampDifference;
+                    matchBufferIdx = i;
+                    bFound = M4OSA_TRUE;
+                    ALOGV("mTimeStampDifference = %lf, matchBufferIdx = %d",minTimeStampDifference,matchBufferIdx);
+                }
+            }
+        }
+        if (bFound) {
+            pRenderVIDEOEDITORBuffer = &pDecShellContext->m_pDecBufferPool->pNXPBuffer[matchBufferIdx];
+            candidateTimeStamp = pRenderVIDEOEDITORBuffer->buffCTS;
+            ALOGV("VideoDecoder_render_NV12: found a buffer with nearest timestamp = %lf",
+                    candidateTimeStamp);
+        }
+        else
+        {
+            err = M4WAR_VIDEORENDERER_NO_NEW_FRAME;
+            goto cleanUp;
+        }
     }
 
     ALOGV("VideoEditorVideoDecoder_render 3 ouput %d %d %d %d",
