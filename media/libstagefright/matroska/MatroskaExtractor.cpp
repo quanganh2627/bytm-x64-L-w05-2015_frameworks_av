@@ -278,6 +278,16 @@ void BlockIterator::advance_l() {
 
             res = mCluster->Parse(pos, len);
             ALOGV("Parse (2) returned %ld", res);
+
+            if (res < 0) {
+                // I/O error
+
+                ALOGE("Cluster::Parse (2) returned result %ld", res);
+
+                mCluster = NULL;
+                break;
+            }
+
             CHECK_GE(res, 0);
 
             mBlockEntryIndex = 0;
