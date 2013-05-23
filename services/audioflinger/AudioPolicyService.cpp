@@ -1048,7 +1048,14 @@ int AudioPolicyService::setVoiceVolume(float volume, int delayMs)
     return (int)mAudioCommandThread->voiceVolumeCommand(volume, delayMs);
 }
 
-bool AudioPolicyService::isOffloadSupported( const audio_offload_info_t& config )
+bool AudioPolicyService::isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    int sessionId,
+                                    bool isVideo,
+                                    bool isStreaming) const
 {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mpAudioPolicy == NULL) {
@@ -1056,7 +1063,14 @@ bool AudioPolicyService::isOffloadSupported( const audio_offload_info_t& config 
     }
 
     return mpAudioPolicy->is_offload_supported(mpAudioPolicy,
-                                               &config);
+                                               format,
+                                               stream,
+                                               samplingRate,
+                                               bitRate,
+                                               duration,
+                                               sessionId,
+                                               isVideo,
+                                               isStreaming);
 #endif
     return false;
 }

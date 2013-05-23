@@ -239,7 +239,14 @@ public:
 
     static const sp<IAudioPolicyService>& get_audio_policy_service();
 
-    static bool isOffloadSupported(const audio_offload_info_t& config );
+    static bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    int sessionId,
+                                    bool hasVideo = false,
+                                    bool hasStreaming = false);
 
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     static int32_t getPrimaryOutputSamplingRate();
