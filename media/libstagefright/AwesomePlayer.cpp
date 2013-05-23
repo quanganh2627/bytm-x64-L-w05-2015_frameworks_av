@@ -249,6 +249,10 @@ AwesomePlayer::AwesomePlayer()
       mOffloadPauseUs(0),
       mOffloadSinkCreationError(false)
 #endif
+#ifdef BGM_ENABLED
+      ,
+      mAudioPlayerPaused(false)
+#endif
       {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
@@ -1525,6 +1529,7 @@ status_t AwesomePlayer::pause() {
 #endif
 
 #ifdef BGM_ENABLED
+    mAudioPlayerPaused = true;
     if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
 
@@ -4085,10 +4090,10 @@ bool AwesomePlayer::isAudioEffectEnabled() {
 #ifdef BGM_ENABLED
 status_t AwesomePlayer::remoteBGMSuspend() {
 
-    // If BGM is enabled or enabled previouslt and exited then the
+    // If BGM is enabled or enabled previously and exited then the
     // track/ sink needs to be closed and recreated again so that
     // music is heard on active output and not on multitasked output
-    if(mFlags & AUDIOPLAYER_STARTED) {
+    if((mFlags & AUDIOPLAYER_STARTED) && (mAudioPlayerPaused)) {
        ALOGD("[BGMUSIC] %s :: reset the audio player",__func__);
        // Store the current status and use it while starting for IA decoding
        // Terminate the active stream by calling reset_l()
@@ -4107,6 +4112,7 @@ status_t AwesomePlayer::remoteBGMSuspend() {
        mExtractorFlags = extractorFlags;
        mStats = stats;
        mRemoteBGMsuspend = true;
+       mAudioPlayerPaused =  false;
     }
 
     return OK;

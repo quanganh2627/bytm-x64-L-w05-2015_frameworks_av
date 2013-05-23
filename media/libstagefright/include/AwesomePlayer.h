@@ -131,6 +131,7 @@ struct AwesomePlayer {
 #ifdef BGM_ENABLED
     status_t remoteBGMSuspend();
     status_t remoteBGMResume();
+    bool mAudioPlayerPaused;
 #endif
     bool mOffloadCalAudioEOS;
     bool mOffloadPostAudioEOS;
