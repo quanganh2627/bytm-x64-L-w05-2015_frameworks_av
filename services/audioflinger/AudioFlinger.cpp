@@ -2038,10 +2038,17 @@ void AudioFlinger::PlaybackThread::setStreamVolume(audio_stream_type_t stream, f
     // Check if MusicOffload Track is running, if so, instanly apply volume
     // AudioTrack.
     ALOGV("setStreamVolume of thread");
-    if ( (stream == AUDIO_STREAM_MUSIC) && (isOffloadTrack()) &&
-         (getOutput_l()) ) {
+    if ((stream == AUDIO_STREAM_MUSIC) && (isOffloadTrack()) &&
+        (getOutput_l())) {
         ALOGV("DIRECT thread calling set_volume");
-        getOutput_l()->stream->set_volume(getOutput_l()->stream, value, value);
+        if (mActiveTracks.size() != 0) {
+            sp<Track> t = mActiveTracks[0].promote();
+            // The track died recently
+            if (t == 0) return;
+
+            Track* const track = t.get();
+            track->setVolume(value, value);
+        }
     }
 #endif
     Mutex::Autolock _l(mLock);
