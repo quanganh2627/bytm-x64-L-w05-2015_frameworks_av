@@ -2050,8 +2050,10 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l() {
         memset(&info, 0, sizeof(VPPVideoInfo));
         if (mVideoTrack != NULL)
             meta = mVideoTrack->getFormat();
-        if (meta != NULL)
-            CHECK(meta->findInt32(kKeyFrameRate, &fps));
+        if (meta != NULL && !meta->findInt32(kKeyFrameRate, &fps)) {
+            ALOGW("No frame rate info found");
+            fps = 0;
+        }
         if (mVideoSource != NULL) {
             meta = mVideoSource->getFormat();
             if (meta != NULL) {
