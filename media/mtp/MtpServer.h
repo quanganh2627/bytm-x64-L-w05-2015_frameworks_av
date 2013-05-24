@@ -64,6 +64,7 @@ private:
     MtpObjectHandle     mSendObjectHandle;
     MtpObjectFormat     mSendObjectFormat;
     MtpString           mSendObjectFilePath;
+    MtpString           mDirtyFilePath;
     size_t              mSendObjectFileSize;
 
     Mutex               mMutex;
