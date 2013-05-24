@@ -235,6 +235,11 @@ void MtpServer::run() {
         mDatabase->sessionEnded();
     close(fd);
     mFD = -1;
+
+    if (mDirtyFilePath.length() != 0) {
+        ALOGD("Delete dirty file %s. \n", (const char *)mDirtyFilePath);
+        unlink(mDirtyFilePath);
+    }
 }
 
 void MtpServer::sendObjectAdded(MtpObjectHandle handle) {
@@ -959,7 +964,12 @@ MtpResponseCode MtpServer::doSendObject() {
     close(mfr.fd);
 
     if (ret < 0) {
-        unlink(mSendObjectFilePath);
+        if (errno == EIO) {
+            mDirtyFilePath = mSendObjectFilePath;
+        } else {
+            unlink(mSendObjectFilePath);
+        }
+
         if (errno == ECANCELED || errno == EIO )
             result = MTP_RESPONSE_TRANSACTION_CANCELLED;
         else
