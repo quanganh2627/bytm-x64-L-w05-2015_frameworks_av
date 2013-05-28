@@ -141,6 +141,7 @@ private:
     friend class VPPProcessor;
     uint32_t mVppInBufNum;
     uint32_t mVppOutBufNum;
+    bool mVppBufAvail;
 #endif
 
     // Call this with mLock hold
