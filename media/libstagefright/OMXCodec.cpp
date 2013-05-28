@@ -1508,6 +1508,7 @@ OMXCodec::OMXCodec(
 #ifdef TARGET_HAS_VPP
       mVppInBufNum(0),
       mVppOutBufNum(0),
+      mVppBufAvail(false),
 #endif
       mOMXLivesLocally(omx->livesLocally(node, getpid())),
       mNode(node),
@@ -1904,8 +1905,7 @@ void OMXCodec::setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum) {
 }
 
 bool OMXCodec::isVppBufferAvail() {
-    if (mVppInBufNum == 0) return false;
-    return true;
+    return mVppBufAvail && (mVppInBufNum != 0) && (mVppOutBufNum != 0);
 }
 #endif
 
@@ -2012,7 +2012,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
 
 #ifdef TARGET_HAS_VPP
     //add more buffers
-    bool isVppOn = VPPProcessor::isVppOn();
+    bool isVppOn = VPPProcessor::isVppOn() && !(usage & GRALLOC_USAGE_PROTECTED);
     if (isVppOn) {
         ALOGE("def.nBufferCountActual = %d",def.nBufferCountActual);
         int totalBufferCount = def.nBufferCountActual + mVppInBufNum + mVppOutBufNum;
@@ -2028,13 +2028,11 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                     def.nBufferCountActual, err);
                 return err;
             }
+            mVppBufAvail = true;
         } else {
             err = native_window_set_buffer_count(
                 mNativeWindow.get(), def.nBufferCountActual);
-            if (err == 0) {
-                mVppInBufNum = 0;
-                mVppOutBufNum = 0;
-            } else {
+            if (err != 0) {
                 ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err),
                         -err);
                 return err;
@@ -2106,7 +2104,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
     } else {
         // Return the last two buffers to the native window.
 #ifdef TARGET_HAS_VPP
-        if (isVppOn) {
+        if (mVppBufAvail) {
             cancelStart = def.nBufferCountActual - minUndequeuedBufs - mVppOutBufNum;
         } else {
             cancelStart = def.nBufferCountActual - minUndequeuedBufs;

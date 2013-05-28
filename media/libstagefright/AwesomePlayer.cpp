@@ -1774,12 +1774,7 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
 #ifdef TARGET_HAS_VPP
         if (mVPPProcessor != NULL) {
             bool success = omxCodec->isVppBufferAvail();
-            if (success) {
-                if(err != VPP_OK) {
-                    delete mVPPProcessor;
-                    mVPPProcessor = NULL;
-                }
-            } else {
+            if (!success) {
                 delete mVPPProcessor;
                 mVPPProcessor = NULL;
             }
