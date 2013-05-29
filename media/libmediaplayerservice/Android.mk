@@ -74,7 +74,10 @@ ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
 endif
 #VPP support on MRFLD only
 ifeq ($(TARGET_HAS_VPP), true)
-    LOCAL_CFLAGS += -DGFX_BUF_EXT
+    LOCAL_CFLAGS += -DTARGET_HAS_VPP -DGFX_BUF_EXT
+    LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libmedia_utils_vpp \
+        $(TARGET_OUT_HEADERS)/libva
 endif
 
 LOCAL_MODULE:= libmediaplayerservice
