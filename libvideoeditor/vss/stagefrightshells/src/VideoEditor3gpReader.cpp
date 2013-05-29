@@ -1822,6 +1822,7 @@ M4OSA_ERR VideoEditor3gpReader_getNextStreamHandler(M4OSA_Context context,
                 }
             } else {
                 ALOGV("VideoEditor3gpReader_getNextStream mStreamType: none ");
+                pC->mCurrTrack++; //Increment current track to get the next track
                 return M4ERR_READER_UNKNOWN_STREAM_TYPE;
             }
         } else {
