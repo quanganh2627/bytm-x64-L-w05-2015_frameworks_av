@@ -209,7 +209,7 @@ AudioResampler* AudioResampler::create(int bitDepth, int inChannelCount,
     case INTEL_MED_QUALITY:
     case INTEL_HIGH_QUALITY:
     case INTEL_VERY_HIGH_QUALITY:
-        LOGV("Create intel  Resampler");
+        ALOGV("Create intel  Resampler");
         resampler = new AudioResamplerIA(bitDepth, inChannelCount, sampleRate);
         break;
 #endif
