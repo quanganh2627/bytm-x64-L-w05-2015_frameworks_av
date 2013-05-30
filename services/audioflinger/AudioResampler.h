@@ -41,7 +41,19 @@ public:
         MED_QUALITY=2,
         HIGH_QUALITY=3,
         VERY_HIGH_QUALITY=4,
+#ifdef USE_INTEL_SRC
+        INTEL_LOW_QUALITY=400,
+        INTEL_MED_QUALITY=401,
+        INTEL_HIGH_QUALITY=402,
+        INTEL_VERY_HIGH_QUALITY=403,
+#endif
     };
+#ifdef USE_INTEL_SRC
+    enum resampler_type_tag {
+        AF_DEFAULT_SRC=0,
+        INTEL_SRC=1
+    } mResType;
+#endif
 
     static AudioResampler* create(int bitDepth, int inChannelCount,
             int32_t sampleRate, src_quality quality=DEFAULT_QUALITY);
@@ -91,9 +103,9 @@ protected:
 
     int64_t calculateOutputPTS(int outputFrameIndex);
 
-    const int32_t mBitDepth;
-    const int32_t mChannelCount;
-    const int32_t mSampleRate;
+    int32_t mBitDepth;
+    int32_t mChannelCount;
+    int32_t mSampleRate;
     int32_t mInSampleRate;
     AudioBufferProvider::Buffer mBuffer;
     union {
