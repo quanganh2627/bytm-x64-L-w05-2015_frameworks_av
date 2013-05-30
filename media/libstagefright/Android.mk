@@ -1,6 +1,16 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(USE_INTEL_LVSE)),true)
+
+LOCAL_CFLAGS += -DLVSE
+LOCAL_PATH_NXP := ../../../../device/intel/PRIVATE/lifevibes/lvse
+LOCAL_PREBUILT_LIBS += $(LOCAL_PATH_NXP)/libmusicbundle.a
+include $(BUILD_MULTI_PREBUILT)
+endif
+
+include $(CLEAR_VARS)
+
 include frameworks/av/media/libstagefright/codecs/common/Config.mk
 
 LOCAL_SRC_FILES:=                         \
@@ -184,6 +194,20 @@ LOCAL_SHARED_LIBRARIES += \
         libdl
 
 LOCAL_CFLAGS += -Wno-multichar
+
+ifeq ($(strip $(USE_INTEL_LVSE)),true)
+
+LOCAL_STATIC_LIBRARIES += \
+        libmusicbundle \
+        libLVAudioSource \
+
+endif
+
+ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
+    LOCAL_SHARED_LIBRARIES += libmultidisplay
+    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+endif
 
 LOCAL_MODULE:= libstagefright
 

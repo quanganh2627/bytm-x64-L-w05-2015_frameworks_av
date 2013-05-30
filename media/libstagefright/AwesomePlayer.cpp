@@ -543,6 +543,12 @@ void AwesomePlayer::reset_l() {
         // _it_ is stopped. Otherwise this is still our responsibility.
         mAudioSource->stop();
     }
+
+#ifdef LVSE
+    LOGV("mLVAudioSource.clear");
+    mLVAudioSource.clear();
+#endif
+
     mAudioSource.clear();
 
     mTimeSource = NULL;
@@ -1452,6 +1458,21 @@ status_t AwesomePlayer::initAudioDecoder() {
 
     if (mAudioSource != NULL) {
         int64_t durationUs;
+
+#ifdef LVSE
+        // insert LifeVibes component
+
+        int32_t sampleRate;
+        (mAudioSource->getFormat())->findInt32(kKeySampleRate, &sampleRate);
+        LOGV("\tLVSE: mAudioSource sampleRate = %d", sampleRate);
+
+        (mAudioTrack->getFormat())->findInt32(kKeySampleRate, &sampleRate);
+        LOGV("\tLVSE: mAudioTrack sampleRate = %d", sampleRate);
+
+        mLVAudioSource = new LVAudioSource(mAudioSource, mAudioSink->getSessionId());
+        mAudioSource = mLVAudioSource;
+#endif
+
         if (mAudioTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
             Mutex::Autolock autoLock(mMiscStateLock);
             if (mDurationUs < 0 || durationUs > mDurationUs) {
