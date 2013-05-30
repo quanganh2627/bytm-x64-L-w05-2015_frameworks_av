@@ -634,6 +634,10 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
             mState = state;
             triggerEvents(AudioSystem::SYNC_EVENT_PRESENTATION_COMPLETE);
         }
+    } else if (thread == 0) {
+      /*in case of direct output thread, on disconnect; the thread exits hence
+       we need to make sure the tracks are restored */
+        status = DEAD_OBJECT;
     } else {
         status = BAD_VALUE;
     }
