@@ -1289,13 +1289,13 @@ sp<AudioFlinger::PlaybackThread::Track> AudioFlinger::PlaybackThread::createTrac
                 lStatus = BAD_VALUE;
                 goto Exit;
         }
+         // Resampler implementation limits input sampling rate to 2 x output sampling rate.
+        if ((sampleRate > mSampleRate*2)
 #ifdef USE_INTEL_SRC
         //check if Intel SRC support this conversion
-        if (!AudioResamplerIA::sampleRateSupported(sampleRate, mSampleRate)) {
-#else
-        // Resampler implementation limits input sampling rate to 2 x output sampling rate.
-        if (sampleRate > mSampleRate*2) {
+        && (!AudioResamplerIA::sampleRateSupported(sampleRate, mSampleRate))
 #endif
+        ) {
             ALOGE("Sample rate out of range: %u mSampleRate %u", sampleRate, mSampleRate);
             lStatus = BAD_VALUE;
             goto Exit;

@@ -70,7 +70,7 @@ void AudioResamplerIA::setSampleRate(int32_t inSampleRate)
         delete [] mFloatOut;
         mFloatOut = new float[(mMaxInputBufferSize+64)*mSampleRate/mInSampleRate];
         mReinitNeeded = 0;
-        LOGD("Create AudioResamplerIA Resampler: Input rate %i, output rate %i",
+        ALOGD("Create AudioResamplerIA Resampler: Input rate %i, output rate %i",
              mInSampleRate, mSampleRate);
     }
 }
