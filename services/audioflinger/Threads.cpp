@@ -53,6 +53,10 @@
 #include "ServiceUtilities.h"
 #include "SchedulingPolicyService.h"
 
+#ifdef USE_INTEL_SRC
+#include "AudioResamplerIA.h"
+#endif
+
 #undef ADD_BATTERY_DATA
 
 #ifdef ADD_BATTERY_DATA
@@ -1182,8 +1186,13 @@ sp<AudioFlinger::PlaybackThread::Track> AudioFlinger::PlaybackThread::createTrac
             }
         }
     } else {
+#ifdef USE_INTEL_SRC
+        //check if Intel SRC support this conversion
+        if (!AudioResamplerIA::sampleRateSupported(sampleRate, mSampleRate)) {
+#else
         // Resampler implementation limits input sampling rate to 2 x output sampling rate.
         if (sampleRate > mSampleRate*2) {
+#endif
             ALOGE("Sample rate out of range: %u mSampleRate %u", sampleRate, mSampleRate);
             lStatus = BAD_VALUE;
             goto Exit;
@@ -2736,7 +2745,14 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
                 AudioMixer::CHANNEL_MASK, (void *)track->channelMask());
             // limit track sample rate to 2 x output sample rate, which changes at re-configuration
             uint32_t maxSampleRate = mSampleRate * 2;
+
             uint32_t reqSampleRate = track->mServerProxy->getSampleRate();
+#ifdef USE_INTEL_SRC
+            if (!AudioResamplerIA::sampleRateSupported(mSampleRate, reqSampleRate)) {
+                //TODO
+                ALOGW("[INTEL RESAMPLER] unsupported SR");
+            }
+#endif
             if (reqSampleRate == 0) {
                 reqSampleRate = mSampleRate;
             } else if (reqSampleRate > maxSampleRate) {
@@ -4275,11 +4291,17 @@ bool AudioFlinger::RecordThread::checkForNewParameters_l()
                 if (status == BAD_VALUE &&
                     reqFormat == mInput->stream->common.get_format(&mInput->stream->common) &&
                     reqFormat == AUDIO_FORMAT_PCM_16_BIT &&
+#ifdef USE_INTEL_SRC
+                    (AudioResamplerIA::sampleRateSupported(mSampleRate, mReqSampleRate)) &&
+                    (popcount(mInput->stream->common.get_channels(&mInput->stream->common)) < 3) &&
+                    (reqChannelCount < 3)) {
+#else
                     (mInput->stream->common.get_sample_rate(&mInput->stream->common)
                             <= (2 * reqSamplingRate)) &&
-                    popcount(mInput->stream->common.get_channels(&mInput->stream->common))
-                            <= FCC_2 &&
+                    (popcount(mInput->stream->common.get_channels(&mInput->stream->common))
+                            <= FCC_2) &&
                     (reqChannelCount <= FCC_2)) {
+#endif
                     status = NO_ERROR;
                 }
                 if (status == NO_ERROR) {
@@ -4367,7 +4389,16 @@ void AudioFlinger::RecordThread::readInputParameters()
         } else {
             channelCount = 2;
         }
+#ifdef USE_INTEL_SRC
+        if (AudioResamplerIA::sampleRateSupported(mSampleRate, mReqSampleRate)) {
+            mResampler = AudioResampler::create(16, channelCount,
+                             mReqSampleRate, AudioResampler::INTEL_HIGH_QUALITY);
+        } else {
+            mResampler = AudioResampler::create(16, channelCount, mReqSampleRate);
+        }
+#else
         mResampler = AudioResampler::create(16, channelCount, mReqSampleRate);
+#endif
         mResampler->setSampleRate(mSampleRate);
         mResampler->setVolume(AudioMixer::UNITY_GAIN, AudioMixer::UNITY_GAIN);
         mRsmpOutBuffer = new int32_t[mFrameCount * 2];
