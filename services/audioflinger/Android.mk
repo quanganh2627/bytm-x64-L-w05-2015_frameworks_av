@@ -66,6 +66,14 @@ endif
 
 LOCAL_CFLAGS += -fvisibility=hidden
 
+ifeq ($(USE_INTEL_SRC),true)
+  LOCAL_CFLAGS += -DUSE_INTEL_SRC
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
+  LOCAL_SRC_FILES += AudioResamplerIA.cpp
+  LOCAL_SHARED_LIBRARIES += libaudioresample
+endif
+
+
 include $(BUILD_SHARED_LIBRARY)
 
 #
