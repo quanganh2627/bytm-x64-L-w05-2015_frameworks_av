@@ -98,4 +98,10 @@ LOCAL_C_INCLUDES := \
     $(call include-path-for, audio-effects) \
     $(call include-path-for, audio-utils)
 
+ifeq ($(USE_INTEL_SRC), true)
+  LOCAL_CFLAGS += -DUSE_INTEL_SRC
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
+  LOCAL_SHARED_LIBRARIES += libaudioresample
+endif
+
 include $(BUILD_SHARED_LIBRARY)
