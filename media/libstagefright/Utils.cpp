@@ -492,5 +492,18 @@ status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink,
 #endif
 }
 
+bool isInCall() {
+    ALOGV("isInCall");
+    audio_mode_t mode = AUDIO_MODE_INVALID;
+    const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
+
+    if (audioFlinger != 0) {
+        mode = audioFlinger->getMode();
+        ALOGV("isInCall: Mode read from AF = %d", mode);
+        return ((mode == AUDIO_MODE_IN_CALL) ||
+                (mode == AUDIO_MODE_IN_COMMUNICATION));
+    }
+    return false;
+}
 }  // namespace android
 

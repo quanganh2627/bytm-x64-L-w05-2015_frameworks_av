@@ -401,7 +401,6 @@ private:
     void postAudioOffloadTearDownEvent_l();
     void onAudioOffloadTearDownEvent();
     bool isAudioEffectEnabled();
-    bool isInCall();
     status_t createAudioPlayer(audio_format_t audioFormat,
                                int sampleRate,
                                int channelsCount,

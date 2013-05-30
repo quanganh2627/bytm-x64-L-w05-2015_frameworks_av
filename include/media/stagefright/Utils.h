@@ -50,6 +50,7 @@ void convertMessageToMetaData(
 status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink,
                             const sp<MetaData>& meta);
 
+bool isInCall();
 }  // namespace android
 
 #endif  // UTILS_H_
