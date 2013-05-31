@@ -554,13 +554,16 @@ bool AudioMixer::track_t::setResampler(uint32_t value, uint32_t devSampleRate)
     if (value != devSampleRate || resampler != NULL) {
         if (sampleRate != value) {
             sampleRate = value;
+
+            uint8_t channels = downmixerBufferProvider != NULL ? MAX_NUM_CHANNELS : channelCount;
+
             if (resampler == NULL) {
 #ifdef USE_INTEL_SRC
                 if (AudioResamplerIA::sampleRateSupported(sampleRate, devSampleRate)) {
-                    resampler = AudioResampler::create(format, channelCount,
+                    resampler = AudioResampler::create(format, channels,
                                 devSampleRate, AudioResampler::INTEL_HIGH_QUALITY);
                 } else {
-                    resampler = AudioResampler::create(format, channelCount, devSampleRate);
+                    resampler = AudioResampler::create(format, channels, devSampleRate);
                 }
 #else
                 ALOGV("creating resampler from track %d Hz to device %d Hz", value, devSampleRate);
@@ -576,9 +579,7 @@ bool AudioMixer::track_t::setResampler(uint32_t value, uint32_t devSampleRate)
                     quality = AudioResampler::DEFAULT_QUALITY;
                 }
                 resampler = AudioResampler::create(
-                        format,
-                        // the resampler sees the number of channels after the downmixer, if any
-                        downmixerBufferProvider != NULL ? MAX_NUM_CHANNELS : channelCount,
+                        format, channels,
                         devSampleRate, quality);
                 resampler->setLocalTimeFreq(sLocalTimeFreq);
 #endif
@@ -588,7 +589,8 @@ bool AudioMixer::track_t::setResampler(uint32_t value, uint32_t devSampleRate)
                 if (resampler->mResType == AudioResampler::INTEL_SRC &&
                     !AudioResamplerIA::sampleRateSupported(sampleRate, devSampleRate)) {
                     delete resampler;
-                    resampler = AudioResampler::create(format, channelCount, devSampleRate);
+                    resampler = AudioResampler::create(format, channels, devSampleRate);
+                    resampler->setLocalTimeFreq(sLocalTimeFreq);
                 }
             }
 #endif
