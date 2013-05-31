@@ -1145,12 +1145,17 @@ struct MyHandler : public AHandler {
         AString val;
         CHECK(GetAttribute(range.c_str(), "npt", &val));
 
-        float npt1, npt2;
+        float npt1 = 0;
+        float npt2;
         if (!ASessionDescription::parseNTPRange(val.c_str(), &npt1, &npt2)) {
-            // This is a live stream and therefore not seekable.
-
-            ALOGI("This is a live stream");
-            return;
+            // Check whether it is a live stream. Live stream is not seekable.
+            // In SDP,the value of "range" property of a live stream should be
+            // "range=now-" and getDurationUs() would return false
+            int64_t durationUs = 0ll;
+            if (!mSessionDesc->getDurationUs(&durationUs)) {
+                ALOGI("This is a live stream");
+                return;
+            }
         }
 
         i = response->mHeaders.indexOfKey("rtp-info");

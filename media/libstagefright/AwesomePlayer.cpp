@@ -49,7 +49,6 @@
 #include "include/AsyncOMXCodecWrapper.h"
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/OMXCodec.h>
-#include <media/stagefright/Utils.h>
 
 #include <gui/ISurfaceTexture.h>
 #include <gui/SurfaceTextureClient.h>
@@ -250,6 +249,10 @@ AwesomePlayer::AwesomePlayer()
       mOffloadPauseUs(0),
       mOffloadSinkCreationError(false)
 #endif
+#ifdef BGM_ENABLED
+      ,
+      mAudioPlayerPaused(false)
+#endif
       {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
@@ -299,10 +302,6 @@ AwesomePlayer::~AwesomePlayer() {
 
     mClient.disconnect();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    if (mDefaultNativeWindow != NULL) {
-        mDefaultNativeWindow.clear();
-        mMDClient->destroyVideoSurface();
-    }
     setDisplaySource_l(false);
     notifyMDSPlayerStatus_l(MDS_VIDEO_UNPREPARED);
 #endif
@@ -449,7 +448,7 @@ void AwesomePlayer::notifyMDSPlayerStatus_l(int status) {
     }
 
     if (mMDClient != NULL) {
-        mMDClient->prepareForVideo(status);
+        mMDClient->setVideoState((MDS_VIDEO_STATE)status);
 
         if (status == MDS_VIDEO_UNPREPARED) {
             delete mMDClient;
@@ -461,24 +460,13 @@ void AwesomePlayer::notifyMDSPlayerStatus_l(int status) {
 }
 
 void AwesomePlayer::setDisplaySource_l(bool isplaying) {
-    MDSVideoInfo info;
+    MDSVideoSourceInfo info;
+    memset(&info, 0, sizeof(MDSVideoSourceInfo));
+
     if (isplaying) {
         if (mVideoSource != NULL) {
             if (mMDClient == NULL) {
                 mMDClient = new MultiDisplayClient();
-            }
-            if (mNativeWindow == NULL) {
-                LOGV("create a new surface in AwesomePlayer");
-                // If no native window is set from app, create one in MDS.
-                // MDS will return a new surface only if play in background
-                // feature is enabled by Application.
-                // Else it returns Null
-                mDefaultNativeWindow =
-                    mMDClient->createNewVideoSurface(DEFAULT_SURFACE_WIDTH, DEFAULT_SURFACE_HEIGHT,
-                        DEFAULT_SURFACE_PIXEL_FORMAT, (int)this);
-                if (mDefaultNativeWindow != NULL) {
-                    setNativeWindow_l(mDefaultNativeWindow);
-                }
             }
             int wcom = 0;
             if (mNativeWindow != NULL)
@@ -489,7 +477,6 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
              * directly to the window compositor;
              */
             if (wcom == 1) {
-                memset(&info, 0, sizeof(MDSVideoInfo));
                 info.isplaying = true;
                 info.isprotected = (mDecryptHandle != NULL);
                 {
@@ -498,15 +485,14 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
                     info.displayW = mStats.mVideoWidth;
                     info.displayH = mStats.mVideoHeight;
                 }
-                mMDClient->updateVideoInfo(&info);
+                mMDClient->setVideoSourceInfo(&info);
             }
         }
     } else {
         if (mMDClient != NULL) {
-           memset(&info, 0, sizeof(MDSVideoInfo));
            info.isplaying = false;
            info.isprotected = false;
-           mMDClient->updateVideoInfo(&info);
+           mMDClient->setVideoSourceInfo(&info);
            mFramesToDirty = 0;
         }
     }
@@ -1543,6 +1529,7 @@ status_t AwesomePlayer::pause() {
 #endif
 
 #ifdef BGM_ENABLED
+    mAudioPlayerPaused = true;
     if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
 
@@ -1673,11 +1660,7 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer = NULL;
     }
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    // Destroy MDS client only if default native window is not created by MDS.
-    // MDS client will be destroyed in AwesomePlayer destructor.
-    if (mDefaultNativeWindow == NULL) {
-        setDisplaySource_l(false);
-    }
+    setDisplaySource_l(false);
     mRenderedFrames = 0;
 #endif
 
@@ -1919,15 +1902,54 @@ status_t AwesomePlayer::initAudioDecoder() {
     CHECK(meta->findCString(kKeyMIMEType, &mime));
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    status_t mimemap = mapMimeToAudioFormat(&mAudioFormat, mime);
+    status_t mimemap;
+    int32_t sampleRate;
+    mimemap = mapMimeToAudioFormat(&mAudioFormat, mime);
+    if (!mAudioTrack->getFormat()->findInt32(kKeySampleRate, &sampleRate)) {
+        return NO_INIT;
+    }
+    int32_t channels;
+    if (!mAudioTrack->getFormat()->findInt32(kKeyChannelCount, &channels)) {
+        return NO_INIT;
+    }
+
+    int avgBitRate = -1;
+    mAudioTrack->getFormat()->findInt32(kKeyBitRate, &avgBitRate);
+    ALOGV("initAudioDecoder: the avgBitrate = %ld", avgBitRate);
+
+    if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
+        ALOGV("initAudioDecoder: MEDIA_MIMETYPE_AUDIO_AAC");
+        uint32_t bitRate = -1;
+        if (setAACParameters(meta, &mAudioFormat, &bitRate) != OK) {
+                ALOGV("Failed to set AAC parameters/Unsupported AAC format, use non-offload");
+                mAudioFormat = AUDIO_FORMAT_PCM_16_BIT;
+        } else {
+                avgBitRate = (int)bitRate;
+        }
+    }
+
+    ALOGV("initAudioDecoder: sampleRate %d, channels %d", sampleRate, channels);
+    int64_t durationUs;
+    if (mAudioTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
+        Mutex::Autolock autoLock(mMiscStateLock);
+        if (mDurationUs < 0 || durationUs > mDurationUs) {
+            mDurationUs = durationUs;
+        }
+    }
 
     ALOGV("initAudioDecoder: Sink creation error value %d", mOffloadSinkCreationError);
-    if ( (!mOffloadSinkCreationError) && canOffloadStream( meta,
+    status_t stat = OK;
+    if ( (!mOffloadSinkCreationError) && (AudioSystem::isOffloadSupported(
+                mAudioFormat,
+                AUDIO_STREAM_MUSIC,
+                sampleRate,
+                avgBitRate,
+                mDurationUs,
+                mAudioSink->getSessionId(),
                 (mVideoTrack != NULL && mVideoSource != NULL),
-                isStreamingHTTP() && !(isAudioEffectEnabled()),
-                mAudioSink->getSessionId()) )
+                isStreamingHTTP()) && !(isAudioEffectEnabled())) )
     {
-        ALOGI("initAudioDecoder: Offload supported");
+        ALOGI("initAudioDecoder: Offload supported, creating AudioPlayer");
         mOffload = true;
         mAudioSource = mAudioTrack;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
@@ -3668,7 +3690,6 @@ void AwesomePlayer::postAudioOffloadTearDownEvent_l() {
 #endif
 }
 
-#if 0
 status_t AwesomePlayer::mapMimeToAudioFormat(audio_format_t *audioFormat, const char *mime) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     status_t val = OK;
@@ -3713,6 +3734,7 @@ status_t AwesomePlayer::mapMimeToAudioFormat(audio_format_t *audioFormat, const 
 #endif
     return OK;
 }
+
 status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFormat, uint32_t *avgBitRate) {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     // Get ESDS and check its validity
@@ -3852,7 +3874,6 @@ status_t AwesomePlayer::setAACParameters(sp<MetaData> meta, audio_format_t *aFor
 #endif
     return OK;
 }
-#endif
 /* Function will start a timer, which will expire if resume does not happen
  * in the configured duration. On timer expiry the callback function will
  * be invoked
@@ -4069,10 +4090,10 @@ bool AwesomePlayer::isAudioEffectEnabled() {
 #ifdef BGM_ENABLED
 status_t AwesomePlayer::remoteBGMSuspend() {
 
-    // If BGM is enabled or enabled previouslt and exited then the
+    // If BGM is enabled or enabled previously and exited then the
     // track/ sink needs to be closed and recreated again so that
     // music is heard on active output and not on multitasked output
-    if(mFlags & AUDIOPLAYER_STARTED) {
+    if((mFlags & AUDIOPLAYER_STARTED) && (mAudioPlayerPaused)) {
        ALOGD("[BGMUSIC] %s :: reset the audio player",__func__);
        // Store the current status and use it while starting for IA decoding
        // Terminate the active stream by calling reset_l()
@@ -4091,6 +4112,7 @@ status_t AwesomePlayer::remoteBGMSuspend() {
        mExtractorFlags = extractorFlags;
        mStats = stats;
        mRemoteBGMsuspend = true;
+       mAudioPlayerPaused =  false;
     }
 
     return OK;

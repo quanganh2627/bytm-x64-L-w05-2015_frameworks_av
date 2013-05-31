@@ -131,6 +131,7 @@ struct AwesomePlayer {
 #ifdef BGM_ENABLED
     status_t remoteBGMSuspend();
     status_t remoteBGMResume();
+    bool mAudioPlayerPaused;
 #endif
     bool mOffloadCalAudioEOS;
     bool mOffloadPostAudioEOS;
@@ -405,6 +406,9 @@ private:
                                int sampleRate,
                                int channelsCount,
                                int bitRate);
+    status_t mapMimeToAudioFormat(audio_format_t *audioFormat, const char *mime);
+    status_t setAACParameters(sp<MetaData> meta, audio_format_t *aFormat,
+                              uint32_t *avgBitRate);
 
     audio_format_t mAudioFormat;
     bool mOffload;
