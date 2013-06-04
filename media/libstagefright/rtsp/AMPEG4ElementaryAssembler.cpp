@@ -262,8 +262,14 @@ ARTPAssembler::AssemblyStatus AMPEG4ElementaryAssembler::addPacket(
         CHECK_GE(buffer->size(), 2u);
         unsigned AU_headers_length = U16_AT(buffer->data());  // in bits
 
-        CHECK_GE(buffer->size(), 2 + (AU_headers_length + 7) / 8);
-
+        //CHECK_GE(buffer->size(), 2 + (AU_headers_length + 7) / 8);
+        if (buffer->size() < (2 + (AU_headers_length + 7) / 8)){
+            ALOGE("buffer size is: %u---------------VS-------------AU_headers_length = %u",
+                  buffer->size(), AU_headers_length);
+            queue->erase(queue->begin());
+            ++mNextExpectedSeqNo;
+            return MALFORMED_PACKET;
+        }
         List<AUHeader> headers;
 
         ABitReader bits(buffer->data() + 2, buffer->size() - 2);
