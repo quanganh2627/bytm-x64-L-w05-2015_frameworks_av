@@ -96,6 +96,7 @@ private:
     status_t readMetaData();
     status_t parseChunk(off64_t *offset, int depth);
     status_t parseMetaData(off64_t offset, size_t size);
+    status_t parseUdtaMetaData(off64_t offset, size_t size);
 
     status_t updateAudioTrackInfoFromESDS_MPEG4Audio(
             const void *esds_data, size_t esds_size);

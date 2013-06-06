@@ -741,6 +741,69 @@ static void convertTimeToDate(int64_t time_1904, String8 *s) {
     s->setTo(tmp);
 }
 
+status_t MPEG4Extractor::parseUdtaMetaData(off64_t offset, size_t size) {
+        ALOGV("This file have udta component ,size = %d\n", size);
+        if (size < 4) {
+            return ERROR_MALFORMED;
+        }
+
+        char *buffer = new char[size + 1];
+        if (mDataSource->readAt(
+                    offset, buffer, size) != (ssize_t)size) {
+            delete[] buffer;
+            buffer = NULL;
+
+            return ERROR_IO;
+        }
+        int buffer_off = 0;
+        uint64_t chunk_size;
+        uint32_t chunk_type;
+        while(buffer_off < size) {
+            chunk_size = U32_AT((uint8_t*)&buffer[buffer_off]);
+            chunk_type = U32_AT((uint8_t*)&buffer[buffer_off + 4]);
+
+            ALOGV("chunk_size = %d", chunk_size);
+
+            uint32_t metadataKey = 0;
+            switch (chunk_type) {
+                case FOURCC('t', 'i', 't', 'l'):
+                {
+                    ALOGV("have titl now!");
+                    metadataKey = kKeyTitle;
+                    break;
+                }
+                case FOURCC('p', 'e', 'r', 'f'):
+                {
+                    ALOGV("have perf now!");
+                    metadataKey = kKeyArtist;
+                    break;
+                }
+                default:
+                {
+                    break;
+                }
+            }
+
+            //14 = 8 + 6
+            //8: chunk_size + chunk_type totally 8 bytes.
+            //6: the offset from the chunk_type to the real user data.(bytes)
+            if (metadataKey && buffer_off + 14 < size) {
+                char *tmp = new char[chunk_size +1];
+                strncpy(tmp, &buffer[buffer_off + 14], chunk_size - 14);
+                tmp[chunk_size -14] = NULL;
+                mFileMetaData->setCString(metadataKey, tmp);
+
+                delete[] tmp;
+                tmp = NULL;
+            }
+
+            buffer_off += chunk_size;
+        }
+        delete[] buffer;
+        buffer = NULL;
+        return OK;
+}
+
 status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
     ALOGV("entering parseChunk %lld/%d", *offset, depth);
     uint32_t hdr[2];
@@ -866,6 +929,10 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
                 track->skipTrack = false;
                 track->timescale = 0;
                 track->meta->setCString(kKeyMIMEType, "application/octet-stream");
+            }
+
+            if (chunk_type == FOURCC('u', 'd', 't', 'a')) {
+                parseUdtaMetaData(data_offset, chunk_data_size);
             }
 
             off64_t stop_offset = *offset + chunk_size;
