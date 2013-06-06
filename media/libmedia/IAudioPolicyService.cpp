@@ -376,26 +376,12 @@ public:
         return status;
     }
 
-    virtual bool isOffloadSupported(uint32_t format,
-                                    audio_stream_type_t stream,
-                                    uint32_t samplingRate,
-                                    uint32_t bitRate,
-                                    int64_t duration,
-                                    int sessionId,
-                                    bool isVideo,
-                                    bool isStreaming) const
+    virtual bool isOffloadSupported(const audio_offload_info_t &config)
     {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         Parcel data, reply;
         data.writeInterfaceToken(IAudioPolicyService::getInterfaceDescriptor());
-        data.writeInt32(static_cast <uint32_t>(format));
-        data.writeInt32(static_cast <uint32_t>(stream));
-        data.writeInt32(static_cast <uint32_t>(samplingRate));
-        data.writeInt32(static_cast <uint32_t>(bitRate));
-        data.writeInt64(static_cast <int64_t>(duration));
-        data.writeInt32(sessionId);
-        data.writeInt32(isVideo);
-        data.writeInt32(isStreaming);
+        data.write( &config, sizeof(audio_offload_info_t));
         remote()->transact(IS_OFFLOAD_SUPPORTED, data, &reply);
         return reply.readInt32();
 #else
@@ -684,17 +670,9 @@ status_t BnAudioPolicyService::onTransact(
         case IS_OFFLOAD_SUPPORTED: {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
             CHECK_INTERFACE(IAudioPolicyService, data, reply);
-            uint32_t format = data.readInt32();
-            audio_stream_type_t stream =
-                    static_cast <audio_stream_type_t>(data.readInt32());
-            uint32_t samplingRate = data.readInt32();
-           uint32_t bitRate = data.readInt32();
-            int64_t duration = data.readInt64();
-            int sessionId = data.readInt32();
-            bool isVideo = data.readInt32();
-            bool isStreaming = data.readInt32();
-            bool isSupported = isOffloadSupported(format, stream, samplingRate,
-                                   bitRate, duration, sessionId, isVideo, isStreaming);
+            audio_offload_info_t config;
+            data.read( &config, sizeof(audio_offload_info_t) );
+            bool isSupported = isOffloadSupported( config );
             reply->writeInt32(isSupported);
 #endif
             return NO_ERROR;
