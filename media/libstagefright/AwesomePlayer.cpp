@@ -1533,19 +1533,21 @@ status_t AwesomePlayer::pause() {
     if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
 
-       if ((mAudioSource == NULL) && (mVideoSource != NULL)) {
-            ALOGD("[BGMUSIC] remote player paused/stopped in BGM ");
-            AudioParameter param = AudioParameter();
-            status_t status = NO_ERROR;
-            // video only clip stopped/paused, update BGM sink
-            // set audio availability in BGM to true by default
-            mBGMAudioAvailable = true;
-            param.addInt(String8(AudioParameter::keyBGMAudio), mBGMAudioAvailable);
-            status = AudioSystem::setParameters(0, param.toString());
-            if (status != NO_ERROR) {
-               ALOGE("error setting bgm params - mBGMAudioAvailable");
-               return status;
-            }
+       if(mBGMEnabled) {
+          if ((mAudioSource == NULL) && (mVideoSource != NULL)) {
+              ALOGD("[BGMUSIC] remote player paused/stopped in BGM ");
+              AudioParameter param = AudioParameter();
+              status_t status = NO_ERROR;
+              // video only clip stopped/paused, update BGM sink
+              // set audio availability in BGM to true by default
+              mBGMAudioAvailable = true;
+              param.addInt(String8(AudioParameter::keyBGMAudio), mBGMAudioAvailable);
+              status = AudioSystem::setParameters(0, param.toString());
+              if (status != NO_ERROR) {
+                 ALOGE("error setting bgm params - mBGMAudioAvailable");
+                 return status;
+              }
+          }
        }
     }
 #endif //BGM_ENABLED
@@ -2050,8 +2052,10 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l() {
         memset(&info, 0, sizeof(VPPVideoInfo));
         if (mVideoTrack != NULL)
             meta = mVideoTrack->getFormat();
-        if (meta != NULL)
-            CHECK(meta->findInt32(kKeyFrameRate, &fps));
+        if (meta != NULL && !meta->findInt32(kKeyFrameRate, &fps)) {
+            ALOGW("No frame rate info found");
+            fps = 0;
+        }
         if (mVideoSource != NULL) {
             meta = mVideoSource->getFormat();
             if (meta != NULL) {
