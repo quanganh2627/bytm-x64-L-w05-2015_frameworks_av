@@ -883,7 +883,7 @@ M4OSA_ERR VideoEditorVideoEncoder_processOutputBuffer(
         ALOGV("[TS_CHECK] VI/ENC WRITE frame %d @ %lld -> %d (last %d)",
             pEncoderContext->mNbOutputFrames, i64Tmp, Cts,
             pEncoderContext->mLastCTS);
-        if ( Cts < pEncoderContext->mLastCTS ) {
+        if ( Cts < pEncoderContext->mLastCTS || Cts < pEncoderContext->mAccessUnit->CTS ) {
             ALOGV("VideoEncoder_processOutputBuffer WARNING : Cts is going "
             "backwards %d < %d", Cts, pEncoderContext->mLastCTS);
             goto cleanUp;
