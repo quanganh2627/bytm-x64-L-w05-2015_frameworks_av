@@ -1359,6 +1359,7 @@ status_t AwesomePlayer::play_l() {
     addBatteryData(params);
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     setDisplaySource_l(true);
+    notifyMDSPlayerStatus_l(MDS_VIDEO_PREPARED);
 #endif
     return OK;
 }
