@@ -279,8 +279,10 @@ AwesomePlayer::AwesomePlayer()
     mAudioOffloadTearDownEventPending = false;
 #endif
 #ifdef BGM_ENABLED
-    if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
        String8 reply;
        char* bgmKVpair;
 
@@ -1093,6 +1095,8 @@ status_t AwesomePlayer::play() {
     if (mOffload && ( isInCall() || isAudioEffectEnabled() ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
+        (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_BLUETOOTH_A2DP, "")
@@ -1113,8 +1117,10 @@ status_t AwesomePlayer::play() {
     }
 
 #ifdef BGM_ENABLED
-    if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
        String8 reply;
        char* bgmKVpair;
 
@@ -1165,8 +1171,10 @@ status_t AwesomePlayer::play() {
 
 #ifdef BGM_ENABLED
 
-    if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
        String8 reply;
        char* bgmKVpair;
 
@@ -1309,8 +1317,10 @@ status_t AwesomePlayer::play_l() {
     }
 
 #ifdef BGM_ENABLED
-    if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
 
        if(mBGMEnabled) {
           if ((mAudioSource == NULL) && (mVideoSource != NULL)) {
@@ -1538,8 +1548,10 @@ status_t AwesomePlayer::pause() {
 
 #ifdef BGM_ENABLED
     mAudioPlayerPaused = true;
-    if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
 
        if(mBGMEnabled) {
           if ((mAudioSource == NULL) && (mVideoSource != NULL)) {

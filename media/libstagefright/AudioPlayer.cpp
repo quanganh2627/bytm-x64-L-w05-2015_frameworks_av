@@ -180,8 +180,10 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
 
 #ifdef BGM_ENABLED
     mAllowBackgroundPlayback = false;
-    if(AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
        String8 reply;
        char* bgmKVpair;
 
