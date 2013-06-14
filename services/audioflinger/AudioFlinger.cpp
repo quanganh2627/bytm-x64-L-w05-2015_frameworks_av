@@ -5306,7 +5306,7 @@ void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
         Mutex::Autolock _l(thread->mLock);
         PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
         audio_track_cblk_t* cblk = mCblk;
-        if ((isOffloaded()) && (playbackThread != NULL)) {
+        if ((isOffloaded()) && (playbackThread != NULL) && (mStreamType != AUDIO_STREAM_DEFAULT)) {
             float typeVolume = playbackThread->mStreamTypes[mStreamType].volume;
             float v = playbackThread->mMasterVolume * typeVolume;
             uint32_t vlr = cblk->getVolumeLR();
