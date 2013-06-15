@@ -690,17 +690,10 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
                  mInputBuffer->range_length(),
                  mPositionTimeMediaUs / 1E6, mPositionTimeRealUs / 1E6);
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-             // need to adjust the mStartPos for offload decoding since parser
-            // might not be able to get the exact seek time requested.
-            if (mSeeking && mOffload) {
-                mSeeking = false;
-                if (mObserver) {
-                    ALOGV("fillBuffer is going to post SEEK_COMPLETE");
-                    mObserver->postAudioSeekComplete();
-                }
-
-                mStartPos = mPositionTimeMediaUs;
-                ALOGV("adjust seek time to: %.2f", mStartPos/ 1E6);
+            if (mOffload && mObserver && postSeekComplete) {
+                ALOGV("fillBuffer is going to post SEEK_COMPLETE");
+                mObserver->postAudioSeekComplete();
+                postSeekComplete = false;
             }
 #endif
         }
@@ -752,6 +745,11 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
 }
 
 int64_t AudioPlayer::getRealTimeUs() {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mOffload) {
+        return getMediaTimeUs();
+    }
+#endif
     Mutex::Autolock autoLock(mLock);
     return getRealTimeUsLocked();
 }

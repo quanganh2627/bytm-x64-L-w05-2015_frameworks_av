@@ -231,7 +231,8 @@ AwesomePlayer::AwesomePlayer()
       mOffloadTearDown(false),
       mOffloadTearDownForPause(false),
       mOffloadPauseUs(0),
-      mOffloadSinkCreationError(false)
+      mOffloadSinkCreationError(false),
+      mTimeSourceDeltaUs(-1)
 #endif
 #ifdef BGM_ENABLED
       ,
@@ -697,9 +698,9 @@ void AwesomePlayer::reset_l() {
 #endif
     {
         modifyFlags(0, ASSIGN);
+        mTimeSourceDeltaUs = 0;
     }
     mExtractorFlags = 0;
-    mTimeSourceDeltaUs = 0;
     mVideoTimeUs = 0;
 
     mSeeking = NO_SEEK;
@@ -1790,6 +1791,9 @@ status_t AwesomePlayer::initAudioDecoder() {
     {
         ALOGI("initAudioDecoder: Offload supported, creating AudioPlayer");
         mOffload = true;
+        // In offload cases, initialize mTimeSourceDeltaUs to -1
+        // as the lateness calculation for video rendering depends on this
+        mTimeSourceDeltaUs = -1;
         mAudioSource = mAudioTrack;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
         mAudioSource = mAudioTrack;
@@ -2184,22 +2188,42 @@ void AwesomePlayer::onVideoEvent() {
     TimeSource *ts =
         ((mFlags & AUDIO_AT_EOS) || !(mFlags & AUDIOPLAYER_STARTED))
             ? &mSystemTimeSource : mTimeSource;
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // mTimeSourceDeltaUs is modified for audio offload in av files
+    // It is the difference b/w audio ts and system ts when audio EOS is set.
+    if (mOffload && mFlags & AUDIO_AT_EOS && mTimeSourceDeltaUs == -1) {
+         mTimeSourceDeltaUs = mTimeSource->getRealTimeUs() -
+                              mSystemTimeSource.getRealTimeUs();
+    }
+#endif
     if (mFlags & FIRST_FRAME) {
         modifyFlags(FIRST_FRAME, CLEAR);
         mSinceLastDropped = 0;
-        mTimeSourceDeltaUs = ts->getRealTimeUs() - timeUs;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (!mOffload)
+#endif
+            mTimeSourceDeltaUs = ts->getRealTimeUs() - timeUs;
     }
 
     int64_t realTimeUs, mediaTimeUs;
     if (!(mFlags & AUDIO_AT_EOS) && mAudioPlayer != NULL
         && mAudioPlayer->getMediaTimeMapping(&realTimeUs, &mediaTimeUs)) {
-        mTimeSourceDeltaUs = realTimeUs - mediaTimeUs;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (!mOffload)
+#endif
+            mTimeSourceDeltaUs = realTimeUs - mediaTimeUs;
     }
-
     if (wasSeeking == SEEK_VIDEO_ONLY) {
-        int64_t nowUs = ts->getRealTimeUs() - mTimeSourceDeltaUs;
-
+        int64_t nowUs = ts->getRealTimeUs();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mOffload) {
+            if (mTimeSourceDeltaUs != -1)
+                nowUs += mTimeSourceDeltaUs;
+        } else
+#endif
+        {
+            nowUs -= mTimeSourceDeltaUs;
+        }
         int64_t latenessUs = nowUs - timeUs;
 
         ATRACE_INT("Video Lateness (ms)", latenessUs / 1E3);
@@ -2212,10 +2236,17 @@ void AwesomePlayer::onVideoEvent() {
     if (wasSeeking == NO_SEEK) {
         // Let's display the first frame after seeking right away.
 
-        int64_t nowUs = ts->getRealTimeUs() - mTimeSourceDeltaUs;
-
+        int64_t nowUs = ts->getRealTimeUs();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mOffload) {
+            if (mTimeSourceDeltaUs != -1)
+                nowUs += mTimeSourceDeltaUs;
+        } else
+#endif
+        {
+            nowUs -= mTimeSourceDeltaUs;
+        }
         int64_t latenessUs = nowUs - timeUs;
-
         ATRACE_INT("Video Lateness (ms)", latenessUs / 1E3);
 
         if (latenessUs > 500000ll
