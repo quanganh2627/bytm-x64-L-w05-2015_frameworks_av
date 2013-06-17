@@ -246,6 +246,7 @@ AwesomePlayer::AwesomePlayer()
       mBGMEnabled(false),
       mBGMAudioAvailable(true)
 #endif //BGM_ENABLED
+      ,mIsDeepBufferPossible(true)
       {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
@@ -379,6 +380,11 @@ status_t AwesomePlayer::setDataSource_l(
 status_t AwesomePlayer::setDataSource(
         int fd, int64_t offset, int64_t length) {
     Mutex::Autolock autoLock(mLock);
+
+    if (offset > 0) {
+        mIsDeepBufferPossible = false;
+
+    }
 
     reset_l();
 
@@ -1170,7 +1176,7 @@ status_t AwesomePlayer::play_l() {
                         && (mDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US ||
                         (getCachedDuration_l(&cachedDurationUs, &eos) &&
                         cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))
-                        && !isInCall()) {
+                        && !isInCall() && mIsDeepBufferPossible) {
                     allowDeepBuffering = true;
                 } else {
                     allowDeepBuffering = false;

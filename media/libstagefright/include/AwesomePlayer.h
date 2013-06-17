@@ -131,6 +131,7 @@ struct AwesomePlayer {
     bool mOffloadPostAudioEOS;
     void postAudioOffloadTearDown();
     status_t tearDownToNonDeepBufferAudio();
+    bool mIsDeepBufferPossible;
 #ifdef BGM_ENABLED
     status_t remoteBGMSuspend();
     status_t remoteBGMResume();
@@ -418,14 +419,13 @@ private:
     sp<TimedEventQueue::Event> mAudioOffloadTearDownEvent;
     bool mAudioOffloadTearDownEventPending;
     bool mOffloadSinkCreationError;
+    bool mDeepBufferAudio;
+    bool mDeepBufferTearDown;
 #ifdef BGM_ENABLED
     bool mRemoteBGMsuspend;
     bool mBGMEnabled;
     bool mBGMAudioAvailable;
 #endif
-
-    bool mDeepBufferAudio;
-    bool mDeepBufferTearDown;
 
 #ifdef LVSE
     sp<LVAudioSource> mLVAudioSource;
