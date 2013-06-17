@@ -5307,15 +5307,17 @@ void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
         PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
         audio_track_cblk_t* cblk = mCblk;
         if ((isOffloaded()) && (playbackThread != NULL) && (mStreamType != AUDIO_STREAM_DEFAULT)) {
-            float typeVolume = playbackThread->mStreamTypes[mStreamType].volume;
-            float v = playbackThread->mMasterVolume * typeVolume;
             uint32_t vlr = cblk->getVolumeLR();
-            float v_clamped = v * (vlr & 0xFFFF);
-            if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
-            left = v_clamped/MAX_GAIN;
-            v_clamped = v * (vlr >> 16);
-            if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
-            right = v_clamped/MAX_GAIN;
+            if (!vlr) {
+                float typeVolume = playbackThread->mStreamTypes[mStreamType].volume;
+                float v = playbackThread->mMasterVolume * typeVolume;
+                float v_clamped = v * (vlr & 0xFFFF);
+                if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
+                left = v_clamped/MAX_GAIN;
+                v_clamped = v * (vlr >> 16);
+                if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
+                right = v_clamped/MAX_GAIN;
+            }
             playbackThread->getOutput_l()->stream->set_volume(
                                       playbackThread->getOutput_l()->stream, left, right);
         }
