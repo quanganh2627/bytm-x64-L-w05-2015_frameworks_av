@@ -1313,11 +1313,11 @@ status_t AwesomePlayer::play_l() {
                status_t status = NO_ERROR;
                // no audio stream found in this clip, update BGM sink
                mBGMAudioAvailable = false;
-               param.addInt(String8(AudioParameter::keyBGMAudio), mBGMAudioAvailable);
+               param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO),mBGMAudioAvailable);
                status = AudioSystem::setParameters(0, param.toString());
                if (status != NO_ERROR) {
-                  ALOGE("error setting bgm params - mBGMAudioAvailable");
-                  return status;
+                  // this is not fatal so need not stop the graph
+                  ALOGW("error setting bgm params - mBGMAudioAvailable");
                }
           }
        }
@@ -1542,11 +1542,11 @@ status_t AwesomePlayer::pause() {
               // video only clip stopped/paused, update BGM sink
               // set audio availability in BGM to true by default
               mBGMAudioAvailable = true;
-              param.addInt(String8(AudioParameter::keyBGMAudio), mBGMAudioAvailable);
+              param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO), mBGMAudioAvailable);
               status = AudioSystem::setParameters(0, param.toString());
               if (status != NO_ERROR) {
-                 ALOGE("error setting bgm params - mBGMAudioAvailable");
-                 return status;
+                 // this is not fatal so need not stop the graph
+                 ALOGW("error setting bgm params - mBGMAudioAvailable");
               }
           }
        }
