@@ -237,26 +237,26 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
 #else
     if (mAudioSink.get() != NULL) {
 #ifdef BGM_ENABLED
-       if((mAllowBackgroundPlayback) &&(!mAllowDeepBuffering)) {
+       if ((mAllowBackgroundPlayback) &&(!mAllowDeepBuffering)) {
 
-          status_t  err = mAudioSink->open(
-                        mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
-                        DEFAULT_AUDIOSINK_BUFFERCOUNT,
-                        &AudioPlayer::AudioSinkCallback,
-                        this,
-                        (mAllowBackgroundPlayback ?
-                            AUDIO_OUTPUT_FLAG_REMOTE_BGM :
-                            AUDIO_OUTPUT_FLAG_NONE));
+           err = mAudioSink->open(
+               mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+               DEFAULT_AUDIOSINK_BUFFERCOUNT,
+               &AudioPlayer::AudioSinkCallback,
+               this,
+               (mAllowBackgroundPlayback ?
+                   AUDIO_OUTPUT_FLAG_REMOTE_BGM :
+                   AUDIO_OUTPUT_FLAG_NONE));
        } else {
 #endif
-           status_t err = mAudioSink->open(
-                        mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
-                        DEFAULT_AUDIOSINK_BUFFERCOUNT,
-                        &AudioPlayer::AudioSinkCallback,
-                        this,
-                        (mAllowDeepBuffering ?
-                            AUDIO_OUTPUT_FLAG_DEEP_BUFFER :
-                            AUDIO_OUTPUT_FLAG_NONE));
+           err = mAudioSink->open(
+               mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+               DEFAULT_AUDIOSINK_BUFFERCOUNT,
+               &AudioPlayer::AudioSinkCallback,
+               this,
+               (mAllowDeepBuffering ?
+                   AUDIO_OUTPUT_FLAG_DEEP_BUFFER :
+                   AUDIO_OUTPUT_FLAG_NONE));
 #ifdef BGM_ENABLED
        }
 #endif
