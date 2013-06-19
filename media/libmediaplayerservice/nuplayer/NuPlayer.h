@@ -24,6 +24,9 @@
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 #include <display/MultiDisplayClient.h>
 #endif
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#endif
 
 namespace android {
 
@@ -118,6 +121,11 @@ private:
 
     List<sp<Action> > mDeferredActions;
 
+#ifdef TARGET_HAS_VPP
+    sp<NuPlayerVPPProcessor> mVPPProcessor;
+    bool mIsVppInit;
+    sp<NuPlayerVPPProcessor> createVppProcessor();
+#endif
     bool mAudioEOS;
     bool mVideoEOS;
 
