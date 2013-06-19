@@ -2063,7 +2063,7 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
 }
 
 #ifdef TARGET_HAS_VPP
-VPPProcessor* AwesomePlayer::createVppProcessor_l() {
+VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
     VPPProcessor* processor = NULL;
 
     if (mNativeWindow == NULL)
@@ -2091,7 +2091,7 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l() {
         info.fps = fps;
         info.width = width;
         info.height = height;
-        OMXCodec* omxCodec = (OMXCodec*) (mVideoSource.get());
+
         processor = new VPPProcessor(mNativeWindow, omxCodec, &info);
     }
     return processor;
@@ -2185,25 +2185,19 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         }
 
 #ifdef TARGET_HAS_VPP
+        OMXCodec* omxCodec;
+        if (mCachedSource != NULL) {
+            AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
+            omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
+        } else
+            omxCodec = (OMXCodec*) (mVideoSource.get());
+
         if (mVPPProcessor != NULL) {
             delete mVPPProcessor;
             mVPPProcessor = NULL;
         }
-        mVPPProcessor = createVppProcessor_l();
-        OMXCodec* omxCodec;
-        if (mCachedSource != NULL) {
-#if 1
-            // FIXME: Disable VPP/FRC for http streaming so far
-            if (mVPPProcessor != NULL) {
-                delete mVPPProcessor;
-                mVPPProcessor = NULL;
-            }
-#else
-            AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
-            omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
-#endif
-        } else
-            omxCodec = (OMXCodec*) (mVideoSource.get());
+        mVPPProcessor = createVppProcessor_l(omxCodec);
+
         if (mVPPProcessor != NULL)
             omxCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
 #endif
@@ -2454,7 +2448,10 @@ void AwesomePlayer::onVideoEvent() {
             if (err != OK) {
                 CHECK(mVideoBuffer == NULL);
 
-                if (err == INFO_FORMAT_CHANGED) {
+                if (err == -EWOULDBLOCK) {
+                    postVideoEvent_l(10000);
+                    return;
+                } else if (err == INFO_FORMAT_CHANGED) {
                     ALOGV("VideoSource signalled format change.");
 
                     notifyVideoSize_l();
