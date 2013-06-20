@@ -53,7 +53,11 @@ static const struct {
     { "OMX.google.vpx.decoder", "vpxdec", "video_decoder.vpx" },
     { "OMX.Intel.alac.decoder", "alacdec", "audio_decoder.alac" },
     { "OMX.google.raw.decoder", "rawdec", "audio_decoder.raw" },
-    { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" },
+#ifdef USE_INTEL_MDP
+    { "OMX.Intel.mp3.decoder", "mp3dec_mdp", "audio_decoder.mp3" },
+    { "OMX.Intel.aac.decoder", "aacdec_mdp", "audio_decoder.aac" },
+#endif
+    { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" }
 };
 
 static const size_t kNumComponents =
