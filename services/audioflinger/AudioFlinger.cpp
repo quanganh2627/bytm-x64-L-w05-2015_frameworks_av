@@ -1607,7 +1607,7 @@ status_t AudioFlinger::closeOutput_nonvirtual(audio_io_handle_t output)
         }
 //To be checked as close is called in nonvirtual
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (thread->type() == ThreadBase::DIRECT) {
+        if (thread->isOffloadTrack()) {
             Vector<int> sessionIds;
 
             thread->getEffectSessionIds(sessionIds);

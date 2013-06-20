@@ -982,7 +982,11 @@ status_t AudioTrack::createTrack_l(
             tid = mAudioTrackThread->getTid();
         }
     }
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+        trackFlags |= IAudioFlinger::TRACK_OFFLOAD;
+    }
+#endif
     sp<IAudioTrack> track = audioFlinger->createTrack(streamType,
                                                       sampleRate,
                                                       // AudioFlinger only sees 16-bit PCM

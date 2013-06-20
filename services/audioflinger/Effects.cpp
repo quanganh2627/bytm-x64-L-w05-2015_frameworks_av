@@ -614,7 +614,7 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
         PlaybackThread *p = (PlaybackThread *)thread.get();
 
         if (enabled) {
-            if (p->type() == ThreadBase::DIRECT ) {
+            if (p-> isOffloadTrack()) {
                 ALOGV("setEnabled: Offload, invalidate tracks");
                 DirectOutputThread *srcThread = (DirectOutputThread *)p;
                 srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);

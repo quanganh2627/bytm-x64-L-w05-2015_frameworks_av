@@ -649,8 +649,8 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
         // In case of Music Offload write, it could be blocked on pause-event
         // make sure we restart the output
         PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
-        if (playbackThread->type() == DIRECT && (state==PAUSING || state==PAUSED)) {
-            ALOGV("calling resume directly");
+        if ((isOffloadTrack()) && (state==PAUSING || state==PAUSED) ) {
+            ALOGV("Start Offload : Resume ");
             status_t status = playbackThread->getOutput_l()->stream->resume(
                                             playbackThread->getOutput_l()->stream);
             if (NO_ERROR != status) {
@@ -704,9 +704,9 @@ void AudioFlinger::PlaybackThread::Track::stop()
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         PlaybackThread* playbackThread = static_cast<PlaybackThread*>(thread.get());
-        if ((playbackThread->type() == DIRECT) ) {
+        if (isOffloadTrack()) {
             if (state!=ACTIVE && state!=RESUMING) {
-                ALOGV("Track:stop: state!=ACTIVE && state!=RESUMING");
+                ALOGV("Track:stop: offload state!=ACTIVE && state!=RESUMING");
                 status_t status = playbackThread->getOutput_l()->stream->flush(
                                            playbackThread->getOutput_l()->stream);
                 if (NO_ERROR != status) {
@@ -732,7 +732,8 @@ void AudioFlinger::PlaybackThread::Track::pause()
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
                 // Call direct pause for offload mechanism
                 PlaybackThread* pPBThread = static_cast<PlaybackThread*>(thread.get());
-                if (pPBThread->type() == DIRECT) {
+                if (isOffloadTrack()) {
+                    ALOGV("pause: offload pause");
                     status_t status = pPBThread->getOutput_l()->stream->pause(
                                                pPBThread->getOutput_l()->stream);
                     if (NO_ERROR != status) {
@@ -764,8 +765,8 @@ void AudioFlinger::PlaybackThread::Track::flush()
         Mutex::Autolock _l(thread->mLock);
     PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (playbackThread->type() == DIRECT) {
-            ALOGV("Calling flush directly");
+        if (isOffloadTrack()) {
+            ALOGV("flush: Offload flush");
             mCblk->lock.lock();
             reset();
             mCblk->lock.unlock();
@@ -790,7 +791,8 @@ void AudioFlinger::PlaybackThread::Track::flush()
         // this will be done by prepareTracks_l() when the track is stopped.
         // prepareTracks_l() will see mState == FLUSHED, then
         // remove from active track list, reset(), and trigger presentation complete
-//        PlaybackThread *playbackThread = (PlaybackThread *)thread.get(); To be checked 
+//Offload To be checked
+//        PlaybackThread *playbackThread = (PlaybackThread *)thread.get();  
         if (playbackThread->mActiveTracks.indexOf(this) < 0) {
             reset();
         }
@@ -804,19 +806,7 @@ void AudioFlinger::PlaybackThread::Track::reset()
     // For MusicOffload: Flush the data if requested anytime
     // Check if Music Offload playback is running
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    bool offload = false;
-    sp<ThreadBase> baseThread = mThread.promote();
-    if (baseThread != 0) {
-        PlaybackThread *playbackThread = (PlaybackThread *)baseThread.get();
-
-        if (playbackThread->type() == DIRECT) {
-            offload = true;
-        }
-    }
-#endif
-
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (!mResetDone || offload) {
+    if ( (!mResetDone) || (isOffloadTrack()) ) {
 #else
     if (!mResetDone) {
 #endif

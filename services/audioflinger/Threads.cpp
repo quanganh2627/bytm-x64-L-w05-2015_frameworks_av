@@ -1320,7 +1320,8 @@ void AudioFlinger::PlaybackThread::setStreamVolume(audio_stream_type_t stream, f
     // Check if MusicOffload Track is running, if so, instanly apply volume
     // AudioTrack.
     ALOGV("setStreamVolume of thread");
-    if (stream == AUDIO_STREAM_MUSIC && mType == DIRECT && getOutput_l()) {
+    if ( (stream == AUDIO_STREAM_MUSIC) && (isOffloadTrack()) &&
+         (getOutput_l()) ) {
         ALOGV("DIRECT thread calling set_volume");
         getOutput_l()->stream->set_volume(getOutput_l()->stream, value, value);
     }
@@ -2307,6 +2308,22 @@ AudioFlinger::MixerThread::~MixerThread()
     delete mAudioMixer;
 }
 
+bool AudioFlinger::PlaybackThread::isOffloadTrack() const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    bool offloadTrack = false;
+    for (size_t i = 0; i < mTracks.size(); ++i) {
+        sp<Track> t = mTracks[i];
+        if (t != 0 && t->isOffloadTrack()) {
+            offloadTrack = true;
+        }
+    }
+    return offloadTrack;
+#else
+    return false;
+#endif
+}
+
 
 uint32_t AudioFlinger::MixerThread::correctLatency_l(uint32_t latency) const
 {
@@ -3232,12 +3249,16 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
             minFrames = 1;
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (track->isPausing()) {
-             track->setPaused();
+        bool offloadTrack = track->isOffloadTrack();
+        if (offloadTrack) {
+            if (track->isPausing()) {
+                track->setPaused();
+            }
         }
 
-        if ((track->framesReady() >= minFrames) && track->isReady() &&  track->isActive())
-//                !track->isPaused() && !track->isTerminated())
+        if ((track->framesReady() >= minFrames) && track->isReady() &&
+                (offloadTrack ? (track->isActive()) :
+                               (!track->isPaused() && !track->isTerminated())))
         {
 #else
         if ((track->framesReady() >= minFrames) && track->isReady() &&
