@@ -49,6 +49,7 @@
 #include "include/AsyncOMXCodecWrapper.h"
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/OMXCodec.h>
+#include <media/stagefright/Utils.h>
 
 #include <gui/ISurfaceTexture.h>
 #include <gui/SurfaceTextureClient.h>
@@ -253,6 +254,7 @@ AwesomePlayer::AwesomePlayer()
       ,
       mAudioPlayerPaused(false)
 #endif
+      ,mIsDeepBufferPossible(true)
       {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
@@ -390,6 +392,11 @@ status_t AwesomePlayer::setDataSource_l(
 status_t AwesomePlayer::setDataSource(
         int fd, int64_t offset, int64_t length) {
     Mutex::Autolock autoLock(mLock);
+
+    if (offset > 0) {
+        mIsDeepBufferPossible = false;
+
+    }
 
     reset_l();
 
@@ -1227,7 +1234,7 @@ status_t AwesomePlayer::play_l() {
                         && (mDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US ||
                         (getCachedDuration_l(&cachedDurationUs, &eos) &&
                         cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))
-                        && !isInCall()) {
+                        && !isInCall() && mIsDeepBufferPossible) {
                     allowDeepBuffering = true;
                 } else {
                     allowDeepBuffering = false;
@@ -1312,11 +1319,11 @@ status_t AwesomePlayer::play_l() {
                status_t status = NO_ERROR;
                // no audio stream found in this clip, update BGM sink
                mBGMAudioAvailable = false;
-               param.addInt(String8(AudioParameter::keyBGMAudio), mBGMAudioAvailable);
+               param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO),mBGMAudioAvailable);
                status = AudioSystem::setParameters(0, param.toString());
                if (status != NO_ERROR) {
-                  ALOGE("error setting bgm params - mBGMAudioAvailable");
-                  return status;
+                  // this is not fatal so need not stop the graph
+                  ALOGW("error setting bgm params - mBGMAudioAvailable");
                }
           }
        }
@@ -1541,11 +1548,11 @@ status_t AwesomePlayer::pause() {
               // video only clip stopped/paused, update BGM sink
               // set audio availability in BGM to true by default
               mBGMAudioAvailable = true;
-              param.addInt(String8(AudioParameter::keyBGMAudio), mBGMAudioAvailable);
+              param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO), mBGMAudioAvailable);
               status = AudioSystem::setParameters(0, param.toString());
               if (status != NO_ERROR) {
-                 ALOGE("error setting bgm params - mBGMAudioAvailable");
-                 return status;
+                 // this is not fatal so need not stop the graph
+                 ALOGW("error setting bgm params - mBGMAudioAvailable");
               }
           }
        }
@@ -4046,22 +4053,6 @@ status_t AwesomePlayer::tearDownToNonDeepBufferAudio() {
     }
     mDeepBufferTearDown = false;
     return err;
-}
-
-bool AwesomePlayer::isInCall() {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    ALOGV("isInCall");
-    audio_mode_t mode = AUDIO_MODE_INVALID;
-    const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
-
-    if (audioFlinger != 0) {
-        mode = audioFlinger->getMode();
-        ALOGV("isInCall: Mode read from AF = %d", mode);
-        return ((mode == AUDIO_MODE_IN_CALL) ||
-                (mode == AUDIO_MODE_IN_COMMUNICATION));
-    }
-#endif
-    return false;
 }
 
 bool AwesomePlayer::isAudioEffectEnabled() {

@@ -137,6 +137,7 @@ struct AwesomePlayer {
     bool mOffloadPostAudioEOS;
     void postAudioOffloadTearDown();
     status_t tearDownToNonDeepBufferAudio();
+    bool mIsDeepBufferPossible;
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -401,7 +402,6 @@ private:
     void postAudioOffloadTearDownEvent_l();
     void onAudioOffloadTearDownEvent();
     bool isAudioEffectEnabled();
-    bool isInCall();
     status_t createAudioPlayer(audio_format_t audioFormat,
                                int sampleRate,
                                int channelsCount,
@@ -419,7 +419,6 @@ private:
     sp<TimedEventQueue::Event> mAudioOffloadTearDownEvent;
     bool mAudioOffloadTearDownEventPending;
     bool mOffloadSinkCreationError;
-
     bool mDeepBufferAudio;
     bool mDeepBufferTearDown;
 

@@ -5307,15 +5307,17 @@ void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
         PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
         audio_track_cblk_t* cblk = mCblk;
         if ((isOffloaded()) && (playbackThread != NULL) && (mStreamType != AUDIO_STREAM_DEFAULT)) {
-            float typeVolume = playbackThread->mStreamTypes[mStreamType].volume;
-            float v = playbackThread->mMasterVolume * typeVolume;
             uint32_t vlr = cblk->getVolumeLR();
-            float v_clamped = v * (vlr & 0xFFFF);
-            if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
-            left = v_clamped/MAX_GAIN;
-            v_clamped = v * (vlr >> 16);
-            if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
-            right = v_clamped/MAX_GAIN;
+            if (!vlr) {
+                float typeVolume = playbackThread->mStreamTypes[mStreamType].volume;
+                float v = playbackThread->mMasterVolume * typeVolume;
+                float v_clamped = v * (vlr & 0xFFFF);
+                if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
+                left = v_clamped/MAX_GAIN;
+                v_clamped = v * (vlr >> 16);
+                if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
+                right = v_clamped/MAX_GAIN;
+            }
             playbackThread->getOutput_l()->stream->set_volume(
                                       playbackThread->getOutput_l()->stream, left, right);
         }
@@ -10046,8 +10048,21 @@ void AudioFlinger::EffectChain::clearInputBuffer_l(sp<ThreadBase> thread)
         memset(mInBuffer, 0, numSamples * sizeof(int8_t));
     }
 #else
-    size_t numSamples = thread->frameCount() * thread->channelCount();
-    memset(mInBuffer, 0, numSamples * sizeof(int16_t));
+    size_t numSamples;
+    PlaybackThread* pBThread = static_cast<PlaybackThread*>(thread.get());
+    // [WORKAROUND]
+    // for DUT, effects need not be applied
+    // when the number of channels is more than 2, the effects chain
+    // is not supported at present;
+    if((thread->channelCount() > 2) && (pBThread->type() == ThreadBase::DIRECT)) {
+      ALOGI("Effects for multi-channel- NA");
+      numSamples = thread->frameCount();
+      memset(mInBuffer, 0, numSamples * sizeof(int8_t));
+    }
+    else {
+      numSamples = thread->frameCount() * thread->channelCount();
+      memset(mInBuffer, 0, numSamples * sizeof(int16_t));
+    }
 #endif
 
 }
