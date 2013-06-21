@@ -102,6 +102,7 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
 
     // ALOGD("Creating track with %d buffers @ %d bytes", bufferCount, bufferSize);
     size_t size = sizeof(audio_track_cblk_t);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     size_t bufferSize;
     if ( audio_is_linear_pcm(format) ) {
         // fixed 16-bit samples
@@ -113,7 +114,9 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
         bufferSize = frameCount;
         ALOGV( "compressed: bufferSize = %d", bufferSize );
     }
-
+#else
+    size_t bufferSize = frameCount*channelCount*sizeof(int16_t);
+#endif
     if (sharedBuffer == 0) {
         size += bufferSize;
     }
@@ -723,8 +726,12 @@ void AudioFlinger::PlaybackThread::Track::stop()
     if (thread != 0) {
         Mutex::Autolock _l(thread->mLock);
         track_state state = mState;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         if (state == RESUMING || state == ACTIVE || state == PAUSING || 
             state == PAUSED || state == STOPPING_1 || state == STOPPING_2) {
+#else
+        if (state == RESUMING || state == ACTIVE || state == PAUSING || state == PAUSED) {
+#endif
             // If the track is not active (PAUSED and buffers full), flush buffers
             PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
             if (playbackThread->mActiveTracks.indexOf(this) < 0) {
@@ -740,8 +747,12 @@ void AudioFlinger::PlaybackThread::Track::stop()
             ALOGV("not stopping/stopped => stopping/stopped (%d) on thread %p", mName,
                     playbackThread);
         }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         if (!isOutputTrack() && (state == ACTIVE || state == RESUMING ||
             state == STOPPING_1 || state == STOPPING_2)) {
+#else
+        if (!isOutputTrack() && (state == ACTIVE || state == RESUMING)) {
+#endif
             thread->mLock.unlock();
             AudioSystem::stopOutput(thread->id(), mStreamType, mSessionId);
             thread->mLock.lock();

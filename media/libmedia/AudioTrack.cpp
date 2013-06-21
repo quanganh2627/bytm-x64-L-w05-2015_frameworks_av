@@ -107,6 +107,7 @@ AudioTrack::AudioTrack()
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     mOutput = 0;
     mBitRate = 0;
+    mOffloadEOSReached = 0;
 #endif
 }
 
@@ -570,7 +571,9 @@ void AudioTrack::flush_l()
         // Release AudioTrack callback thread in case it was waiting for new buffers
         // in AudioTrack::obtainBuffer()
 
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         mOffloadEOSReached = false;
+#endif
         mCblk->cv.signal();
     }
 }
@@ -1122,6 +1125,7 @@ status_t AudioTrack::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
 
     cblk->lock.lock();
     if (cblk->flags & CBLK_INVALID) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
 //To be checked
 //    if (cblk->flags & CBLK_INVALID_MSK) {
         // no need to clear the invalid flag as this cblk will not be used anymore
@@ -1130,6 +1134,7 @@ status_t AudioTrack::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
             cblk->lock.unlock();
             return TEAR_DOWN;
         }
+#endif
         goto create_new_track;
     }
     cblk->lock.unlock();
@@ -1445,8 +1450,12 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
 #endif
 
     // Manage underrun callback
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (!mOffloadEOSReached &&
         active && (cblk->framesAvailable() == cblk->frameCount)) {
+#else
+    if (active && (cblk->framesAvailable() == cblk->frameCount)) {
+#endif
         ALOGV("Underrun user: %x, server: %x, flags %04x", cblk->user, cblk->server, cblk->flags);
         if (!(android_atomic_or(CBLK_UNDERRUN, &cblk->flags) & CBLK_UNDERRUN)) {
             mCbf(EVENT_UNDERRUN, mUserData, 0);
@@ -1545,7 +1554,7 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
             // still try to get more data in intervals of WAIT_PERIOD_MS
             // but don't just loop and block the CPU, so wait
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-            if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD & mOffloadEOSReached) {
+            if ((mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD && mOffloadEOSReached)) {
                 ALOGV("processAudioBuffer: EOS reached, sleeping for 100 ms");
                 usleep(OFFLOAD_WAIT_PERIOD_MS*1000);
             } else {
