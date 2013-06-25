@@ -2034,6 +2034,10 @@ void AudioFlinger::PlaybackThread::setMasterMute(bool muted)
 
 void AudioFlinger::PlaybackThread::setStreamVolume(audio_stream_type_t stream, float value)
 {
+    {
+        Mutex::Autolock _l(mLock);
+        mStreamTypes[stream].volume = value;
+    }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     // Check if MusicOffload Track is running, if so, instanly apply volume
     // AudioTrack.
@@ -2051,8 +2055,6 @@ void AudioFlinger::PlaybackThread::setStreamVolume(audio_stream_type_t stream, f
         }
     }
 #endif
-    Mutex::Autolock _l(mLock);
-    mStreamTypes[stream].volume = value;
 }
 
 void AudioFlinger::PlaybackThread::setStreamMute(audio_stream_type_t stream, bool muted)
