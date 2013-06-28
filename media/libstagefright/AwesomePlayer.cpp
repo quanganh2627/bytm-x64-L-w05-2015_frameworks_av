@@ -2929,7 +2929,6 @@ status_t AwesomePlayer::finishSetDataSource_l() {
     }
 
     AString sniffedMIME;
-    sp<MediaExtractor> extractorTemp = NULL;
 
     if (!strncasecmp("http://", mUri.string(), 7)
             || !strncasecmp("https://", mUri.string(), 8)
@@ -3044,15 +3043,7 @@ status_t AwesomePlayer::finishSetDataSource_l() {
 
                     usleep(200000);
                 }
-                extractorTemp = MediaExtractor::Create(
-                        dataSource, sniffedMIME.empty() ? NULL : sniffedMIME.c_str());
-                if (extractorTemp != NULL) {
-                    // ensure get the metadata
-                    extractorTemp->countTracks();
-                } else {
-                    mLock.lock();
-                    return UNKNOWN_ERROR;
-                }
+
                 mLock.lock();
             }
 
@@ -3095,11 +3086,19 @@ status_t AwesomePlayer::finishSetDataSource_l() {
             mWVMExtractor->setUID(mUID);
         extractor = mWVMExtractor;
     } else {
-        if (extractorTemp != NULL) {
-            extractor = extractorTemp;
-        } else {
+        if (mCachedSource != NULL) {
+            // It's an HTTP stream, create extractor here may be blocked potentially.
+            // we should do it without mLock held.
+            mLock.unlock();
             extractor = MediaExtractor::Create(
                     dataSource, sniffedMIME.empty() ? NULL : sniffedMIME.c_str());
+            if (extractor != NULL) {
+                // ensure get the metadata
+                extractor->countTracks();
+            }
+            mLock.lock();
+        } else {
+            extractor = MediaExtractor::Create(dataSource, NULL);
         }
         if (extractor == NULL) {
             return UNKNOWN_ERROR;
