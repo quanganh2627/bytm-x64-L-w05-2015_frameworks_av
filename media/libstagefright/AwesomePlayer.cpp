@@ -495,6 +495,7 @@ void AwesomePlayer::setDisplaySource_l(bool isplaying) {
                     info.displayH = mStats.mVideoHeight;
                 }
                 mMDClient->setVideoSourceInfo(&info);
+                notifyMDSPlayerStatus_l(MDS_VIDEO_PREPARED);
             }
         }
     } else {
@@ -1369,7 +1370,6 @@ status_t AwesomePlayer::play_l() {
     addBatteryData(params);
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     setDisplaySource_l(true);
-    notifyMDSPlayerStatus_l(MDS_VIDEO_PREPARED);
 #endif
     return OK;
 }
