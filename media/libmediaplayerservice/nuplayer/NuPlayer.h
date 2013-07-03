@@ -156,7 +156,9 @@ private:
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
     sp<ANativeWindow> mANativeWindow;
-    void setDisplaySource(bool isplaying);
+    int mVideoSessionId;
+    void setMDSVideoInfo_l();
+    void setMDSVideoState_l(int state);
 #endif
 
     int32_t mVideoScalingMode;

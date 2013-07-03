@@ -218,6 +218,7 @@ AwesomePlayer::AwesomePlayer()
       mMDClient(NULL),
       mFramesToDirty(0),
       mRenderedFrames(0),
+      mVideoSessionId(-1),
 #endif
       mLastVideoTimeUs(-1),
       mTextDriver(NULL)
@@ -271,8 +272,7 @@ AwesomePlayer::~AwesomePlayer() {
 
     mClient.disconnect();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setDisplaySource_l(false);
-    notifyMDSPlayerStatus_l(MDS_VIDEO_UNPREPARED);
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARED);
 #endif
 }
 
@@ -411,61 +411,60 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
 }
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-void AwesomePlayer::notifyMDSPlayerStatus_l(int status) {
+void AwesomePlayer::setMDSVideoState_l(int state) {
+    if (state >= MDS_VIDEO_UNPREPARED && mMDClient == NULL) {
+        mVideoSessionId = -1;
+        return;
+    }
     if (mMDClient == NULL) {
         mMDClient = new MultiDisplayClient();
     }
+    if (mVideoSessionId < 0) {
+        mVideoSessionId = mMDClient->allocateVideoSessionId();
+    }
+    MDS_VIDEO_STATE cstate = mMDClient->getVideoState(mVideoSessionId);
+    if (cstate == (MDS_VIDEO_STATE)state)
+        return;
+    // Correct state
+    if (state == (int)MDS_VIDEO_PREPARED && cstate != MDS_VIDEO_PREPARING) {
+        mMDClient->setVideoState(mVideoSessionId, MDS_VIDEO_PREPARING);
+    }
+    mMDClient->setVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
 
-    if (mMDClient != NULL) {
-        mMDClient->setVideoState((MDS_VIDEO_STATE)status);
-
-        if (status == MDS_VIDEO_UNPREPARED) {
-            delete mMDClient;
-            mMDClient = NULL;
-        }
-    } else {
-        LOGI("NULL MDClient in AwesomePlayer!");
+    if (state == MDS_VIDEO_UNPREPARED) {
+        mVideoSessionId = -1;
+        delete mMDClient;
+        mMDClient = NULL;
     }
 }
 
-void AwesomePlayer::setDisplaySource_l(bool isplaying) {
+void AwesomePlayer::setMDSVideoInfo_l() {
     MDSVideoSourceInfo info;
-    memset(&info, 0, sizeof(MDSVideoSourceInfo));
-
-    if (isplaying) {
-        if (mVideoSource != NULL) {
-            if (mMDClient == NULL) {
-                mMDClient = new MultiDisplayClient();
-            }
-            int wcom = 0;
-            if (mNativeWindow != NULL)
-                mNativeWindow->query(mNativeWindow.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-            /*
-             * 0 means the buffers do not go directly to the window compositor;
-             * 1 means the ANativeWindow DOES send queued buffers
-             * directly to the window compositor;
-             */
-            if (wcom == 1) {
-                info.isplaying = true;
-                info.isprotected = (mDecryptHandle != NULL);
-                {
-                    Mutex::Autolock autoLock(mStatsLock);
-                    info.frameRate = mStats.mFrameRate;
-                    info.displayW = mStats.mVideoWidth;
-                    info.displayH = mStats.mVideoHeight;
-                }
-                mMDClient->setVideoSourceInfo(&info);
-                notifyMDSPlayerStatus_l(MDS_VIDEO_PREPARED);
-            }
-        }
-    } else {
-        if (mMDClient != NULL) {
-           info.isplaying = false;
-           info.isprotected = false;
-           mMDClient->setVideoSourceInfo(&info);
-           mFramesToDirty = 0;
-        }
+    int wcom = 0;
+    if (mNativeWindow != NULL) {
+        mNativeWindow->query(mNativeWindow.get(),
+                NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+        /*
+         * 0 means the buffers do not go directly to the window compositor;
+         * 1 means the ANativeWindow DOES send queued buffers
+         * directly to the window compositor;
+         * For more info, refer system/core/include/system/window.h
+         */
     }
+    if (wcom == 0 || mVideoSource == NULL ||
+            mMDClient == NULL || mVideoSessionId < 0)
+        return;
+    memset(&info, 0, sizeof(MDSVideoSourceInfo));
+    info.isplaying = true;
+    info.isprotected = (mDecryptHandle != NULL);
+    {
+        Mutex::Autolock autoLock(mStatsLock);
+        info.frameRate = mStats.mFrameRate;
+        info.displayW = mStats.mVideoWidth;
+        info.displayH = mStats.mVideoHeight;
+    }
+    setMDSVideoState_l(MDS_VIDEO_PREPARED);
+    mMDClient->setVideoSourceInfo(mVideoSessionId, &info);
 }
 #endif
 
@@ -1229,7 +1228,7 @@ status_t AwesomePlayer::play_l() {
     }
     addBatteryData(params);
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setDisplaySource_l(true);
+    setMDSVideoInfo_l();
 #endif
     return OK;
 }
@@ -1506,15 +1505,12 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer->release();
         mVideoBuffer = NULL;
     }
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setDisplaySource_l(false);
-    mRenderedFrames = 0;
-#endif
 
     mVideoSource->stop();
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    notifyMDSPlayerStatus_l(MDS_VIDEO_UNPREPARED);
+    mRenderedFrames = 0;
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARED);
 #endif
 
     // The following hack is necessary to ensure that the OMX
@@ -1954,7 +1950,7 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
 
     if (mVideoSource != NULL) {
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-        notifyMDSPlayerStatus_l(MDS_VIDEO_PREPARING);
+        setMDSVideoState_l(MDS_VIDEO_PREPARING);
 #endif
         int64_t durationUs;
         if (mVideoTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
@@ -2295,6 +2291,22 @@ void AwesomePlayer::onVideoEvent() {
     if (mVideoRenderer != NULL) {
         mSinceLastDropped++;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+        struct IntelPlatformPrivate platformPrivate;
+        struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
+        if (mVideoSessionId >= 0) {
+            ALOGV("MDS Video session ID is %d, Gfx buffer is %s", mVideoSessionId, (anwBuff == NULL? "null" : "not null"));
+            if (anwBuff != NULL) {
+                // Get mds_video_session_ID
+                // Limitation: support upto 16 concurrent video sessions
+                // native_window usage, bit 24 ~ bit 27 is used to maintain mds video session id
+                // TODO: use macro to replace magic numbers
+                anwBuff->usage |= ((mVideoSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
+                anwBuff->usage |= GRALLOC_USAGE_PRIVATE_3;
+            } else {
+                platformPrivate.usage = GRALLOC_USAGE_PRIVATE_3;
+                platformPrivate.usage |= ((mVideoSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
+            }
+        }
         // Only check the seek after the player start rendering.
         // Some player will seek to the last exit position in
         // the beginning automatically, but is not done by the user.
@@ -2313,29 +2325,18 @@ void AwesomePlayer::onVideoEvent() {
             mFramesToDirty = fps > 0 ? fps : 30;
         }
 
-        struct IntelPlatformPrivate *platformPrivate = NULL;
 
         // Put a speicial flag
         if (mFramesToDirty-- > 0) {
-            struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
             if (anwBuff != NULL) {
                 anwBuff->usage |= GRALLOC_USAGE_PRIVATE_2;
                 ALOGV("Add private usage:%x", anwBuff->usage);
             } else {
-                platformPrivate = (struct IntelPlatformPrivate *)
-                    malloc(sizeof(struct IntelPlatformPrivate));
-                if (platformPrivate != NULL)
-                    platformPrivate->usage = GRALLOC_USAGE_PRIVATE_2;
-                else
-                    ALOGE("Memory allocate failed!");
+                platformPrivate.usage = GRALLOC_USAGE_PRIVATE_2;
             }
         }
 
-        mVideoRenderer->render(mVideoBuffer, platformPrivate);
-        if (platformPrivate != NULL) {
-            free(platformPrivate);
-            platformPrivate = NULL;
-        }
+        mVideoRenderer->render(mVideoBuffer, &platformPrivate);
         mRenderedFrames++;
 #else
         mVideoRenderer->render(mVideoBuffer);
