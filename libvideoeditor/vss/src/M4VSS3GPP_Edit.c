@@ -3267,7 +3267,8 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                  pClipProperties->uiVideoWidth) ||
             ((M4OSA_UInt32)pC->ewc.uiVideoHeight !=
                  pClipProperties->uiVideoHeight) ||
-            pClipProperties->videoRotationDegrees != 0) {
+            (pClipProperties->videoRotationDegrees != 0 &&
+                 pClip->pSettings->bTranscodingRequired) ) {
 
             if (pClip->m_pPreResizeFrame == M4OSA_NULL) {
                 /**
