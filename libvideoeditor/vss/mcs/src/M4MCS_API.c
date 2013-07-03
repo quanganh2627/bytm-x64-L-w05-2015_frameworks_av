@@ -5989,7 +5989,8 @@ static M4OSA_ERR M4MCS_intPrepareVideoEncoder( M4MCS_InternalContext *pC )
     if( ( (M4OSA_UInt32)EncParams.FrameWidth
         != pC->pReaderVideoStream->m_videoWidth)
         || ((M4OSA_UInt32)EncParams.FrameHeight
-        != pC->pReaderVideoStream->m_videoHeight) )
+        != pC->pReaderVideoStream->m_videoHeight)
+        || pC->pReaderVideoStream->videoRotationDegrees != 0)
     {
         /**
         * Allocate the intermediate video plane that will receive the decoded image before
