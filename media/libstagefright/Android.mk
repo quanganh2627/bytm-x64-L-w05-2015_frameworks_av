@@ -186,12 +186,6 @@ LOCAL_STATIC_LIBRARIES += \
 LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
 endif
 
-ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
-        LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
-        LOCAL_SHARED_LIBRARIES += libmultidisplay
-        LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
-endif
-
 LOCAL_SHARED_LIBRARIES += libstlport
 include external/stlport/libstlport.mk
 
@@ -202,6 +196,14 @@ LOCAL_SHARED_LIBRARIES += \
         libdl
 
 LOCAL_CFLAGS += -Wno-multichar
+
+#ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+#    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+#ifeq ($(USE_MDS_LEGACY),true)
+#    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
+#endif
+#    LOCAL_SHARED_LIBRARIES += libmultidisplay
+#endif
 
 LOCAL_MODULE:= libstagefright
 
