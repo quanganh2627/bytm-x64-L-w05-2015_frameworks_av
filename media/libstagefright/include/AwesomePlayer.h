@@ -237,9 +237,9 @@ private:
     bool mWatchForAudioEOS;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
-    sp<ANativeWindow> mDefaultNativeWindow;
     int mFramesToDirty;
     uint32_t mRenderedFrames;
+    int mVideoSessionId;
 #endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
@@ -291,8 +291,8 @@ private:
     status_t setDataSource_l(const sp<DataSource> &dataSource);
     status_t setDataSource_l(const sp<MediaExtractor> &extractor);
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    void notifyMDSPlayerStatus_l(int status);
-    void setDisplaySource_l(bool isplaying);
+    void setMDSVideoState_l(int status);
+    void setMDSVideoInfo_l();
 #endif
     void reset_l();
     status_t seekTo_l(int64_t timeUs);
