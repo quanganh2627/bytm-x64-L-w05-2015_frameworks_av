@@ -34,7 +34,13 @@
 #include <utils/threads.h>
 #include <drm/DrmManagerClient.h>
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
 #include <display/MultiDisplayClient.h>
+#else
+#include <display/MultiDisplayService.h>
+#include <display/IMultiDisplayVideoControl.h>
+using namespace android::intel;
+#endif
 #endif
 
 namespace android {
@@ -56,12 +62,18 @@ struct WVMExtractor;
 struct AwesomeRenderer : public RefBase {
     AwesomeRenderer() {}
 
-    virtual void render(MediaBuffer *buffer) = 0;
+    virtual void render(MediaBuffer *buffer, void *platformPrivate = NULL) = 0;
 
 private:
     AwesomeRenderer(const AwesomeRenderer &);
     AwesomeRenderer &operator=(const AwesomeRenderer &);
 };
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+struct IntelPlatformPrivate {
+    int usage;
+};
+#endif
 
 struct AwesomePlayer {
     AwesomePlayer();
@@ -217,7 +229,12 @@ private:
     bool mWatchForAudioSeekComplete;
     bool mWatchForAudioEOS;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
     MultiDisplayClient* mMDClient;
+#else
+    sp<IMultiDisplayVideoControl> mMDClient;
+#endif
+    int mVideoSessionId;
 #endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
@@ -273,7 +290,8 @@ private:
     status_t setDataSource_l(const sp<DataSource> &dataSource);
     status_t setDataSource_l(const sp<MediaExtractor> &extractor);
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    void setDisplaySource_l(bool isplaying);
+    void setMDSVideoState_l(int status);
+    void setMDSVideoInfo_l();
 #endif
     void reset_l();
     status_t seekTo_l(int64_t timeUs);

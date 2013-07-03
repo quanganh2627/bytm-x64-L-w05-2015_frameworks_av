@@ -80,7 +80,12 @@
 #include "RemoteDisplay.h"
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
 #include <display/MultiDisplayClient.h>
+#else
+#include <display/MultiDisplayService.h>
+#include <display/IMultiDisplayVideoControl.h>
+#endif
 #endif
 
 namespace {
@@ -90,6 +95,11 @@ using android::OK;
 using android::BAD_VALUE;
 using android::NOT_ENOUGH_DATA;
 using android::Parcel;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifndef USE_MDS_LEGACY
+using namespace android::intel;
+#endif
+#endif
 
 // Max number of entries in the filter.
 const int kMaxFilterSize = 64;  // I pulled that out of thin air.
@@ -228,12 +238,28 @@ MediaPlayerService::MediaPlayerService()
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     // Reset video playback status in case media server crashes.
-    MultiDisplayClient* client = new MultiDisplayClient;
-    if (client) {
-        MDSVideoSourceInfo info;
-        memset(&info, 0, sizeof(MDSVideoSourceInfo));
-        client->setVideoSourceInfo(&info);
-        delete client;
+#ifdef USE_MDS_LEGACY
+    MultiDisplayClient* mdsclient = new MultiDisplayClient();
+#else
+    sp<IServiceManager> sm = defaultServiceManager();
+    if (sm == NULL) {
+        LOGE("%s: Fail to get service manager", __func__);
+        return;
+    }
+    sp<IMDService> mds = interface_cast<IMDService>(
+            sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
+    if (mds == NULL) {
+        LOGE("%s: Failed to get MDS service", __func__);
+        return;
+    }
+    sp<IMultiDisplayVideoControl> mdsclient = mds->getVideoControl();
+#endif
+    if (mdsclient != NULL) {
+        mdsclient->resetVideoPlayback();
+#ifdef USE_MDS_LEGACY
+        delete mdsclient;
+#endif
+        mdsclient = NULL;
     }
 #endif
 }
