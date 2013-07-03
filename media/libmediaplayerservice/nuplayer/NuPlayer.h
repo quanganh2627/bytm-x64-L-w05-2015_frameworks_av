@@ -21,12 +21,18 @@
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/foundation/AHandler.h>
 #include <media/stagefright/NativeWindowWrapper.h>
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#include <display/MultiDisplayClient.h>
-#endif
-
 #ifdef TARGET_HAS_VPP
 #include <NuPlayerVPPProcessor.h>
+#endif
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
+#include <display/MultiDisplayClient.h>
+#else
+#include <display/MultiDisplayService.h>
+#include <display/IMultiDisplayVideoControl.h>
+using namespace android::intel;
+#endif
 #endif
 
 namespace android {
@@ -169,9 +175,14 @@ private:
     int64_t mVideoLateByUs;
     int64_t mNumFramesTotal, mNumFramesDropped;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
     MultiDisplayClient* mMDClient;
-    sp<ANativeWindow> mANativeWindow;
-    void setDisplaySource(bool isplaying);
+#else
+    sp<IMultiDisplayVideoControl> mMDClient;
+#endif
+    int mVideoSessionId;
+    void setMDSVideoInfo_l();
+    void setMDSVideoState_l(int state);
 #endif
 
     int32_t mVideoScalingMode;
