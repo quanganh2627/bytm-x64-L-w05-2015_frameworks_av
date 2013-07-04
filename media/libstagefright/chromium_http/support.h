@@ -51,7 +51,7 @@ private:
 };
 
 struct SfRequestContext : public net::URLRequestContext {
-    SfRequestContext();
+    SfRequestContext(bool bCacheEnable);
 
     virtual const std::string &GetUserAgent(const GURL &url) const;
 
