@@ -1271,9 +1271,12 @@ struct MyHandler : public AHandler {
                         timeout->post(kStartupTimeoutUs);
 
                         ssize_t i = response->mHeaders.indexOfKey("rtp-info");
-                        CHECK_GE(i, 0);
+                        if (i < 0) {
+                            ALOGE("rtp-info is %d", i);
+                            result = UNKNOWN_ERROR;
+                        }
 
-                        ALOGV("rtp-info: %s", response->mHeaders.valueAt(i).c_str());
+                        ALOGV("rtp-info: %s", (i >= 0) ? response->mHeaders.valueAt(i).c_str() : "-1");
 
                         ALOGI("seek completed.");
                     }
