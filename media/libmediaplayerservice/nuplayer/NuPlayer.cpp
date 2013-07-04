@@ -767,6 +767,14 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                       mFlushingAudio, mFlushingVideo);
 
                 mResetPostponed = true;
+                // if the track EOS, it can not receive the DISCONTINUITY msg
+                // flush and close this decoder.
+                if (mVideoEOS && mVideoDecoder != NULL) {
+                    flushDecoder(false,true);
+                }
+                if (mAudioEOS && mAudioDecoder != NULL) {
+                    flushDecoder(true, true);
+                }
                 break;
             }
 
@@ -805,17 +813,20 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     driver->notifySeekComplete();
                 }
             }
-
-            if ((mAudioDecoder != NULL) && mAudioEOS &&
-                   !mSource->isIStreamSource()) {
-                flushDecoder(true, false);
-                mAudioEOS = false;
+            if (mSource->isIStreamSource()) {
+                break;
             }
 
-            if ((mVideoDecoder != NULL) && mVideoEOS &&
-                   !mSource->isIStreamSource()) {
-                flushDecoder(false, false);
-                mVideoEOS = false;
+            if ((mAudioEOS || mAudioDecoder == NULL)
+                    && (mVideoEOS || mVideoDecoder == NULL)) {
+                if (mAudioDecoder != NULL) {
+                     flushDecoder(true, false);
+                     mAudioEOS = false;
+                }
+                if (mVideoDecoder != NULL) {
+                     flushDecoder(false, false);
+                     mVideoEOS = false;
+                }
             }
 
             break;
@@ -1059,6 +1070,21 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
 
                 mTimeDiscontinuityPending =
                     mTimeDiscontinuityPending || timeChange;
+
+                // if one of the tracks EOS, end the playback
+                if (mAudioEOS || mVideoEOS) {
+                    ALOGI("One of the tracks already EOS, end the playback");
+                    if (!IsFlushingState(audio ? mFlushingAudio : mFlushingVideo)) {
+                        mRenderer->queueEOS(audio, ERROR_END_OF_STREAM);
+                    } else if (audio) {
+                        mAudioEosPending = true;
+                        mAudioEosErr = ERROR_END_OF_STREAM;
+                    } else {
+                        mVideoEosPending = true;
+                        mVideoEosErr = ERROR_END_OF_STREAM;
+                    }
+                    return -EWOULDBLOCK;
+                }
 
                 if (formatChange || timeChange) {
                     flushDecoder(audio, formatChange);
