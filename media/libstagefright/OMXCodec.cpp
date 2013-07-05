@@ -1527,20 +1527,18 @@ status_t OMXCodec::setVideoOutputFormat(
             ALOGW("Set decode rotation failed");
         }
 
-        if (mNativeWindow != NULL && mOMX->livesLocally(mNode,getpid())) {
-            int wcom = 0;
-            mNativeWindow->query(mNativeWindow.get(),NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER,&wcom);
-            if (wcom == 1) {
-                InitOMXParams(&def);
-                def.nPortIndex = kPortIndexInput;
-                err = mOMX->getParameter(
-                        mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
-                CHECK_EQ(err, (status_t)OK);
-                ALOGD("set NativeWindow = %p",mNativeWindow.get());
-                video_def->pNativeWindow = mNativeWindow.get();
-                err = mOMX->setParameter(
-                        mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
-            }
+        if (mNativeWindow != NULL && mOMX->livesLocally(mNode,getpid())){
+            InitOMXParams(&def);
+            def.nPortIndex = kPortIndexInput;
+
+            err = mOMX->getParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            CHECK_EQ(err, (status_t)OK);
+
+            ALOGD("set NativeWindow = %p",mNativeWindow.get());
+            video_def->pNativeWindow = mNativeWindow.get();
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
         }
     }
     return err;

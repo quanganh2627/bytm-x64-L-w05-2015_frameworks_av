@@ -146,12 +146,14 @@ void NuPlayer::setDisplaySource(bool isplaying) {
             info.displayW  = displayW;
             info.displayH  = displayH;
             mMDClient->setVideoSourceInfo(&info);
+            mMDClient->setVideoState(MDS_VIDEO_PREPARED);
         }
     } else {
       if (mMDClient != NULL) {
           info.isplaying = false;
           info.isprotected = false;
           mMDClient->setVideoSourceInfo(&info);
+          mMDClient->setVideoState(MDS_VIDEO_UNPREPARED);
           delete mMDClient;
           mMDClient = NULL;
       }
