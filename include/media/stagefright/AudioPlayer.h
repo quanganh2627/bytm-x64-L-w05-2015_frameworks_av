@@ -163,6 +163,8 @@ public:
     bool mOffloadPostEOSPending;
 #ifdef BGM_ENABLED
     bool mAllowBackgroundPlayback;
+    int mBGMAudioSessionID;
+    void updateBGMoutput();
 #endif
 };
 
