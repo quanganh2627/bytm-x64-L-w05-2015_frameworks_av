@@ -2976,6 +2976,22 @@ static M4OSA_ERR M4VSS3GPP_intSwitchToNextClip(
         }
     }
 
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+    // Shut down the former encode once one clip has finished encoding
+    if( pC->Vstate == M4VSS3GPP_kEditVideoState_DECODE_ENCODE )
+    {
+        err = M4VSS3GPP_intDestroyVideoEncoder(pC);
+        if( M4NO_ERROR != err )
+        {
+            M4OSA_TRACE1_1(
+                "M4VSS3GPP_intSwitchToNextClip:\
+                M4VSS3GPP_editDestroyVideoEncoder() returns 0x%x!",
+                err);
+            return err;
+        }
+    }
+#endif
+
     /**
     * Init starting state for this clip processing */
     if( M4SYS_kMP3 == pC->ewc.AudioStreamType )
