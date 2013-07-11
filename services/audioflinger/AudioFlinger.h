@@ -53,6 +53,10 @@
 
 #include <powermanager/IPowerManager.h>
 
+#ifdef AUDIO_DUMP_ENABLE
+#include "AudioDumpUtils.h"
+#endif
+
 namespace android {
 
 class audio_track_cblk_t;
@@ -1269,6 +1273,10 @@ public:
                     // accessed by both binder threads and within threadLoop(), lock on mutex needed
                     unsigned    mFastTrackAvailMask;    // bit i set if fast track [i] is available
                     bool        isOffloadTrack() const;
+#ifdef AUDIO_DUMP_ENABLE
+    private:
+       AudioDump *mPlaybackAudioDump;
+#endif
 
     };
 
@@ -1611,6 +1619,9 @@ private:
                 // when < 0, maximum frames to drop before starting capture even if sync event is
                 // not received
                 ssize_t                             mFramestoDrop;
+#ifdef AUDIO_DUMP_ENABLE
+                AudioDump *mRecordAudioDump;
+#endif
     };
 
     // server side of the client's IAudioRecord
