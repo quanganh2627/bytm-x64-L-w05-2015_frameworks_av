@@ -1,6 +1,24 @@
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
+# Build AudioDumpUtil
+#########################
+ifeq ($(AUDIO_DUMP_ENABLE),true)
+LOCAL_C_INCLUDES:= \
+    $(LOCAL_PATH)/include \
+
+LOCAL_SRC_FILES:= \
+    AudioDumpUtils.cpp \
+
+LOCAL_MODULE:= libaudiodumputil
+
+include $(BUILD_STATIC_LIBRARY)
+endif
+##########################
+
+
+include $(CLEAR_VARS)
+
 include frameworks/av/media/libstagefright/codecs/common/Config.mk
 
 LOCAL_SRC_FILES:=                         \
@@ -204,6 +222,12 @@ LOCAL_CFLAGS += -Wno-multichar
 #endif
 #    LOCAL_SHARED_LIBRARIES += libmultidisplay
 #endif
+
+ifeq ($(AUDIO_DUMP_ENABLE),true)
+  LOCAL_C_INCLUDES += $(TOP)/frameworks/av/media/libstagefright/include
+  LOCAL_STATIC_LIBRARIES += libaudiodumputil
+  LOCAL_CFLAGS += -DAUDIO_DUMP_ENABLE
+endif
 
 LOCAL_MODULE:= libstagefright
 

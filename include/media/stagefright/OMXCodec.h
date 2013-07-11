@@ -37,6 +37,9 @@ class SkipCutBuffer;
 class VPPProcessor;
 #endif
 
+#ifdef AUDIO_DUMP_ENABLE
+class AudioDump;
+#endif
 struct OMXCodec : public MediaSource,
                   public MediaBufferObserver {
     enum CreationFlags {
@@ -256,6 +259,11 @@ private:
     // Used to record the decoding time for an output picture from
     // a video encoder.
     List<int64_t> mDecodingTimeList;
+
+    // pointer to AudioDump object.
+#ifdef AUDIO_DUMP_ENABLE
+    AudioDump *mParserAudioDump;
+#endif
 
     OMXCodec(const sp<IOMX> &omx, IOMX::node_id node,
              uint32_t quirks, uint32_t flags,

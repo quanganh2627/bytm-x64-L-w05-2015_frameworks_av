@@ -35,6 +35,12 @@
 #include <media/AudioParameter.h>
 #include <hardware/audio.h>
 #endif
+
+#ifdef AUDIO_DUMP_ENABLE
+#include <cutils/properties.h>
+#include "AudioDumpUtils.h"
+#endif
+
 namespace android {
 
 AudioPlayer::AudioPlayer(
@@ -59,6 +65,9 @@ AudioPlayer::AudioPlayer(
       mFirstBuffer(NULL),
       mAudioSink(audioSink),
       mObserver(observer),
+#ifdef AUDIO_DUMP_ENABLE
+      mDecAudioDump(NULL),
+#endif
       mPinnedTimeUs(-1ll),
       mPlaying(false),
       mStartPosUs(0),
@@ -73,6 +82,12 @@ AudioPlayer::~AudioPlayer() {
     if (mStarted) {
         reset();
     }
+#ifdef AUDIO_DUMP_ENABLE
+    if (mDecAudioDump) {
+        delete mDecAudioDump;
+        mDecAudioDump = NULL;
+    }
+#endif
 }
 
 void AudioPlayer::setSource(const sp<MediaSource> &source) {
@@ -747,6 +762,24 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
         memcpy((char *)data + size_done,
                (const char *)mInputBuffer->data() + mInputBuffer->range_offset(),
                copy);
+#ifdef AUDIO_DUMP_ENABLE
+        char value[PROPERTY_VALUE_MAX];
+        if (property_get("audio.media_pb.decoder.dump", value, "disable")) {
+            if (!strcmp(value, "enable") && mDecAudioDump) {
+                //take audio dump
+                mDecAudioDump->dumpData((uint8_t*)mInputBuffer->data(),
+                                         mInputBuffer->range_offset(), copy);
+            } else if (!strcmp(value, "enable") && !mDecAudioDump) {
+                mDecAudioDump = new AudioDump(AudioDump::AUDIO_DECODER);
+                if (mDecAudioDump) {
+                    mDecAudioDump->isOffloadTrack = mOffload;
+                    //take audio dump
+                    mDecAudioDump->dumpData((uint8_t*)mInputBuffer->data(),
+                                            mInputBuffer->range_offset(), copy);
+                }
+            }
+        }
+#endif
 
         mInputBuffer->set_range(mInputBuffer->range_offset() + copy,
                                 mInputBuffer->range_length() - copy);
