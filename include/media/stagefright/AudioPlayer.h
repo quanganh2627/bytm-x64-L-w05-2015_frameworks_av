@@ -28,6 +28,9 @@ namespace android {
 class MediaSource;
 class AudioTrack;
 class AwesomePlayer;
+#ifdef AUDIO_DUMP_ENABLE
+class AudioDump;
+#endif
 
 class AudioPlayer : public TimeSource {
 public:
@@ -128,6 +131,12 @@ private:
     int mChannels;
     audio_format_t mOffloadFormat;
     int64_t mStartPos;
+
+   //Pointer to AudioDump object.
+#ifdef AUDIO_DUMP_ENABLE
+    AudioDump *mDecAudioDump;
+#endif
+
     static void AudioCallback(int event, void *user, void *info);
     void AudioCallback(int event, void *info);
 

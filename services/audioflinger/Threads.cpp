@@ -946,6 +946,9 @@ AudioFlinger::PlaybackThread::PlaybackThread(const sp<AudioFlinger>& audioFlinge
         mMixerStatusIgnoringFastTracks(MIXER_IDLE),
         standbyDelay(AudioFlinger::mStandbyTimeInNsecs),
         mScreenState(AudioFlinger::mScreenState),
+#ifdef AUDIO_DUMP_ENABLE
+        mPlaybackAudioDump(NULL),
+#endif
         // index 0 is reserved for normal mixer's submix
         mFastTrackAvailMask(((1 << FastMixerState::kMaxFastTracks) - 1) & ~1)
 {
@@ -982,10 +985,19 @@ AudioFlinger::PlaybackThread::PlaybackThread(const sp<AudioFlinger>& audioFlinge
     }
     // mStreamTypes[AUDIO_STREAM_CNT] exists but isn't explicitly initialized here,
     // because mAudioFlinger doesn't have one to copy from
+#ifdef AUDIO_DUMP_ENABLE
+    mPlaybackAudioDump = new AudioDump(AudioDump::AUDIOFLINGER_PLAYBACK);
+#endif
 }
 
 AudioFlinger::PlaybackThread::~PlaybackThread()
 {
+#ifdef AUDIO_DUMP_ENABLE
+    if (mPlaybackAudioDump) {
+        delete mPlaybackAudioDump;
+        mPlaybackAudioDump = NULL;
+    }
+#endif
     mAudioFlinger->unregisterWriter(mNBLogWriter);
     delete [] mMixBuffer;
 }
@@ -1280,6 +1292,11 @@ Exit:
     if (status) {
         *status = lStatus;
     }
+#ifdef AUDIO_DUMP_ENABLE
+    if (mPlaybackAudioDump) {
+        mPlaybackAudioDump->isOffloadTrack = isOffloadTrack();
+    }
+#endif
     return track;
 }
 
@@ -1769,7 +1786,17 @@ void AudioFlinger::PlaybackThread::threadLoop_write()
         mBytesWritten += mixBufferSize;
     }
 #endif
-
+#ifdef AUDIO_DUMP_ENABLE
+    if (bytesWritten > 0) {
+        char value[PROPERTY_VALUE_MAX];
+        if (property_get("audio.media_pb.flinger.dump", value, "disable")) {
+            if (!strcmp(value, "enable") && mPlaybackAudioDump) {
+                mPlaybackAudioDump->dumpData((uint8_t*)mMixBuffer,
+                                             0, (size_t)bytesWritten);
+            }
+        }
+    }
+#endif
     mNumWrites++;
     mInWrite = false;
 }
@@ -3903,6 +3930,9 @@ AudioFlinger::RecordThread::RecordThread(const sp<AudioFlinger>& audioFlinger,
     mInput(input), mResampler(NULL), mRsmpOutBuffer(NULL), mRsmpInBuffer(NULL),
     // mRsmpInIndex and mInputBytes set by readInputParameters()
     mReqChannelCount(popcount(channelMask)),
+#ifdef AUDIO_DUMP_ENABLE
+    mRecordAudioDump(NULL),
+#endif
     mReqSampleRate(sampleRate)
     // mBytesRead is only meaningful while active, and so is cleared in start()
     // (but might be better to also clear here for dump?)
@@ -3913,7 +3943,9 @@ AudioFlinger::RecordThread::RecordThread(const sp<AudioFlinger>& audioFlinger,
     snprintf(mName, kNameLength, "AudioIn_%X", id);
 
     readInputParameters();
-
+#ifdef AUDIO_DUMP_ENABLE
+    mRecordAudioDump = new AudioDump(AudioDump::AUDIOFLINGER_RECORD);
+#endif
 }
 
 
@@ -3922,6 +3954,12 @@ AudioFlinger::RecordThread::~RecordThread()
     delete[] mRsmpInBuffer;
     delete mResampler;
     delete[] mRsmpOutBuffer;
+#ifdef AUDIO_DUMP_ENABLE
+    if (mRecordAudioDump) {
+        delete mRecordAudioDump;
+        mRecordAudioDump = NULL;
+    }
+#endif
 }
 
 void AudioFlinger::RecordThread::onFirstRef()
@@ -4052,6 +4090,27 @@ bool AudioFlinger::RecordThread::threadLoop()
                                 readInto = mRsmpInBuffer;
                                 mRsmpInIndex = 0;
                             }
+#ifdef AUDIO_DUMP_ENABLE
+                            if (mBytesRead > 0) {
+                                char value[PROPERTY_VALUE_MAX];
+                                if (property_get("audio.media_rc.flinger.dump",
+                                                 value, "disable")) {
+                                    if (!strcmp(value, "enable") && mRecordAudioDump) {
+                                        if (framesOut == mFrameCount &&
+                                            ((int)mChannelCount == mReqChannelCount ||
+                                            mFormat != AUDIO_FORMAT_PCM_16_BIT)) {
+                                            mRecordAudioDump->dumpData(
+                                                    (uint8_t*)buffer.raw,
+                                                    0, (size_t)mBytesRead);
+                                        } else {
+                                            mRecordAudioDump->dumpData(
+                                                    (uint8_t*)mRsmpInBuffer,
+                                                    0, (size_t)mBytesRead);
+                                        }
+                                    }
+                                }
+                            }
+#endif
                             mBytesRead = mInput->stream->read(mInput->stream, readInto,
                                     mInputBytes);
                             if (mBytesRead <= 0) {
@@ -4471,6 +4530,17 @@ status_t AudioFlinger::RecordThread::getNextBuffer(AudioBufferProvider::Buffer* 
             buffer->frameCount = 0;
             return NOT_ENOUGH_DATA;
         }
+#ifdef AUDIO_DUMP_ENABLE
+        if (mBytesRead > 0) {
+            char value[PROPERTY_VALUE_MAX];
+            if (property_get("audio.media_rc.flinger.dump", value, "disable")) {
+                if (!strcmp(value, "enable") && mRecordAudioDump) {
+                    mRecordAudioDump->dumpData((uint8_t*)mRsmpInBuffer,
+                                               0, (size_t)mBytesRead);
+                }
+            }
+        }
+#endif
         mRsmpInIndex = 0;
         framesReady = mFrameCount;
     }

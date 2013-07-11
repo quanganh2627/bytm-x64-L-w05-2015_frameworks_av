@@ -60,6 +60,10 @@
 #include "VAVideoDecoder.h"
 #endif
 
+#ifdef AUDIO_DUMP_ENABLE
+#include "AudioDumpUtils.h"
+#include <cutils/properties.h>
+#endif
 namespace android {
 
 // Treat time out as an error if we have not received any output
@@ -1518,6 +1522,9 @@ OMXCodec::OMXCodec(
       mSkipCutBuffer(NULL),
       mLeftOverBuffer(NULL),
       mPaused(false),
+#ifdef AUDIO_DUMP_ENABLE
+      mParserAudioDump(NULL),
+#endif
       mNativeWindow(
               (!strncmp(componentName, "OMX.google.", 11)
               || !strcmp(componentName, "OMX.Nvidia.mpeg2v.decode"))
@@ -1640,6 +1647,12 @@ OMXCodec::~OMXCodec() {
 
     free(mMIME);
     mMIME = NULL;
+#ifdef AUDIO_DUMP_ENABLE
+    if (mParserAudioDump) {
+        delete mParserAudioDump;
+        mParserAudioDump = NULL;
+    }
+#endif
 }
 
 status_t OMXCodec::init() {
@@ -3276,6 +3289,23 @@ bool OMXCodec::drainInputBuffer(BufferInfo *info) {
             break;
         }
 
+#ifdef AUDIO_DUMP_ENABLE
+        char value[PROPERTY_VALUE_MAX];
+        if (property_get("audio.media_pb.parser.dump", value, "disable")) {
+            if (!strcmp(value, "enable") && mParserAudioDump) {
+                mParserAudioDump->dumpData((uint8_t*)srcBuffer->data(),
+                                           srcBuffer->range_offset(),
+                                           srcBuffer->range_length());
+            } else if (!strcmp(value, "enable") && !mParserAudioDump) {
+                mParserAudioDump = new AudioDump(AudioDump::AUDIO_PARSER);
+                if (mParserAudioDump) {
+                    mParserAudioDump->dumpData((uint8_t*)srcBuffer->data(),
+                                               srcBuffer->range_offset(),
+                                               srcBuffer->range_length());
+                }
+            }
+        }
+#endif
         if (mFlags & kUseSecureInputBuffers) {
             info = findInputBufferByDataPointer(srcBuffer->data());
             CHECK(info != NULL);

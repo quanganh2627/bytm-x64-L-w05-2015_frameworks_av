@@ -18,6 +18,9 @@
 #ifndef INCLUDING_FROM_AUDIOFLINGER_H
     #error This header file should only be included from AudioFlinger.h
 #endif
+#ifdef AUDIO_DUMP_ENABLE
+#include "AudioDumpUtils.h"
+#endif
 
 class ThreadBase : public Thread {
 public:
@@ -563,6 +566,10 @@ protected:
                 // accessed by both binder threads and within threadLoop(), lock on mutex needed
                 unsigned    mFastTrackAvailMask;    // bit i set if fast track [i] is available
                 bool isOffloadTrack() const;
+#ifdef AUDIO_DUMP_ENABLE
+    private:
+       AudioDump *mPlaybackAudioDump;
+#endif
 
 };
 
@@ -815,7 +822,9 @@ private:
             // when < 0, maximum frames to drop before starting capture even if sync event is
             // not received
             ssize_t                             mFramestoDrop;
-
+#ifdef AUDIO_DUMP_ENABLE
+                AudioDump *mRecordAudioDump;
+#endif
             // For dumpsys
             const sp<NBAIO_Sink>                mTeeSink;
 };
