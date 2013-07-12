@@ -29,7 +29,9 @@
 #include "StreamingSource.h"
 #include "GenericSource.h"
 #include "mp4/MP4Source.h"
-
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#endif
 #include "ATSParser.h"
 
 #include <cutils/properties.h> // for property_get
@@ -76,9 +78,13 @@ NuPlayer::NuPlayer()
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDClient(NULL),
 #endif
+#ifdef TARGET_HAS_VPP
+      mIsVppInit(false),
+#endif
       mVideoScalingMode(NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW),
       mSourceAlreadyStart(false),
       mPreparePending(false) {
+          LOGV("nuplayer constructor");
 }
 
 NuPlayer::~NuPlayer() {
@@ -548,6 +554,14 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     ALOGV("initiating %s decoder shutdown",
                          audio ? "audio" : "video");
 
+/*#ifdef TARGET_HAS_VPP
+                    if (mVideoEOS) {
+                        mRenderer->releaseVppProcessor();
+                        mVPPProcessor.clear();
+                        mIsVppInit = false;
+                    }
+#endif*/
+
                     (audio ? mAudioDecoder : mVideoDecoder)->initiateShutdown();
 
                     if (audio) {
@@ -657,6 +671,25 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     mVideoEosErr = UNKNOWN_ERROR;
                 }
             } else if (what == ACodec::kWhatDrainThisBuffer) {
+#ifdef TARGET_HAS_VPP
+                // init VPP
+                if (!audio) {
+                    if (!mIsVppInit && mVideoDecoder != NULL && mVPPProcessor != NULL) {
+                        mIsVppInit = true;
+                        sp<ACodec> codec = mVideoDecoder->mCodec;
+                        bool success = codec->isVppBufferAvail();
+                        if (success) {
+                            if(mVPPProcessor->init(codec) != VPP_OK){
+                                mRenderer->releaseVppProcessor();
+                                mVPPProcessor.clear();
+                            }
+                        } else {
+                            mRenderer->releaseVppProcessor();
+                            mVPPProcessor.clear();
+                        }
+                    }
+                }
+#endif
                 renderBuffer(audio, codecRequest);
             } else {
                 ALOGV("Unhandled codec notification %d.", what);
@@ -703,6 +736,7 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                         && (mVideoEOS || mVideoDecoder == NULL)) {
                     notifyListener(MEDIA_PLAYBACK_COMPLETE, 0, 0);
                 }
+
             } else if (what == Renderer::kWhatPosition) {
                 int64_t positionUs;
                 CHECK(msg->findInt64("positionUs", &positionUs));
@@ -741,7 +775,11 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
             ALOGV("kWhatReset");
 
             cancelPollDuration();
-
+#ifdef TARGET_HAS_VPP
+            if (mVPPProcessor != NULL) {
+                mVPPProcessor->flushShutdown();
+            }
+#endif
             if (mRenderer != NULL) {
                 // There's an edge case where the renderer owns all output
                 // buffers and is paused, therefore the decoder will not read
@@ -767,6 +805,14 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                       mFlushingAudio, mFlushingVideo);
 
                 mResetPostponed = true;
+                // if the track EOS, it can not receive the DISCONTINUITY msg
+                // flush and close this decoder.
+                if (mVideoEOS && mVideoDecoder != NULL) {
+                    flushDecoder(false,true);
+                }
+                if (mAudioEOS && mAudioDecoder != NULL) {
+                    flushDecoder(true, true);
+                }
                 break;
             }
 
@@ -798,24 +844,31 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                  seekTimeUs, seekTimeUs / 1E6);
 
             mSource->seekTo(seekTimeUs);
-
+#ifdef TARGET_HAS_VPP
+            if (mVPPProcessor != NULL) {
+                mVPPProcessor->seek();
+            }
+#endif
             if (mDriver != NULL) {
                 sp<NuPlayerDriver> driver = mDriver.promote();
                 if (driver != NULL) {
                     driver->notifySeekComplete();
                 }
             }
-
-            if ((mAudioDecoder != NULL) && mAudioEOS &&
-                   !mSource->isIStreamSource()) {
-                flushDecoder(true, false);
-                mAudioEOS = false;
+            if (mSource->isIStreamSource()) {
+                break;
             }
 
-            if ((mVideoDecoder != NULL) && mVideoEOS &&
-                   !mSource->isIStreamSource()) {
-                flushDecoder(false, false);
-                mVideoEOS = false;
+            if ((mAudioEOS || mAudioDecoder == NULL)
+                    && (mVideoEOS || mVideoDecoder == NULL)) {
+                if (mAudioDecoder != NULL) {
+                     flushDecoder(true, false);
+                     mAudioEOS = false;
+                }
+                if (mVideoDecoder != NULL) {
+                     flushDecoder(false, false);
+                     mVideoEOS = false;
+                }
             }
 
             break;
@@ -905,9 +958,15 @@ void NuPlayer::finishPrepare() {
 }
 
 void NuPlayer::finishReset() {
+    LOGV("finishReset");
     CHECK(mAudioDecoder == NULL);
     CHECK(mVideoDecoder == NULL);
-
+#ifdef TARGET_HAS_VPP
+    if (mVPPProcessor != NULL && mRenderer != NULL) {
+        mRenderer->releaseVppProcessor();
+        mVPPProcessor.clear();
+    }
+#endif
     ++mScanSourcesGeneration;
     mScanSourcesPending = false;
 
@@ -979,7 +1038,20 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
     looper()->registerHandler(*decoder);
 
     (*decoder)->configure(format);
-
+#ifdef TARGET_HAS_VPP
+    if (!audio) {
+        if(mVPPProcessor == NULL) {
+            mVPPProcessor = createVppProcessor();
+            if(mVPPProcessor != NULL) {
+                sp<ACodec> codec = (*decoder)->mCodec;
+                looper()->registerHandler(mVPPProcessor);
+                LOGE("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
+                        mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+                codec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+            }
+        }
+    }
+#endif
     int64_t durationUs;
     if (mDriver != NULL && mSource->getDuration(&durationUs) == OK) {
         sp<NuPlayerDriver> driver = mDriver.promote();
@@ -992,8 +1064,34 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
         setDisplaySource(true);
 #endif
 
+
     return OK;
 }
+
+#ifdef TARGET_HAS_VPP
+sp<NuPlayerVPPProcessor> NuPlayer::createVppProcessor() {
+    sp<NuPlayerVPPProcessor> processor = NULL;
+    if (NuPlayerVPPProcessor::isVppOn()) {
+        int32_t width = 0, height = 0, fps = 0;
+        VPPVideoInfo info;
+        memset(&info, 0, sizeof(VPPVideoInfo));
+
+        sp<AMessage> format = mSource->getFormat(false);
+        sp<MetaData> meta = new MetaData();
+        convertMessageToMetaData(format, meta);
+        CHECK(meta->findInt32(kKeyWidth, &width));
+        CHECK(meta->findInt32(kKeyHeight, &height));
+        if (!meta->findInt32(kKeyFrameRate, &fps))
+            fps = 0;
+        info.fps = fps;
+        info.width = width;
+        info.height = height;
+
+        processor = mRenderer->createVppProcessor(&info, mNativeWindow);
+    }
+    return processor;
+}
+#endif
 
 status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
     sp<AMessage> reply;
@@ -1059,6 +1157,21 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
 
                 mTimeDiscontinuityPending =
                     mTimeDiscontinuityPending || timeChange;
+
+                // if one of the tracks EOS, end the playback
+                if (mAudioEOS || mVideoEOS) {
+                    ALOGI("One of the tracks already EOS, end the playback");
+                    if (!IsFlushingState(audio ? mFlushingAudio : mFlushingVideo)) {
+                        mRenderer->queueEOS(audio, ERROR_END_OF_STREAM);
+                    } else if (audio) {
+                        mAudioEosPending = true;
+                        mAudioEosErr = ERROR_END_OF_STREAM;
+                    } else {
+                        mVideoEosPending = true;
+                        mVideoEosErr = ERROR_END_OF_STREAM;
+                    }
+                    return -EWOULDBLOCK;
+                }
 
                 if (formatChange || timeChange) {
                     flushDecoder(audio, formatChange);

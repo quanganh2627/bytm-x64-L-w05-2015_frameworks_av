@@ -581,6 +581,53 @@ status_t OMXCodec::parseAVCCodecSpecificData(
     return OK;
 }
 
+status_t OMXCodec::parseHEVCCodecSpecificData(
+    const void *data, size_t size) {
+    const uint8_t *ptr = (const uint8_t *)data;
+
+    // verify minimum size and configurationVersion == 1.
+    if (size < 23 || ptr[0] != 1) {
+        return ERROR_MALFORMED;
+    }
+
+    size_t numOfParameterSets = ptr[22];
+
+    ptr += 23;
+    size -= 23;
+
+    for (size_t i = 0; i < numOfParameterSets; ++i) {
+        if (size < 3) {
+            return ERROR_MALFORMED;
+        }
+
+        ptr += 1;
+        size -= 1;
+
+        size_t numNALs = U16_AT(ptr);
+
+        ptr += 2;
+        size -= 2;
+
+        for (size_t j = 0; j < numNALs; ++j) {
+            size_t length = U16_AT(ptr);
+
+            ptr += 2;
+            size -= 2;
+
+            if (size < length) {
+                return ERROR_MALFORMED;
+            }
+
+            addCodecSpecificData(ptr, length);
+
+            ptr += length;
+            size -= length;
+        }
+    }
+
+    return OK;
+}
+
 status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
     ALOGV("configureCodec protected=%d",
          (mFlags & kEnableGrallocUsageProtected) ? 1 : 0);
@@ -624,6 +671,14 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
             if (mQuirks & kRequiresSetProfileLevel) {
                  meta->setInt32(kKeyVideoProfile, profile);
                  meta->setInt32(kKeyVideoLevel, level);
+            }
+        } else if (meta->findData(kKeyHVCC, &type, &data, &size)) {
+            // Parse the HEVCDecoderConfigurationRecord
+            status_t err;
+            if ((err = parseHEVCCodecSpecificData(
+                            data, size)) != OK) {
+                ALOGE("Malformed HEVC codec specific data.");
+                return err;
             }
         } else if (meta->findData(kKeyVorbisInfo, &type, &data, &size)) {
             addCodecSpecificData(data, size);
@@ -986,6 +1041,8 @@ void OMXCodec::setVideoInputFormat(
     OMX_VIDEO_CODINGTYPE compressionFormat = OMX_VIDEO_CodingUnused;
     if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mime)) {
         compressionFormat = OMX_VIDEO_CodingAVC;
+    } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mime)) {
+        compressionFormat = OMX_VIDEO_CodingHEVC;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_MPEG4, mime)) {
         compressionFormat = OMX_VIDEO_CodingMPEG4;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_H263, mime)) {
@@ -1376,6 +1433,8 @@ status_t OMXCodec::setVideoOutputFormat(
     OMX_VIDEO_CODINGTYPE compressionFormat = OMX_VIDEO_CodingUnused;
     if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mime)) {
         compressionFormat = OMX_VIDEO_CodingAVC;
+    } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mime)) {
+        compressionFormat = OMX_VIDEO_CodingHEVC;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_MPEG4, mime)) {
         compressionFormat = OMX_VIDEO_CodingMPEG4;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_H263, mime)) {
@@ -1584,6 +1643,7 @@ OMXCodec::OMXCodec(
       mPaused(false),
       mNativeWindow(
               (!strncmp(componentName, "OMX.google.", 11)
+              || !strncmp(componentName, "OMX.Intel.sw_vd", 15)
               || !strcmp(componentName, "OMX.Nvidia.mpeg2v.decode"))
                         ? NULL : nativeWindow) {
     mPortStatus[kPortIndexInput] = ENABLED;
@@ -1623,6 +1683,8 @@ void OMXCodec::setComponentRole(
             "audio_decoder.g711alaw", "audio_encoder.g711alaw" },
         { MEDIA_MIMETYPE_VIDEO_AVC,
             "video_decoder.avc", "video_encoder.avc" },
+        { MEDIA_MIMETYPE_VIDEO_HEVC,
+            "video_decoder.hevc", "video_encoder.hevc" },
         { MEDIA_MIMETYPE_VIDEO_MPEG4,
             "video_decoder.mpeg4", "video_encoder.mpeg4" },
         { MEDIA_MIMETYPE_VIDEO_H263,
@@ -3341,7 +3403,8 @@ bool OMXCodec::drainInputBuffer(BufferInfo *info) {
 
         size_t size = specific->mSize;
 
-        if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mMIME)
+        if ((!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mMIME) ||
+             !strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mMIME))
                 && !(mQuirks & kWantsNALFragments)) {
             static const uint8_t kNALStartCode[4] =
                     { 0x00, 0x00, 0x00, 0x01 };
@@ -4870,6 +4933,9 @@ void OMXCodec::initOutputFormat(const sp<MetaData> &inputFormat) {
             } else if (video_def->eCompressionFormat == OMX_VIDEO_CodingAVC) {
                 mOutputFormat->setCString(
                         kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_AVC);
+            } else if (video_def->eCompressionFormat == OMX_VIDEO_CodingHEVC) {
+                mOutputFormat->setCString(
+                        kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_HEVC);
             } else {
                 CHECK(!"Unknown compression format.");
             }

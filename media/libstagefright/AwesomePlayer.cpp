@@ -248,7 +248,8 @@ AwesomePlayer::AwesomePlayer()
       mOffloadTearDown(false),
       mOffloadTearDownForPause(false),
       mOffloadPauseUs(0),
-      mOffloadSinkCreationError(false)
+      mOffloadSinkCreationError(false),
+      mTimeSourceDeltaUs(-1)
 #endif
 #ifdef BGM_ENABLED
       ,
@@ -747,9 +748,9 @@ void AwesomePlayer::reset_l() {
 #endif
     {
         modifyFlags(0, ASSIGN);
+        mTimeSourceDeltaUs = 0;
     }
     mExtractorFlags = 0;
-    mTimeSourceDeltaUs = 0;
     mVideoTimeUs = 0;
 
     mSeeking = NO_SEEK;
@@ -1515,6 +1516,7 @@ void AwesomePlayer::initRenderer_l() {
     if (USE_SURFACE_ALLOC
             && !strncmp(component, "OMX.", 4)
             && strncmp(component, "OMX.google.", 11)
+            && strncmp(component, "OMX.Intel.sw_vd", 15)
             && strcmp(component, "OMX.Nvidia.mpeg2v.decode")) {
         // Hardware decoders avoid the CPU color conversion by decoding
         // directly to ANativeBuffers, so we must use a renderer that
@@ -1973,6 +1975,9 @@ status_t AwesomePlayer::initAudioDecoder() {
     {
         ALOGI("initAudioDecoder: Offload supported, creating AudioPlayer");
         mOffload = true;
+        // In offload cases, initialize mTimeSourceDeltaUs to -1
+        // as the lateness calculation for video rendering depends on this
+        mTimeSourceDeltaUs = -1;
         mAudioSource = mAudioTrack;
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
         mAudioSource = mAudioTrack;
@@ -2058,7 +2063,7 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
 }
 
 #ifdef TARGET_HAS_VPP
-VPPProcessor* AwesomePlayer::createVppProcessor_l() {
+VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
     VPPProcessor* processor = NULL;
 
     if (mNativeWindow == NULL)
@@ -2086,7 +2091,7 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l() {
         info.fps = fps;
         info.width = width;
         info.height = height;
-        OMXCodec* omxCodec = (OMXCodec*) (mVideoSource.get());
+
         processor = new VPPProcessor(mNativeWindow, omxCodec, &info);
     }
     return processor;
@@ -2180,25 +2185,19 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         }
 
 #ifdef TARGET_HAS_VPP
+        OMXCodec* omxCodec;
+        if (mCachedSource != NULL) {
+            AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
+            omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
+        } else
+            omxCodec = (OMXCodec*) (mVideoSource.get());
+
         if (mVPPProcessor != NULL) {
             delete mVPPProcessor;
             mVPPProcessor = NULL;
         }
-        mVPPProcessor = createVppProcessor_l();
-        OMXCodec* omxCodec;
-        if (mCachedSource != NULL) {
-#if 1
-            // FIXME: Disable VPP/FRC for http streaming so far
-            if (mVPPProcessor != NULL) {
-                delete mVPPProcessor;
-                mVPPProcessor = NULL;
-            }
-#else
-            AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
-            omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
-#endif
-        } else
-            omxCodec = (OMXCodec*) (mVideoSource.get());
+        mVPPProcessor = createVppProcessor_l(omxCodec);
+
         if (mVPPProcessor != NULL)
             omxCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
 #endif
@@ -2449,7 +2448,10 @@ void AwesomePlayer::onVideoEvent() {
             if (err != OK) {
                 CHECK(mVideoBuffer == NULL);
 
-                if (err == INFO_FORMAT_CHANGED) {
+                if (err == -EWOULDBLOCK) {
+                    postVideoEvent_l(10000);
+                    return;
+                } else if (err == INFO_FORMAT_CHANGED) {
                     ALOGV("VideoSource signalled format change.");
 
                     notifyVideoSize_l();
@@ -2572,22 +2574,42 @@ void AwesomePlayer::onVideoEvent() {
     TimeSource *ts =
         ((mFlags & AUDIO_AT_EOS) || !(mFlags & AUDIOPLAYER_STARTED))
             ? &mSystemTimeSource : mTimeSource;
-
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // mTimeSourceDeltaUs is modified for audio offload in av files
+    // It is the difference b/w audio ts and system ts when audio EOS is set.
+    if (mOffload && mFlags & AUDIO_AT_EOS && mTimeSourceDeltaUs == -1) {
+         mTimeSourceDeltaUs = mTimeSource->getRealTimeUs() -
+                              mSystemTimeSource.getRealTimeUs();
+    }
+#endif
     if (mFlags & FIRST_FRAME) {
         modifyFlags(FIRST_FRAME, CLEAR);
         mSinceLastDropped = 0;
-        mTimeSourceDeltaUs = ts->getRealTimeUs() - timeUs;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (!mOffload)
+#endif
+            mTimeSourceDeltaUs = ts->getRealTimeUs() - timeUs;
     }
 
     int64_t realTimeUs, mediaTimeUs;
     if (!(mFlags & AUDIO_AT_EOS) && mAudioPlayer != NULL
         && mAudioPlayer->getMediaTimeMapping(&realTimeUs, &mediaTimeUs)) {
-        mTimeSourceDeltaUs = realTimeUs - mediaTimeUs;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (!mOffload)
+#endif
+            mTimeSourceDeltaUs = realTimeUs - mediaTimeUs;
     }
-
     if (wasSeeking == SEEK_VIDEO_ONLY) {
-        int64_t nowUs = ts->getRealTimeUs() - mTimeSourceDeltaUs;
-
+        int64_t nowUs = ts->getRealTimeUs();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mOffload) {
+            if (mTimeSourceDeltaUs != -1)
+                nowUs += mTimeSourceDeltaUs;
+        } else
+#endif
+        {
+            nowUs -= mTimeSourceDeltaUs;
+        }
         int64_t latenessUs = nowUs - timeUs;
 
         ATRACE_INT("Video Lateness (ms)", latenessUs / 1E3);
@@ -2600,10 +2622,17 @@ void AwesomePlayer::onVideoEvent() {
     if (wasSeeking == NO_SEEK) {
         // Let's display the first frame after seeking right away.
 
-        int64_t nowUs = ts->getRealTimeUs() - mTimeSourceDeltaUs;
-
+        int64_t nowUs = ts->getRealTimeUs();
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mOffload) {
+            if (mTimeSourceDeltaUs != -1)
+                nowUs += mTimeSourceDeltaUs;
+        } else
+#endif
+        {
+            nowUs -= mTimeSourceDeltaUs;
+        }
         int64_t latenessUs = nowUs - timeUs;
-
         ATRACE_INT("Video Lateness (ms)", latenessUs / 1E3);
 
         if (latenessUs > 500000ll
