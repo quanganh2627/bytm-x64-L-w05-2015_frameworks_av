@@ -127,6 +127,8 @@ OMX_ERRORTYPE SoftOMXPlugin::makeComponentInstance(
         codec->incStrong(this);
         codec->setLibHandle(libHandle);
 
+        ALOGI("Created OMXPlugin : %s", kComponents[i].mName);
+
         return OMX_ErrorNone;
     }
 
