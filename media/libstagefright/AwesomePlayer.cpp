@@ -210,6 +210,7 @@ AwesomePlayer::AwesomePlayer()
       mDecryptHandle(NULL),
 #ifdef TARGET_HAS_VPP
       mVPPProcessor(NULL),
+      mVPPInit(false),
 #endif
       mLastVideoTimeUs(-1),
       mTextDriver(NULL),
@@ -1624,34 +1625,40 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
 #ifdef TARGET_HAS_VPP
 VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
     VPPProcessor* processor = NULL;
+    mVPPInit = false;
 
     if (mNativeWindow == NULL)
         return processor;
 
     if (VPPProcessor::isVppOn()) {
-        VPPVideoInfo info;
-        sp<MetaData> meta = NULL;
-        int32_t width, height, fps;
-        width = height = fps = 0;
-        memset(&info, 0, sizeof(VPPVideoInfo));
-        if (mVideoTrack != NULL)
-            meta = mVideoTrack->getFormat();
-        if (meta != NULL && !meta->findInt32(kKeyFrameRate, &fps)) {
-            ALOGW("No frame rate info found");
-            fps = 0;
-        }
-        if (mVideoSource != NULL) {
-            meta = mVideoSource->getFormat();
-            if (meta != NULL) {
-                CHECK(meta->findInt32(kKeyWidth, &width));
-                CHECK(meta->findInt32(kKeyHeight, &height));
+        processor = VPPProcessor::getInstance(mNativeWindow, omxCodec);
+        if (processor != NULL) {
+            VPPVideoInfo info;
+            sp<MetaData> meta = NULL;
+            int32_t width, height, fps;
+            width = height = fps = 0;
+            memset(&info, 0, sizeof(VPPVideoInfo));
+            if (mVideoTrack != NULL)
+                meta = mVideoTrack->getFormat();
+            if (meta != NULL && !meta->findInt32(kKeyFrameRate, &fps)) {
+                ALOGW("No frame rate info found");
+                fps = 0;
+            }
+            if (mVideoSource != NULL) {
+                meta = mVideoSource->getFormat();
+                if (meta != NULL) {
+                    CHECK(meta->findInt32(kKeyWidth, &width));
+                    CHECK(meta->findInt32(kKeyHeight, &height));
+                }
+            }
+            info.fps = fps;
+            info.width = width;
+            info.height = height;
+            if (processor->validateVideoInfo(&info) != VPP_OK) {
+                delete processor;
+                processor = NULL;
             }
         }
-        info.fps = fps;
-        info.width = width;
-        info.height = height;
-
-        processor = new VPPProcessor(mNativeWindow, omxCodec, &info);
     }
     return processor;
 }
@@ -2068,6 +2075,16 @@ void AwesomePlayer::onVideoEvent() {
             break;
         }
 
+        if (!mVPPInit) {
+            if (mVPPProcessor->init() == VPP_OK)
+                mVPPInit = true;
+            else {
+                delete mVPPProcessor;
+                mVPPProcessor = NULL;
+                postVideoEvent_l(100);
+                return;
+             }
+        }
         ALOGV("SET DATA %p\n", mVideoBuffer);
         if (mVPPProcessor->setDecoderBufferToVPP(mVideoBuffer) == VPP_OK) {
             mVideoBuffer = NULL;
