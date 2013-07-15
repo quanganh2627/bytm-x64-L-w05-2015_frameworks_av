@@ -247,6 +247,7 @@ private:
 
 #ifdef TARGET_HAS_VPP
     VPPProcessor *mVPPProcessor;
+    bool mVPPInit;
 #endif
 
     int64_t mLastVideoTimeUs;

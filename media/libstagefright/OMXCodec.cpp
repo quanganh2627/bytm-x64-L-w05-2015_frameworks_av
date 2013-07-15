@@ -2145,6 +2145,7 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
     // Dequeue the next buffer from the native window.
     ANativeWindowBuffer* buf;
     int fenceFd = -1;
+    BufferInfo *bufInfo = 0;
 #ifdef TARGET_HAS_VPP
     while (1) {
 #endif
@@ -2158,7 +2159,6 @@ OMXCodec::BufferInfo* OMXCodec::dequeueBufferFromNativeWindow() {
 
     // Determine which buffer we just dequeued.
     Vector<BufferInfo> *buffers = &mPortBuffers[kPortIndexOutput];
-    BufferInfo *bufInfo = 0;
     for (size_t i = 0; i < buffers->size(); i++) {
       sp<GraphicBuffer> graphicBuffer = buffers->itemAt(i).
           mMediaBuffer->graphicBuffer();
