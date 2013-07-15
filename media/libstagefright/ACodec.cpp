@@ -892,7 +892,7 @@ ACodec::BufferInfo *ACodec::dequeueBufferFromNativeWindow() {
         }
 
         size_t i;
-        BufferInfo *info;
+        BufferInfo *info = NULL;
         for (i = mBuffers[kPortIndexOutput].size(); i-- > 0;) {
             info = &mBuffers[kPortIndexOutput].editItemAt(i);
 
@@ -900,7 +900,7 @@ ACodec::BufferInfo *ACodec::dequeueBufferFromNativeWindow() {
                 break;
             }
         }
-        if (i < 0) return NULL;
+        if (i < 0 || info == NULL) return NULL;
         /*
          * The buffer is still used as reference by VPP,
          * go on dequeue next buffer, until we get a free one.

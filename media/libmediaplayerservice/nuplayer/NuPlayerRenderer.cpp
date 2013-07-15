@@ -357,7 +357,7 @@ void NuPlayer::Renderer::postDrainVideoQueue() {
         mVPPProcessor->invokeThreads();
         List<QueueEntry>::iterator it;
         for(it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
-            if ((*it).mBuffer == NULL) break;
+            if ((*it).mBuffer == NULL || (*it).mNotifyConsumed == NULL) break;
             sp<AMessage> notifyConsumed = (*it).mNotifyConsumed;
             int32_t input, output, notInput;
             if (notifyConsumed->findInt32("vppInput", &input)
@@ -577,7 +577,12 @@ sp<NuPlayerVPPProcessor> NuPlayer::Renderer::createVppProcessor(VPPVideoInfo *in
 
     if (NuPlayerVPPProcessor::isVppOn()) {
         if (mVPPProcessor == NULL) {
-            mVPPProcessor = new NuPlayerVPPProcessor(new AMessage(kWhatVPPNotify, id()), info, nativeWindow);
+            mVPPProcessor = NuPlayerVPPProcessor::getInstance(new AMessage(kWhatVPPNotify, id()), nativeWindow);
+            if (mVPPProcessor != NULL) {
+                if (mVPPProcessor->validateVideoInfo(info) != VPP_OK) {
+                    releaseVppProcessor();
+                }
+            }
         }
         return mVPPProcessor;
     }
