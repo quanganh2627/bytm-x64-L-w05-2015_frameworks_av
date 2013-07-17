@@ -122,6 +122,16 @@ LOCAL_MODULE:= libstagefright
 
 LOCAL_MODULE_TAGS := optional
 
+ifeq ($(USE_INTEL_ASF_EXTRACTOR),true)
+
+LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libmix_asf_extractor
+
+LOCAL_STATIC_LIBRARIES += libasfextractor
+LOCAL_SHARED_LIBRARIES += libasfparser
+LOCAL_CPPFLAGS += -DUSE_INTEL_ASF_EXTRACTOR
+endif
+
 include $(BUILD_SHARED_LIBRARY)
 
 include $(call all-makefiles-under,$(LOCAL_PATH))
