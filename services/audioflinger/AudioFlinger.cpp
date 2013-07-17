@@ -886,7 +886,7 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
                     strlen(CODEC_OFFLOAD_MODULE_NAME)) == 0) {
                     ALOGW("setParameters: offload module %s matches",
                            CODEC_OFFLOAD_MODULE_NAME);
-                    mOffloadDev = mAudioHwDevs.valueAt(i)->hwDevice();
+                    mOffloadDev =(audio_hw_device_t*) mAudioHwDevs.valueAt(i)->hwDevice();
                }
             }
             if (mOffloadDev == NULL) {
@@ -1546,7 +1546,7 @@ audio_io_handle_t AudioFlinger::openOutput(audio_module_handle_t module,
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-           mOffloadDev = outHwDev;
+           mOffloadDev = outHwDev->hwDevice();
         }
 #endif
         return id;
@@ -1845,10 +1845,11 @@ status_t AudioFlinger::closeInput_nonvirtual(audio_io_handle_t input)
 status_t AudioFlinger::setStreamOutput(audio_stream_type_t stream, audio_io_handle_t output)
 {
     Mutex::Autolock _l(mLock);
+    PlaybackThread *thread = NULL;
     ALOGV("setStreamOutput() stream %d to output %d", stream, output);
 
     for (size_t i = 0; i < mPlaybackThreads.size(); i++) {
-        PlaybackThread *thread = mPlaybackThreads.valueAt(i).get();
+        thread = mPlaybackThreads.valueAt(i).get();
         thread->invalidateTracks(stream);
     }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE

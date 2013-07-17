@@ -59,6 +59,9 @@ namespace android {
 // ----------------------------------------------------------------------------
 //      TrackBase
 // ----------------------------------------------------------------------------
+// If the stream is offloaded
+// we need to make sure that AudioTrack client has enough time to send large buffers
+extern const int8_t kMaxTrackRetriesOffloaded = 20;
 
 static volatile int32_t nextTrackId = 55;
 
@@ -106,7 +109,7 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
     size_t bufferSize;
     if ( audio_is_linear_pcm(format) ) {
         // fixed 16-bit samples
-        bufferSize = frameCount*channelCount*sizeof(int16_t);
+        bufferSize = frameCount*mChannelCount*sizeof(int16_t);
         ALOGV( "PCM: bufferSize = %d", bufferSize );
     } else {
         // number of samples in buffer is variable depending on compression
@@ -115,7 +118,7 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
         ALOGV( "compressed: bufferSize = %d", bufferSize );
     }
 #else
-    size_t bufferSize = frameCount*channelCount*sizeof(int16_t);
+    size_t bufferSize = frameCount * mFrameSize;
 #endif
     if (sharedBuffer == 0) {
         size += bufferSize;
@@ -867,8 +870,6 @@ void AudioFlinger::PlaybackThread::Track::flush()
         // this will be done by prepareTracks_l() when the track is stopped.
         // prepareTracks_l() will see mState == FLUSHED, then
         // remove from active track list, reset(), and trigger presentation complete
-//Offload To be checked
-//        PlaybackThread *playbackThread = (PlaybackThread *)thread.get();  
         if (playbackThread->mActiveTracks.indexOf(this) < 0) {
             reset();
         }
@@ -906,6 +907,7 @@ void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
     * volume control from application
     */
 }
+
 status_t AudioFlinger::PlaybackThread::Track::setParameters(
                                               const String8& keyValuePairs)
 {

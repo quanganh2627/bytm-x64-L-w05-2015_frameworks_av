@@ -562,6 +562,7 @@ public:
 protected:
                 // accessed by both binder threads and within threadLoop(), lock on mutex needed
                 unsigned    mFastTrackAvailMask;    // bit i set if fast track [i] is available
+                bool isOffloadTrack() const;
 
 };
 

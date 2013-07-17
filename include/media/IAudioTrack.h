@@ -87,7 +87,7 @@ public:
     virtual void setVolume(float left, float right) = 0;
 
     /* Send parameters to the audio hardware */
-    virtual status_t    setParameters(const String8& keyValuePairs) = 0;
+    virtual status_t    setParameters(const String8& keyValuePairs) =0;
 
     /* Set EOS reached in AudioFlinger */
     virtual status_t setOffloadEOSReached(bool value) = 0;

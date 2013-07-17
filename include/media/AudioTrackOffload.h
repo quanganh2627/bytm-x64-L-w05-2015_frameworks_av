@@ -101,7 +101,7 @@ public:
 
     /* Set parameters - only possible when using direct output */
     status_t   setParameters(const String8& keyValuePairs);
-
+    status_t    setVolume(float left, float right);
     status_t    getPosition(uint32_t *position);
     status_t    obtainBuffer(Buffer* audioBuffer, int32_t waitCount);
 

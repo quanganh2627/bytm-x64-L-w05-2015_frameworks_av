@@ -21,7 +21,8 @@ ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
   LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
 endif
 
-LOCAL_SRC_FILES := \
+
+#LOCAL_SRC_FILES := \
     AudioBufferProviderSource.cpp   \
     AudioStreamOutSink.cpp          \
     AudioStreamInSource.cpp         \
@@ -41,15 +42,15 @@ LOCAL_SRC_FILES := \
 # uncomment for systrace
 # LOCAL_CFLAGS += -DATRACE_TAG=ATRACE_TAG_AUDIO
 
-LOCAL_MODULE := libnbaio
+#LOCAL_MODULE := libnbaio
 
-include $(BUILD_STATIC_LIBRARY)
+#include $(BUILD_STATIC_LIBRARY)
 
-include $(CLEAR_VARS)
+#include $(CLEAR_VARS)
 
-ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
-  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
-endif
+#ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+#  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+#endif
 
 LOCAL_SRC_FILES:=               \
     AudioFlinger.cpp            \

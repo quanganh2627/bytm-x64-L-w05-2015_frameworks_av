@@ -420,6 +420,7 @@ status_t AudioFlinger::EffectModule::init()
     }
     status_t cmdStatus;
     uint32_t size = sizeof(status_t);
+
     status_t status = (*mEffectInterface)->command(mEffectInterface,
                                                    EFFECT_CMD_INIT,
                                                    0,
@@ -435,6 +436,7 @@ status_t AudioFlinger::EffectModule::init()
 status_t AudioFlinger::EffectModule::start()
 {
     Mutex::Autolock _l(mLock);
+
     return start_l();
 }
 
@@ -621,6 +623,7 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
                 srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
             }
         }
+      }
 #endif
     }
     return NO_ERROR;
@@ -1240,6 +1243,21 @@ void AudioFlinger::EffectChain::clearInputBuffer()
         return;
     }
     clearInputBuffer_l(thread);
+}
+
+bool AudioFlinger::EffectChain::isAudioEffectEnabled() const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    size_t size = mEffects.size();
+
+    for (size_t i = 0; i < size; i++) {
+        if (mEffects[i]->isEnabled()) {
+            return true;
+        }
+    }
+    return false;
+#endif
+    return false;
 }
 
 // Must be called with EffectChain::mLock locked

@@ -1697,7 +1697,7 @@ status_t AwesomePlayer::initAudioDecoder() {
         }
     }
 
-    ALOGV("initAudioDecoder: Sink creation error value %d", mOffloadSinkCreationError);
+    ALOGV("initAudioDecoder: Sink creation value %d", mOffloadSinkCreationError);
     status_t stat = OK;
     if ( (!mOffloadSinkCreationError) && (AudioSystem::isOffloadSupported(
                 mAudioFormat,

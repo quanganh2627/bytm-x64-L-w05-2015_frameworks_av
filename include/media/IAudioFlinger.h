@@ -191,9 +191,8 @@ public:
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     // FIXME move these APIs to AudioPolicy to permit a more accurate implementation
     // that looks on primary device for a stream with fast flag, primary flag, or first one.
-    virtual int32_t getPrimaryOutputSamplingRate() = 0;
-    virtual int32_t getPrimaryOutputFrameCount() = 0;
-
+    virtual uint32_t getPrimaryOutputSamplingRate() = 0;
+    virtual size_t getPrimaryOutputFrameCount() = 0;
     // get audio mode
     virtual audio_mode_t   getMode() const  = 0;
 

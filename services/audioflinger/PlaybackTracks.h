@@ -45,6 +45,7 @@ public:
             void        flush();
             void        destroy();
             int         name() const { return mName; }
+            void        setVolume(float left, float right);
             status_t    setParameters(const String8& keyValuePairs);
             status_t    setOffloadEOSReached(bool value);
             audio_stream_type_t streamType() const {

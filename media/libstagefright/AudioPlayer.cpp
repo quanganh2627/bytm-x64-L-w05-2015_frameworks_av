@@ -226,7 +226,36 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
         }
 #endif
 
+    }
+#else
+    if (mAudioSink.get() != NULL) {
+#ifdef BGM_ENABLED
+       if ((mAllowBackgroundPlayback) &&(!mAllowDeepBuffering)) {
+
+           err = mAudioSink->open(
+               mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+               DEFAULT_AUDIOSINK_BUFFERCOUNT,
+               &AudioPlayer::AudioSinkCallback,
+               this,
+               (mAllowBackgroundPlayback ?
+                   AUDIO_OUTPUT_FLAG_REMOTE_BGM :
+                   AUDIO_OUTPUT_FLAG_NONE));
+       } else {
 #endif
+           err = mAudioSink->open(
+               mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+               DEFAULT_AUDIOSINK_BUFFERCOUNT,
+               &AudioPlayer::AudioSinkCallback,
+               this,
+               (mAllowDeepBuffering ?
+                   AUDIO_OUTPUT_FLAG_DEEP_BUFFER :
+                   AUDIO_OUTPUT_FLAG_NONE));
+#ifdef BGM_ENABLED
+       }
+#endif
+
+#endif
+
         if (err != OK) {
             if (mFirstBuffer != NULL) {
                 mFirstBuffer->release();
@@ -248,7 +277,6 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
             sendMetaDataToHal(mAudioSink, format);
         }
 #endif
-
         mAudioSink->start();
     } else {
         // playing to an AudioTrack, set up mask if necessary
@@ -803,6 +831,7 @@ status_t AudioPlayer::seekTo(int64_t time_us) {
     if (mOffload)
         mStartPos = time_us;
 #endif
+    ALOGV("Audio Player - seekTo");
 
     // Flush resets the number of played frames
     mNumFramesPlayed = 0;

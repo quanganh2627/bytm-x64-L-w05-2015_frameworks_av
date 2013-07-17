@@ -304,7 +304,6 @@ status_t AudioTrack::set(
                                   flags,
                                   sharedBuffer,
                                   output);
-
     if (status != NO_ERROR) {
         if (mAudioTrackThread != 0) {
             mAudioTrackThread->requestExit();
@@ -333,15 +332,8 @@ status_t AudioTrack::set(
     mUpdatePeriod = 0;
     mFlushed = false;
     AudioSystem::acquireAudioSessionId(mSessionId);
-    mRestoreStatus = NO_ERROR;
     return NO_ERROR;
 }
-
-status_t AudioTrack::initCheck() const
-{
-    return mStatus;
-}
-
 
 // -------------------------------------------------------------------------
 
@@ -1013,7 +1005,7 @@ status_t AudioTrack::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
     size_t framesAvail = mProxy->framesAvailable();
 
     cblk->lock.lock();
-    if (cblk->flags & CBLK_INVALID_MSK) {
+    if (cblk->flags & CBLK_INVALID) {
         goto create_new_track;
     }
     cblk->lock.unlock();
@@ -1048,7 +1040,7 @@ status_t AudioTrack::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
                 cblk->lock.lock();
             }
 
-            if (cblk->flags & CBLK_INVALID_MSK) {
+            if (cblk->flags & CBLK_INVALID) {
                 goto create_new_track;
             }
             if (CC_UNLIKELY(result != NO_ERROR)) {
@@ -1189,7 +1181,7 @@ ssize_t AudioTrack::write(const void* buffer, size_t userSize)
         size_t toWrite;
 
         if (mFormat == AUDIO_FORMAT_PCM_8_BIT && !(mFlags & AUDIO_OUTPUT_FLAG_DIRECT)) {
-            // Divide capacity by 2 to take expansion into account
+            //  capacity by 2 to take expansion into account
             toWrite = audioBuffer.size>>1;
             memcpy_to_i16_from_u8(audioBuffer.i16, (const uint8_t *) src, toWrite);
         } else {
@@ -1283,6 +1275,7 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
     size_t writtenSize = 0;
 
     mLock.lock();
+
     if (mAwaitBoost) {
         mAwaitBoost = false;
         mLock.unlock();
@@ -1315,7 +1308,7 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
     
 
     // Manage underrun callback
-    if (active && (cblk->framesAvailable() == cblk->frameCount)) {
+    if (active && (mProxy->framesAvailable() == mFrameCount)) {
 
         ALOGV("Underrun user: %x, server: %x, flags %04x", cblk->user, cblk->server, cblk->flags);
         if (!(android_atomic_or(CBLK_UNDERRUN, &cblk->flags) & CBLK_UNDERRUN)) {
@@ -1563,6 +1556,7 @@ AudioTrack::AudioTrackThread::~AudioTrackThread()
 
 bool AudioTrack::AudioTrackThread::threadLoop()
 {
+
     {
         AutoMutex _l(mMyLock);
         if (mPaused) {
@@ -1571,6 +1565,7 @@ bool AudioTrack::AudioTrackThread::threadLoop()
             return true;
         }
     }
+
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mReceiver.mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
         if (!(static_cast<AudioTrackOffload&>(mReceiver).processAudioBuffer(this))) {
@@ -1586,6 +1581,7 @@ bool AudioTrack::AudioTrackThread::threadLoop()
         pause();
     }
 #endif
+
     return true;
 }
 

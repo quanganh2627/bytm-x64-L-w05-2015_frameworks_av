@@ -56,6 +56,8 @@ public:
             audio_track_cblk_t* cblk() const { return mCblk; }
             int         sessionId() const { return mSessionId; }
     virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
+            status_t    setParameters(const String8& keyValuePairs);
+     void        setVolume(float left, float right);
 
 protected:
                         TrackBase(const TrackBase&);

@@ -142,7 +142,6 @@ public:
 
     virtual     status_t    setMicMute(bool state);
     virtual     bool        getMicMute() const;
-
     virtual     status_t    setParameters(audio_io_handle_t ioHandle, const String8& keyValuePairs);
     virtual     String8     getParameters(audio_io_handle_t ioHandle, const String8& keys) const;
 
@@ -221,6 +220,9 @@ public:
                                 const Parcel& data,
                                 Parcel* reply,
                                 uint32_t flags);
+
+    //virtual status_t        setOffloadEOSReached(bool value);
+
     //Get Offload buffer size
     size_t getOffloadBufferSize(
             uint32_t bitRate,
@@ -401,6 +403,8 @@ private:
         virtual void        flush();
         virtual void        pause();
         virtual void        setVolume(float left, float right);
+        virtual status_t    setParameters(const String8& keyValuePairs);
+        virtual status_t    setOffloadEOSReached(bool value);
         virtual status_t    attachAuxEffect(int effectId);
         virtual status_t    allocateTimedBuffer(size_t size,
                                                 sp<IMemory>* buffer);
@@ -425,8 +429,6 @@ private:
         virtual status_t onTransact(
             uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
 
-        virtual status_t    setParameters(const String8& keyValuePairs);
-        virtual status_t    setOffloadEOSReached(bool value);
 
     private:
         const sp<RecordThread::RecordTrack> mRecordTrack;
@@ -537,7 +539,7 @@ private:
 
                 // These two fields are immutable after onFirstRef(), so no lock needed to access
                 AudioHwDevice*                      mPrimaryHardwareDev; // mAudioHwDevs[0] or NULL
-                AudioHwDevice*                      mOffloadDev;
+                audio_hw_device_t*                  mOffloadDev;
                 DefaultKeyedVector<audio_module_handle_t, AudioHwDevice*>  mAudioHwDevs;
 
     // for dump, indicates which hardware operation is currently in progress (but not stream ops)

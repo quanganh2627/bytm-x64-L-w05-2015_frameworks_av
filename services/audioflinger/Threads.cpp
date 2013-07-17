@@ -2059,8 +2059,10 @@ bool AudioFlinger::PlaybackThread::threadLoop()
         }
 
         if (CC_LIKELY(mMixerStatus == MIXER_TRACKS_READY)) {
+            ALOGV("threadLoop: Calling mix");
             threadLoop_mix();
         } else {
+            ALOGV("threadLoop : Calling sleep");
             threadLoop_sleepTime();
         }
 
@@ -3249,7 +3251,6 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
 {
     size_t count = mActiveTracks.size();
     mixer_state mixerStatus = MIXER_IDLE;
-
     // find out which tracks need to be processed
     for (size_t i = 0; i < count; i++) {
         sp<Track> t = mActiveTracks[i].promote();
@@ -3312,7 +3313,6 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
                     track->mState = TrackBase::ACTIVE;
                 }
             }
-
             // compute volume for this track
             float left, right;
             if (mMasterMute || track->isPausing() || mStreamTypes[track->streamType()].mute) {
@@ -3340,9 +3340,7 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
             // As we only care about the transition phase between two tracks on a
             // direct output, it is not a problem to ignore the underrun case.
             if (i == (count - 1)) {
-//ToBeChecked - Prasanna offload
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-            if (left != mLeftVolFloat || right != mRightVolFloat) {	
             if (left != mLeftVolFloat || right != mRightVolFloat || (left==0 && mLeftVolFloat==0)) {
 #else
             if (left != mLeftVolFloat || right != mRightVolFloat) {
@@ -3375,8 +3373,8 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
             track->mOffloadDrained = false;
 #else
                 track->mRetryCount = kMaxTrackRetriesDirect;
-                mActiveTrack = t;
 #endif
+                mActiveTrack = t;
                 mixerStatus = MIXER_TRACKS_READY;
             }
         } else {
@@ -3398,7 +3396,6 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
                 if (track->isPausing() || track->isPaused()) {
                     ALOGV("direct: underrun and PAUSING/PAUSED -> PAUSED");
                     //track->setPaused();
-                    //trackToRemove = track;
                 } else if(track->isStopping_1()) {
                     // for an offloaded track we must do one final pass after
                     // we've written the last buffer to the HAL to wait for the
@@ -3451,14 +3448,12 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
                             ALOGV("direct: underrun calling track reset");
                             track->reset();
                         }
-                        trackToRemove = track;
                     }
                 } else {
                     // No buffers for this track. Give it a few chances to
                     // fill a buffer, then remove it from active list.
                     if (--(track->mRetryCount) <= 0) {
                         ALOGV("BUFFER TIMEOUT: remove(%d) from active list", track->name());
-                        trackToRemove = track;
                     } else {
                         ALOGV("prep: track not ready, wait for buffer time out");
                     }
@@ -3477,14 +3472,12 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
                         if (track->isStopped()) {
                             track->reset();
                         }
-                        trackToRemove = track;
                     }
                 } else {
                     // No buffers for this track. Give it a few chances to
                     // fill a buffer, then remove it from active list.
                     if (--(track->mRetryCount) <= 0) {
                         ALOGV("BUFFER TIMEOUT: remove(%d) from active list", track->name());
-                        trackToRemove = track;
                     } else {
                         mixerStatus = MIXER_TRACKS_ENABLED;
                     }
@@ -3526,6 +3519,8 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::DirectOutputThread::prep
         }
 #endif
     }
+//   }
+
 
     // remove all the tracks that need to be...
     count = tracksToRemove->size();
@@ -3707,7 +3702,7 @@ void AudioFlinger::DirectOutputThread::invalidateTracks(audio_stream_type_t stre
         if (t->streamType() == streamType) {
             if(!t->isPaused() && (!(t->mCblk->flags & CBLK_OFFLOAD_TEAR_DOWN_ON))) {
                 t->mCblk->lock.lock();
-                t->mCblk->flags |= CBLK_INVALID_ON;
+                t->mCblk->flags |= CBLK_INVALID;
                 t->mCblk->flags |= CBLK_OFFLOAD_TEAR_DOWN_ON;
                 t->mCblk->cv.signal();
                 t->mCblk->lock.unlock();
