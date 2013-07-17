@@ -569,7 +569,12 @@ sp<NuPlayerVPPProcessor> NuPlayer::Renderer::createVppProcessor(VPPVideoInfo *in
 
     if (NuPlayerVPPProcessor::isVppOn()) {
         if (mVPPProcessor == NULL) {
-            mVPPProcessor = new NuPlayerVPPProcessor(new AMessage(kWhatVPPNotify, id()), info, nativeWindow);
+            mVPPProcessor = new NuPlayerVPPProcessor(new AMessage(kWhatVPPNotify, id()), nativeWindow);
+            if (mVPPProcessor != NULL) {
+                if (mVPPProcessor->validateVideoInfo(info) != VPP_OK) {
+                    releaseVppProcessor();
+                }
+            }
         }
         return mVPPProcessor;
     }
