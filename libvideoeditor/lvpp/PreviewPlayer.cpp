@@ -1092,7 +1092,10 @@ void PreviewPlayer::onVideoEvent() {
         }
 
         if(!mIsVideoSourceJpg) {
-            postVideoEvent_l(0);
+            // The next video event scheduling will occur after 10ms so that
+            // any attempts to cancel future video events could take effect within
+            // this 10ms interval
+            postVideoEvent_l();
         }
         else {
             postVideoEvent_l(33000);
