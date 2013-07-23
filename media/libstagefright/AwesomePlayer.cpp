@@ -448,8 +448,7 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 void AwesomePlayer::setMDSVideoState_l(int state) {
-    if (state >= MDS_VIDEO_UNPREPARED && mMDClient == NULL) {
-        mVideoSessionId = -1;
+    if (state == MDS_VIDEO_UNPREPARED && mVideoSessionId == -1) {
         return;
     }
     if (mMDClient == NULL) {
@@ -458,15 +457,7 @@ void AwesomePlayer::setMDSVideoState_l(int state) {
     if (mVideoSessionId < 0) {
         mVideoSessionId = mMDClient->allocateVideoSessionId();
     }
-    MDS_VIDEO_STATE cstate = mMDClient->getVideoState(mVideoSessionId);
-    if (cstate == (MDS_VIDEO_STATE)state)
-        return;
-    // Correct state
-    if (state == (int)MDS_VIDEO_PREPARED && cstate != MDS_VIDEO_PREPARING) {
-        mMDClient->setVideoState(mVideoSessionId, MDS_VIDEO_PREPARING);
-    }
     mMDClient->setVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
-
     if (state == MDS_VIDEO_UNPREPARED) {
         mVideoSessionId = -1;
         delete mMDClient;
@@ -499,8 +490,8 @@ void AwesomePlayer::setMDSVideoInfo_l() {
         info.displayW = mStats.mVideoWidth;
         info.displayH = mStats.mVideoHeight;
     }
-    setMDSVideoState_l(MDS_VIDEO_PREPARED);
     mMDClient->setVideoSourceInfo(mVideoSessionId, &info);
+    setMDSVideoState_l(MDS_VIDEO_PREPARED);
 }
 #endif
 
@@ -1679,6 +1670,10 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVideoBuffer->release();
         mVideoBuffer = NULL;
     }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
+#endif
 
     mVideoSource->stop();
 

@@ -118,8 +118,7 @@ void NuPlayer::setDataSource(const sp<IStreamSource> &source) {
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 void NuPlayer::setMDSVideoState_l(int state) {
-    if (state >= MDS_VIDEO_UNPREPARED && mMDClient == NULL) {
-        mVideoSessionId = -1;
+    if (state == MDS_VIDEO_UNPREPARED && mVideoSessionId == -1) {
         return;
     }
     if (mMDClient == NULL) {
@@ -128,15 +127,7 @@ void NuPlayer::setMDSVideoState_l(int state) {
     if (mVideoSessionId < 0) {
         mVideoSessionId = mMDClient->allocateVideoSessionId();
     }
-    MDS_VIDEO_STATE cstate = mMDClient->getVideoState(mVideoSessionId);
-    if (cstate == (MDS_VIDEO_STATE)state)
-        return;
-    // Correct state
-    if (state == (int)MDS_VIDEO_PREPARED && cstate != MDS_VIDEO_PREPARING) {
-        mMDClient->setVideoState(mVideoSessionId, MDS_VIDEO_PREPARING);
-    }
     mMDClient->setVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
-
     if (state == MDS_VIDEO_UNPREPARED) {
         mVideoSessionId = -1;
         delete mMDClient;
@@ -182,8 +173,8 @@ void NuPlayer::setMDSVideoInfo_l() {
     info.frameRate = frameRate;
     info.displayW  = displayW;
     info.displayH  = displayH;
-    setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
     mMDClient->setVideoSourceInfo(mVideoSessionId, &info);
+    setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
 }
 #endif
 
