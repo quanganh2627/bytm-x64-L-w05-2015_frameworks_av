@@ -89,7 +89,7 @@ NuPlayer::NuPlayer()
 
 NuPlayer::~NuPlayer() {
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setDisplaySource(false);
+    setMDSVideoState_l((int)MDS_VIDEO_UNPREPARED);
 #endif
 }
 
@@ -117,53 +117,73 @@ void NuPlayer::setDataSource(const sp<IStreamSource> &source) {
 }
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-void NuPlayer::setDisplaySource(bool isplaying) {
-    MDSVideoSourceInfo info;
-    memset(&info, 0 ,sizeof(&info));
-    if (isplaying) {
-        int wcom = 0;
-        if (mANativeWindow != NULL) {
-            mANativeWindow->query(mANativeWindow.get(),
-                    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-        }
-        if (mVideoDecoder != NULL && wcom == 1) {
-            if (mMDClient == NULL) {
-                mMDClient = new MultiDisplayClient();
-            }
-            sp<AMessage> msg = NULL;
-            int32_t displayW, displayH, frameRate;
-            bool success = false;
-            displayW = displayH = frameRate = 0;
-            info.isplaying = true;
-            info.isprotected = false;
-            msg = mSource->getFormat(false);
-            if (msg != NULL) {
-                success = msg->findInt32("frame-rate", &frameRate);
-                if (!success)
-                    frameRate = 0;
-                success = msg->findInt32("width", &displayW);
-                if (!success)
-                    displayW = 0;
-                success = msg->findInt32("height", &displayH);
-                if (!success)
-                    displayH = 0;
-            }
-            info.frameRate = frameRate;
-            info.displayW  = displayW;
-            info.displayH  = displayH;
-            mMDClient->setVideoSourceInfo(&info);
-            mMDClient->setVideoState(MDS_VIDEO_PREPARED);
-        }
-    } else {
-      if (mMDClient != NULL) {
-          info.isplaying = false;
-          info.isprotected = false;
-          mMDClient->setVideoSourceInfo(&info);
-          mMDClient->setVideoState(MDS_VIDEO_UNPREPARED);
-          delete mMDClient;
-          mMDClient = NULL;
-      }
+void NuPlayer::setMDSVideoState_l(int state) {
+    if (state >= MDS_VIDEO_UNPREPARED && mMDClient == NULL) {
+        mVideoSessionId = -1;
+        return;
     }
+    if (mMDClient == NULL) {
+        mMDClient = new MultiDisplayClient();
+    }
+    if (mVideoSessionId < 0) {
+        mVideoSessionId = mMDClient->allocateVideoSessionId();
+    }
+    MDS_VIDEO_STATE cstate = mMDClient->getVideoState(mVideoSessionId);
+    if (cstate == (MDS_VIDEO_STATE)state)
+        return;
+    // Correct state
+    if (state == (int)MDS_VIDEO_PREPARED && cstate != MDS_VIDEO_PREPARING) {
+        mMDClient->setVideoState(mVideoSessionId, MDS_VIDEO_PREPARING);
+    }
+    mMDClient->setVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
+
+    if (state == MDS_VIDEO_UNPREPARED) {
+        mVideoSessionId = -1;
+        delete mMDClient;
+        mMDClient = NULL;
+    }
+}
+
+void NuPlayer::setMDSVideoInfo_l() {
+    MDSVideoSourceInfo info;
+    int wcom = 0;
+    if (mANativeWindow != NULL) {
+        /*
+         * 0 means the buffers do not go directly to the window compositor;
+         * 1 means the ANativeWindow DOES send queued buffers
+         * directly to the window compositor;
+         * For more info, refer system/core/include/system/window.h
+         */
+        mANativeWindow->query(mANativeWindow.get(),
+                NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+    }
+    if (wcom == 0 || mVideoDecoder == NULL ||
+            mMDClient == NULL || mVideoSessionId < 0)
+        return;
+    memset(&info, 0 ,sizeof(&info));
+    sp<AMessage> msg = NULL;
+    int32_t displayW, displayH, frameRate;
+    bool success = false;
+    displayW = displayH = frameRate = 0;
+    info.isplaying = true;
+    info.isprotected = false;
+    msg = mSource->getFormat(false);
+    if (msg != NULL) {
+        success = msg->findInt32("frame-rate", &frameRate);
+        if (!success)
+            frameRate = 0;
+        success = msg->findInt32("width", &displayW);
+        if (!success)
+            displayW = 0;
+        success = msg->findInt32("height", &displayH);
+        if (!success)
+            displayH = 0;
+    }
+    info.frameRate = frameRate;
+    info.displayW  = displayW;
+    info.displayH  = displayH;
+    setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
+    mMDClient->setVideoSourceInfo(mVideoSessionId, &info);
 }
 #endif
 
@@ -233,9 +253,7 @@ void NuPlayer::setVideoSurfaceTexture(const sp<ISurfaceTexture> &surfaceTexture)
     msg->setObject("native-window", new NativeWindowWrapper(surfaceTextureClient));
     msg->post();
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    if (mVideoDecoder != NULL) {
-        setDisplaySource(false);
-    }
+    setMDSVideoState_l((int)MDS_VIDEO_UNPREPARED);
     mANativeWindow = surfaceTextureClient;
 #endif
 }
@@ -371,6 +389,9 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
             mNumFramesTotal = 0;
             mNumFramesDropped = 0;
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+            setMDSVideoState_l(MDS_VIDEO_PREPARING);
+#endif
             if(!mSourceAlreadyStart) {
                 mSource->start();
             }
@@ -1061,7 +1082,7 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
     }
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     if (!audio)
-        setDisplaySource(true);
+        setMDSVideoInfo_l();
 #endif
 
 

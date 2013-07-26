@@ -51,6 +51,8 @@ public:
     static const char * const keyScreenState;
     static const char * const keyStreamFlags;
     static const char * const keyBGMState;
+    static const char * const keyBGMAudio;
+    static const char * const keyBGMSession;
 
     String8 toString();
 

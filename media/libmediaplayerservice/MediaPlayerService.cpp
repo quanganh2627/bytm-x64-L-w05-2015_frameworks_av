@@ -234,9 +234,7 @@ MediaPlayerService::MediaPlayerService()
     // Reset video playback status in case media server crashes.
     MultiDisplayClient* client = new MultiDisplayClient;
     if (client) {
-        MDSVideoSourceInfo info;
-        memset(&info, 0, sizeof(MDSVideoSourceInfo));
-        client->setVideoSourceInfo(&info);
+        client->resetVideoPlayback();
         delete client;
     }
 #endif
