@@ -557,7 +557,7 @@ sp<NuPlayerVPPProcessor> NuPlayer::Renderer::createVppProcessor(VPPVideoInfo *in
 
     if (NuPlayerVPPProcessor::isVppOn()) {
         if (mVPPProcessor == NULL) {
-            mVPPProcessor = new NuPlayerVPPProcessor(new AMessage(kWhatVPPNotify, id()), nativeWindow);
+            mVPPProcessor = NuPlayerVPPProcessor::getInstance(new AMessage(kWhatVPPNotify, id()), nativeWindow);
             if (mVPPProcessor != NULL) {
                 if (mVPPProcessor->validateVideoInfo(info) != VPP_OK) {
                     releaseVppProcessor();
