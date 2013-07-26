@@ -2043,7 +2043,7 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
         return processor;
 
     if (VPPProcessor::isVppOn()) {
-        processor = new VPPProcessor(mNativeWindow, omxCodec);
+        processor = VPPProcessor::getInstance(mNativeWindow, omxCodec);
         if (processor != NULL) {
             VPPVideoInfo info;
             sp<MetaData> meta = NULL;
