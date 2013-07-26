@@ -401,6 +401,14 @@ void NativeWindowRenderer::queueExternalBuffer(ANativeWindow* anw,
     MediaBuffer* buffer, int width, int height) {
     native_window_set_buffers_geometry(anw, width, height,
             HAL_PIXEL_FORMAT_YV12);
+
+    android_native_rect_t crop;
+    crop.left = 0;
+    crop.top = 0;
+    crop.right = width - 1;
+    crop.bottom = height - 1;
+    native_window_set_crop(anw, &crop);
+
     native_window_set_usage(anw, GRALLOC_USAGE_SW_WRITE_OFTEN);
 
     ANativeWindowBuffer* anb;
