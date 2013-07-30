@@ -756,7 +756,7 @@ status_t ACodec::cancelBufferToNativeWindow(BufferInfo *info) {
 ACodec::BufferInfo *ACodec::dequeueBufferFromNativeWindow() {
     ANativeWindowBuffer *buf;
     int fenceFd = -1;
-#if TARGET_HAS_VPP
+#ifdef TARGET_HAS_VPP
     int num = mVppInBufNum + 1;
     while(num--) {
         if (native_window_dequeue_buffer_and_wait(mNativeWindow.get(), &buf) != 0) {
@@ -2247,15 +2247,7 @@ bool ACodec::allYourBuffersAreBelongToUs(
         OMX_U32 portIndex) {
     for (size_t i = 0; i < mBuffers[portIndex].size(); ++i) {
         BufferInfo *info = &mBuffers[portIndex].editItemAt(i);
-#ifdef TARGET_HAS_VPP
-        if (info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM) {
-            LOGE("downstream buffer = %p", info->mGraphicBuffer.get());
-            int32_t processing;
-            if (info->mData->meta()->findInt32("processing", &processing) && (processing == 1)) {
-                continue;
-            }
-        }
-#endif
+
         if (info->mStatus != BufferInfo::OWNED_BY_US
 #ifdef TARGET_HAS_VPP
                 && info->mStatus != BufferInfo::OWNED_BY_VPP
@@ -3257,14 +3249,14 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
             if (mCodec->mNativeWindow == NULL
                     || !msg->findInt32("render", &render)
                     || msg->findInt32("hide", &hide)) {
-                //LOGE("The buffer which replace by VPP output, only process once");
+                //LOGI("The buffer which replace by VPP output, only process once");
                 processOnce = 1;
                 msg->setInt32("processOnce", processOnce);
                 info->mStatus = BufferInfo::OWNED_BY_VPP;
             }
             // The buffer which send to VPP and also rendered (when VPP speed does not catch up with decode speed)
             if (!msg->findInt32("processOnce", &processOnce)) {
-                //LOGE("The buffer which send to VPP and also rendered (when VPP speed does not catch up with decode speed)");
+                //LOGI("The buffer which send to VPP and also rendered (when VPP speed does not catch up with decode speed)");
                 processOnce = 1;
                 msg->setInt32("processOnce", processOnce);
                 if (mCodec->mNativeWindow != NULL
@@ -3287,7 +3279,7 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
                     info->mStatus = BufferInfo::OWNED_BY_VPP;
                 }
             } else if (processOnce == 1){
-                //LOGE("release second time %lld, status = %d", time, info->mStatus);
+                //LOGI("release second time %lld, status = %d", time, info->mStatus);
                 if (info->mStatus == BufferInfo::OWNED_BY_VPP) {
                     info->mStatus =  BufferInfo::OWNED_BY_US;
                 } else if (info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM) {
@@ -3889,14 +3881,6 @@ void ACodec::ExecutingState::submitOutputBuffers() {
         BufferInfo *info = &mCodec->mBuffers[kPortIndexOutput].editItemAt(i);
 
         if (mCodec->mNativeWindow != NULL) {
-#ifdef TARGET_HAS_VPP
-            if (info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM) {
-                int32_t processing;
-                if (info->mData->meta()->findInt32("processing", &processing) && (processing == 1)) {
-                    continue;
-                }
-            }
-#endif
             CHECK(info->mStatus == BufferInfo::OWNED_BY_US
 #ifdef TARGET_HAS_VPP
                     || info->mStatus == BufferInfo::OWNED_BY_VPP

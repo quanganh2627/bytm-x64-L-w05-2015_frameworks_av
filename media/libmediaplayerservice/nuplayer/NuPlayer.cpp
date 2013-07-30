@@ -566,14 +566,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     ALOGV("initiating %s decoder shutdown",
                          audio ? "audio" : "video");
 
-/*#ifdef TARGET_HAS_VPP
-                    if (mVideoEOS) {
-                        mRenderer->releaseVppProcessor();
-                        mVPPProcessor.clear();
-                        mIsVppInit = false;
-                    }
-#endif*/
-
                     (audio ? mAudioDecoder : mVideoDecoder)->initiateShutdown();
 
                     if (audio) {
@@ -665,6 +657,11 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
 
                     CHECK_EQ((int)mFlushingVideo, (int)SHUTTING_DOWN_DECODER);
                     mFlushingVideo = SHUT_DOWN;
+#ifdef TARGET_HAS_VPP
+                    mRenderer->releaseVppProcessor();
+                    mVPPProcessor.clear();
+                    mIsVppInit = false;
+#endif
                 }
 
                 finishFlushIfPossible();
@@ -856,11 +853,7 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                  seekTimeUs, seekTimeUs / 1E6);
 
             mSource->seekTo(seekTimeUs);
-#ifdef TARGET_HAS_VPP
-            if (mVPPProcessor != NULL) {
-                mVPPProcessor->seek();
-            }
-#endif
+
             if (mDriver != NULL) {
                 sp<NuPlayerDriver> driver = mDriver.promote();
                 if (driver != NULL) {
@@ -878,6 +871,11 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                      mAudioEOS = false;
                 }
                 if (mVideoDecoder != NULL) {
+#ifdef TARGET_HAS_VPP
+                    if (mVPPProcessor != NULL) {
+                        mVPPProcessor->seek();
+                    }
+#endif
                      flushDecoder(false, false);
                      mVideoEOS = false;
                 }
@@ -1186,6 +1184,17 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
                 }
 
                 if (formatChange || timeChange) {
+
+#ifdef TARGET_HAS_VPP
+                    if (!audio && mVPPProcessor != NULL) {
+                        if (formatChange) {
+                            mVPPProcessor->flushShutdown();
+                        } else if (timeChange) {
+                            mVPPProcessor->seek();
+                        }
+                    }
+#endif
+
                     flushDecoder(audio, formatChange);
                 } else {
                     // This stream is unaffected by the discontinuity
