@@ -1544,6 +1544,7 @@ OMXCodec::OMXCodec(
       mPaused(false),
       mNativeWindow(
               (!strncmp(componentName, "OMX.google.", 11)
+              || !strncmp(componentName, "OMX.Intel.sw_vd", 15)
               || !strcmp(componentName, "OMX.Nvidia.mpeg2v.decode"))
                         ? NULL : nativeWindow) {
     mPortStatus[kPortIndexInput] = ENABLED;
