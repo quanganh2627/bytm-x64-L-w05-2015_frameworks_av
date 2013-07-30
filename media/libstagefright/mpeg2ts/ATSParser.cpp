@@ -532,10 +532,11 @@ status_t ATSParser::Stream::parse(
 
     if (mExpectedContinuityCounter >= 0
             && (unsigned)mExpectedContinuityCounter != continuity_counter) {
-        ALOGI("discontinuity on stream pid 0x%04x", mElementaryPID);
-
+        ALOGI("discontinuity on stream pid 0x%04x,expected = %d, got = %d",
+            mElementaryPID, mExpectedContinuityCounter, continuity_counter);
         mPayloadStarted = false;
-        mBuffer->setRange(0, 0);
+        // check if there's a complete PES in current payload buffer
+        flush();
         mExpectedContinuityCounter = -1;
 
 #if 0
@@ -547,8 +548,6 @@ status_t ATSParser::Stream::parse(
             mQueue->clear(true /* clearFormat */);
         }
 #endif
-
-        return OK;
     }
 
     mExpectedContinuityCounter = (continuity_counter + 1) & 0x0f;
