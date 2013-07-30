@@ -353,7 +353,7 @@ bool NuPlayer::Renderer::onDrainAudioQueue() {
 
 void NuPlayer::Renderer::postDrainVideoQueue() {
 #ifdef TARGET_HAS_VPP
-    if (mVPPProcessor != NULL) {
+    if (!mFlushingVideo && mVPPProcessor != NULL) {
         mVPPProcessor->invokeThreads();
         List<QueueEntry>::iterator it;
         for(it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
@@ -402,7 +402,6 @@ void NuPlayer::Renderer::postDrainVideoQueue() {
     } else {
         int64_t mediaTimeUs;
         CHECK(entry.mBuffer->meta()->findInt64("timeUs", &mediaTimeUs));
-
 
         if (mAnchorTimeMediaUs < 0) {
             delayUs = 0;
@@ -597,6 +596,19 @@ void NuPlayer::Renderer::releaseVppProcessor() {
 void NuPlayer::Renderer::onUpdateVPPInput(const sp<AMessage> &msg) {
     sp<AMessage> notifyConsumed;
     CHECK(msg->findMessage("notifyConsumed", &notifyConsumed));
+    /*
+     * in normal playback case, we vpp input comes, the original input in VideoQueue is replaced or rendered
+     * but when seeking, the input may still in VideoQueue, so remove it
+     */
+    List<QueueEntry>::iterator it;
+    if (!mVideoQueue.empty()) {
+        for(it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
+            if ((*it).mNotifyConsumed == notifyConsumed) {
+                LOGV("erase vpp input in video queue maybe in seeking");
+                mVideoQueue.erase(it);
+            }
+        }
+    }
 
     notifyConsumed->post();
 }
@@ -787,7 +799,7 @@ void NuPlayer::Renderer::flushQueue(List<QueueEntry> *queue) {
 
         if (entry->mBuffer != NULL) {
 #ifdef TARGET_HAS_VPP
-            int32_t vppInput;
+            int32_t vppInput, vppOutput, render;
             if (!entry->mNotifyConsumed->findInt32("vppInput", &vppInput)) {
                 entry->mNotifyConsumed->post();
             }
