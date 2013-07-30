@@ -616,14 +616,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     ALOGV("initiating %s decoder shutdown",
                          audio ? "audio" : "video");
 
-/*#ifdef TARGET_HAS_VPP
-                    if (mVideoEOS) {
-                        mRenderer->releaseVppProcessor();
-                        mVPPProcessor.clear();
-                        mIsVppInit = false;
-                    }
-#endif*/
-
                     (audio ? mAudioDecoder : mVideoDecoder)->initiateShutdown();
 
                     if (audio) {
@@ -736,6 +728,11 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
 
                     CHECK_EQ((int)mFlushingVideo, (int)SHUTTING_DOWN_DECODER);
                     mFlushingVideo = SHUT_DOWN;
+#ifdef TARGET_HAS_VPP
+                    mRenderer->releaseVppProcessor();
+                    mVPPProcessor.clear();
+                    mIsVppInit = false;
+#endif
                 }
 
                 finishFlushIfPossible();
@@ -865,11 +862,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
         {
             ALOGV("kWhatReset");
 
-#ifdef TARGET_HAS_VPP
-            if (mVPPProcessor != NULL) {
-                mVPPProcessor->flushShutdown();
-            }
-#endif
             mDeferredActions.push_back(
                     new ShutdownDecoderAction(
                         true /* audio */, true /* video */));
@@ -1128,6 +1120,15 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
                                     &NuPlayer::performScanSources));
                     }
 
+#ifdef TARGET_HAS_VPP
+                    if (!audio && mVPPProcessor != NULL) {
+                        if (formatChange) {
+                            mVPPProcessor->flushShutdown();
+                        } else if (timeChange) {
+                            mVPPProcessor->seek();
+                        }
+                    }
+#endif
                     sp<AMessage> newFormat = mSource->getFormat(audio);
                     sp<Decoder> &decoder = audio ? mAudioDecoder : mVideoDecoder;
                     if (formatChange && !decoder->supportsSeamlessFormatChange(newFormat)) {
@@ -1416,12 +1417,23 @@ void NuPlayer::performDecoderFlush() {
     }
 
     if (mVideoDecoder != NULL) {
+#ifdef TARGET_HAS_VPP
+            if (mVPPProcessor != NULL) {
+                mVPPProcessor->seek();
+            }
+#endif
         flushDecoder(false /* audio */, false /* needShutdown */);
     }
 }
 
 void NuPlayer::performDecoderShutdown(bool audio, bool video) {
     ALOGV("performDecoderShutdown audio=%d, video=%d", audio, video);
+
+#ifdef TARGET_HAS_VPP
+            if (mVPPProcessor != NULL) {
+                mVPPProcessor->flushShutdown();
+            }
+#endif
 
     if ((!audio || mAudioDecoder == NULL)
             && (!video || mVideoDecoder == NULL)) {

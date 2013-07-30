@@ -1978,7 +1978,6 @@ void AwesomePlayer::onVideoEvent() {
             mVideoBuffer->release();
             mVideoBuffer = NULL;
         }
-
         mVPPProcessor->seek();
 
         if (mSeeking == SEEK && isStreamingHTTP() && mAudioSource != NULL
