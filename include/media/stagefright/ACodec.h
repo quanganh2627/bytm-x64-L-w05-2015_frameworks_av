@@ -181,7 +181,6 @@ private:
     List<sp<AMessage> > mDeferredQueue;
 
     bool mSentFormat;
-    bool mFirstFrame;
     bool mIsEncoder;
 
     bool mShutdownInProgress;
