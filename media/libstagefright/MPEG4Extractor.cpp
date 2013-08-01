@@ -93,6 +93,7 @@ private:
     uint64_t* mCurrentSampleInfoOffsets;
 
     bool mIsAVC;
+    bool mIsHEVC;
     size_t mNALLengthSize;
 
     bool mStarted;
@@ -317,6 +318,9 @@ static const char *FourCC2MIME(uint32_t fourcc) {
 
         case FOURCC('a', 'v', 'c', '1'):
             return MEDIA_MIMETYPE_VIDEO_AVC;
+
+        case FOURCC('h', 'v', 'c', '1'):
+            return MEDIA_MIMETYPE_VIDEO_HEVC;
 
         default:
             CHECK(!"should not be here.");
@@ -1388,6 +1392,7 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
         case FOURCC('H', '2', '6', '3'):
         case FOURCC('h', '2', '6', '3'):
         case FOURCC('a', 'v', 'c', '1'):
+        case FOURCC('h', 'v', 'c', '1'):
         {
             mHasVideo = true;
 
@@ -1671,6 +1676,29 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
 
             mLastTrack->meta->setData(
                     kKeyAVCC, kTypeAVCC, buffer->data(), chunk_data_size);
+
+            *offset += chunk_size;
+            break;
+        }
+
+        case FOURCC('h', 'v', 'c', 'C'):
+        {
+            char buffer[512]; // hvcc data is bigger than avcc one
+            if (chunk_data_size > (off64_t)sizeof(buffer)) {
+                return ERROR_BUFFER_TOO_SMALL;
+            }
+
+            if (mDataSource->readAt(
+                        data_offset, buffer, chunk_data_size) < chunk_data_size) {
+                return ERROR_IO;
+            }
+
+            // configurationVersion should be 1
+            if (buffer[0] != 1)
+                return ERROR_MALFORMED;
+
+            mLastTrack->meta->setData(
+                    kKeyHVCC, kTypeHVCC, buffer, chunk_data_size);
 
             *offset += chunk_size;
             break;
@@ -2522,6 +2550,7 @@ MPEG4Source::MPEG4Source(
       mCurrentSampleInfoOffsetsAllocSize(0),
       mCurrentSampleInfoOffsets(NULL),
       mIsAVC(false),
+      mIsHEVC(false),
       mNALLengthSize(0),
       mStarted(false),
       mGroup(NULL),
@@ -2546,6 +2575,7 @@ MPEG4Source::MPEG4Source(
     CHECK(success);
 
     mIsAVC = !strcasecmp(mime, MEDIA_MIMETYPE_VIDEO_AVC);
+    mIsHEVC = !strcasecmp(mime, MEDIA_MIMETYPE_VIDEO_HEVC);
 
     if (mIsAVC) {
         uint32_t type;
@@ -2567,6 +2597,20 @@ MPEG4Source::MPEG4Source(
     if (mFirstMoofOffset != 0) {
         off64_t offset = mFirstMoofOffset;
         parseChunk(&offset);
+    }
+    if (mIsHEVC) {
+        uint32_t type;
+        const void *data;
+        size_t size;
+        CHECK(format->findData(kKeyHVCC, &type, &data, &size));
+
+        const uint8_t *ptr = (const uint8_t *)data;
+
+        CHECK(size >= 23);
+        CHECK_EQ((unsigned)ptr[0], 1u);  // configurationVersion == 1
+
+        // The number of bytes used to encode the length of a NAL unit.
+        mNALLengthSize = 1 + (ptr[21] & 3);
     }
 }
 
@@ -3297,7 +3341,7 @@ status_t MPEG4Source::read(
         }
     }
 
-    if (!mIsAVC || mWantsNALFragments) {
+    if (!mIsAVC && !mIsHEVC || mWantsNALFragments) {
         if (newBuffer) {
             ssize_t num_bytes_read =
                 mDataSource->readAt(offset, (uint8_t *)mBuffer->data(), size);
@@ -3331,7 +3375,7 @@ status_t MPEG4Source::read(
             ++mCurrentSampleIndex;
         }
 
-        if (!mIsAVC) {
+        if (!mIsAVC && !mIsHEVC) {
             *out = mBuffer;
             mBuffer = NULL;
 
@@ -3768,6 +3812,7 @@ static bool isCompatibleBrand(uint32_t fourcc) {
     static const uint32_t kCompatibleBrands[] = {
         FOURCC('i', 's', 'o', 'm'),
         FOURCC('i', 's', 'o', '2'),
+        FOURCC('i', 's', 'o', '4'),
         FOURCC('a', 'v', 'c', '1'),
         FOURCC('3', 'g', 'p', '4'),
         FOURCC('m', 'p', '4', '1'),
