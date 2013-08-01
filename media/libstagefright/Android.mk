@@ -17,11 +17,7 @@ endif
 ##########################
 
 ifeq ($(strip $(USE_INTEL_LVSE)),true)
-
 LOCAL_CFLAGS += -DLVSE
-LOCAL_PATH_NXP := ../../../../device/intel/PRIVATE/lifevibes/lvse
-LOCAL_PREBUILT_LIBS += $(LOCAL_PATH_NXP)/libmusicbundle.a
-include $(BUILD_MULTI_PREBUILT)
 endif
 
 include $(CLEAR_VARS)
