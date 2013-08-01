@@ -22,6 +22,7 @@ const char *MEDIA_MIMETYPE_IMAGE_JPEG = "image/jpeg";
 
 const char *MEDIA_MIMETYPE_VIDEO_VPX = "video/x-vnd.on2.vp8";
 const char *MEDIA_MIMETYPE_VIDEO_AVC = "video/avc";
+const char *MEDIA_MIMETYPE_VIDEO_HEVC = "video/hevc";
 const char *MEDIA_MIMETYPE_VIDEO_MPEG4 = "video/mp4v-es";
 const char *MEDIA_MIMETYPE_VIDEO_H263 = "video/3gpp";
 const char *MEDIA_MIMETYPE_VIDEO_MPEG2 = "video/mpeg2";
