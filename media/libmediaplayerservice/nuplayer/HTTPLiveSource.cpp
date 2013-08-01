@@ -100,6 +100,24 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
         return NULL;
     }
 
+#ifdef TARGET_HAS_VPP
+    if (!audio) {
+       static const int64_t kMinDurationUs = 1000000ll;
+       sp<MetaData> format = source->getFormat();
+       size_t sampleCount = 0;
+       status_t err;
+       int framerate = 0;
+       int64_t duration = source->getBufferedDurationUs(&err,&sampleCount);
+       if (!(format != NULL && format->findInt32(kKeyFrameRate, &framerate) && framerate != 0)) {
+           if (err == OK && duration >= kMinDurationUs) {
+               framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
+               format->setInt32(kKeyFrameRate, framerate);
+           } else {
+               return NULL;
+           }
+       }
+    }
+#endif
     // check if the format of the other stream is null,if it's still null
     // return null for this stream's format to make sure two decoders can
     // be initialized at the same time
@@ -111,6 +129,24 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
         return NULL;
     }
 
+#ifdef TARGET_HAS_VPP
+    if (otherType == ATSParser::VIDEO) {
+       static const int64_t kMinDurationUs = 1000000ll;
+       sp<MetaData> format = anotherSource->getFormat();
+       size_t sampleCount = 0;
+       status_t err;
+       int framerate = 0;
+       int64_t duration = anotherSource->getBufferedDurationUs(&err,&sampleCount);
+       if (!(format != NULL && format->findInt32(kKeyFrameRate, &framerate) && framerate != 0)) {
+           if (err == OK && duration >= kMinDurationUs) {
+               framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
+               format->setInt32(kKeyFrameRate, framerate);
+           } else {
+               return NULL;
+           }
+       }
+    }
+#endif
     return source->getFormat();
 }
 
