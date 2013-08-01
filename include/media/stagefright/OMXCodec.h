@@ -380,6 +380,9 @@ private:
             const void *data, size_t size,
             unsigned *profile, unsigned *level);
 
+    status_t parseHEVCCodecSpecificData(
+            const void *data, size_t size);
+
     status_t stopOmxComponent_l();
 
     OMXCodec(const OMXCodec &);
