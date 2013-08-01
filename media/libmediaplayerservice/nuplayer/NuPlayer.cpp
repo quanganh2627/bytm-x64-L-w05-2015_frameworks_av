@@ -41,6 +41,7 @@
 #include <media/stagefright/MediaDefs.h>
 #include <media/stagefright/MediaErrors.h>
 #include <media/stagefright/MetaData.h>
+#include <media/stagefright/Utils.h>
 #include <gui/IGraphicBufferProducer.h>
 
 #include "avc_utils.h"
@@ -662,7 +663,8 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     if (mVideoDecoder == NULL &&
                             mSource->getDuration(&durationUs) == OK &&
                             durationUs
-                                > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US) {
+                                > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US &&
+                            !isInCall()) {
                         flags = AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
                     } else {
                         flags = AUDIO_OUTPUT_FLAG_NONE;

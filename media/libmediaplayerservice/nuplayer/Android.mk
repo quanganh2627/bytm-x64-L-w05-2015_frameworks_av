@@ -26,6 +26,7 @@ ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
     LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
 endif
 
+LOCAL_SHARED_LIBRARIES += libstagefright
 LOCAL_MODULE:= libstagefright_nuplayer
 
 LOCAL_MODULE_TAGS := eng

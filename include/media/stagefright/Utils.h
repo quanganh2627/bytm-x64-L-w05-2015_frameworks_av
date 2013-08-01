@@ -51,7 +51,7 @@ AString MakeUserAgent();
 // Send information from MetaData to the HAL via AudioSink
 status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink,
                             const sp<MetaData>& meta);
-
+bool isInCall();
 }  // namespace android
 
 #endif  // UTILS_H_

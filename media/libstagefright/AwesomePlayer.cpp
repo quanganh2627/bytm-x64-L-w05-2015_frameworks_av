@@ -49,6 +49,7 @@
 #include "include/AsyncOMXCodecWrapper.h"
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/OMXCodec.h>
+#include <media/stagefright/Utils.h>
 
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/Surface.h>
@@ -3676,22 +3677,6 @@ void AwesomePlayer::onAudioOffloadTearDownEvent() {
     }
     mOffloadTearDown = false;
 #endif
-}
-
-bool AwesomePlayer::isInCall() {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    ALOGV("isInCall");
-    audio_mode_t mode;
-    const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
-
-    if (audioFlinger != 0) {
-        mode = audioFlinger->getMode();
-        ALOGV("isInCall: Mode read from AF = %d", mode);
-    }
-    return ((mode == AUDIO_MODE_IN_CALL) ||
-            (mode == AUDIO_MODE_IN_COMMUNICATION));
-#endif
-    return false;
 }
 
 bool AwesomePlayer::isAudioEffectEnabled() {
