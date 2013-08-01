@@ -280,7 +280,21 @@ status_t AudioTrackOffload::setParameters( const String8& keyValuePairs )
     }
 }
 
+status_t AudioTrackOffload::setVolume(float left, float right)
+{
+    if (left < 0.0f || left > 1.0f || right < 0.0f || right > 1.0f) {
+        return BAD_VALUE;
+    }
 
+    AutoMutex lock(mLock);
+    mVolume[LEFT] = left;
+    mVolume[RIGHT] = right;
+
+    mProxy->setVolumeLR((uint32_t(uint16_t(right * 0x1000)) << 16) | uint16_t(left * 0x1000));
+    mAudioTrack->setVolume(left, right);
+
+    return NO_ERROR;
+}
 
 void AudioTrackOffload::flush_l()
 {

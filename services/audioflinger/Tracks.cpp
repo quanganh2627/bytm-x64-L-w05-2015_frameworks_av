@@ -906,6 +906,28 @@ void AudioFlinger::PlaybackThread::Track::setVolume(float left, float right)
    /* Call set volume of offload hal. This will be invoked by the
     * volume control from application
     */
+    ALOGV("Call set volume of offload HAL");
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    sp<ThreadBase> thread = mThread.promote();
+    if (thread != 0) {
+        Mutex::Autolock _l(thread->mLock);
+        PlaybackThread *playbackThread = (PlaybackThread *)thread.get();
+        audio_track_cblk_t* cblk = mCblk;
+        if ((isOffloaded()) && (playbackThread != NULL)) {
+            float typeVolume = playbackThread->mStreamTypes[mStreamType].volume;
+            float v = playbackThread->mMasterVolume * typeVolume;
+            uint32_t vlr = mServerProxy->getVolumeLR();
+            float v_clamped = v * (vlr & 0xFFFF);
+            if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
+            left = v_clamped/MAX_GAIN;
+            v_clamped = v * (vlr >> 16);
+            if (v_clamped > MAX_GAIN) v_clamped = MAX_GAIN;
+            right = v_clamped/MAX_GAIN;
+            playbackThread->getOutput_l()->stream->set_volume(
+                                      playbackThread->getOutput_l()->stream, left, right);
+        }
+    }
+#endif
 }
 
 status_t AudioFlinger::PlaybackThread::Track::setParameters(

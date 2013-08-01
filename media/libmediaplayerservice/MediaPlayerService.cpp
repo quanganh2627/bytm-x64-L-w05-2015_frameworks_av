@@ -1752,7 +1752,15 @@ void MediaPlayerService::AudioOutput::setVolume(float left, float right)
     mLeftVolume = left;
     mRightVolume = right;
     if (mTrack) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+            static_cast<AudioTrackOffload*>(mTrack)->setVolume(left, right);
+        } else {
+            mTrack->setVolume(left, right);
+        }
+#else
         mTrack->setVolume(left, right);
+#endif
     }
 }
 
