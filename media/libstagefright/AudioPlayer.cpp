@@ -45,7 +45,6 @@
 
 namespace android {
 
-
 AudioPlayer::AudioPlayer(
         const sp<MediaPlayerBase::AudioSink> &audioSink,
         bool allowDeepBuffering,
@@ -263,76 +262,68 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
     }
 #endif
 
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     int avgBitRate = -1;
-    success = format->findInt32(kKeyBitRate, &avgBitRate);
     if (mAudioSink.get() != NULL) {
-        if (mOffload) {
-            ALOGV("Opening compress offload sink");
-            err = mAudioSink->open(
-                mSampleRate, numChannels, channelMask,
-                avgBitRate,
-                mOffloadFormat,
-                DEFAULT_AUDIOSINK_BUFFERCOUNT,
-                &AudioPlayer::AudioSinkCallback,
-                this,
-                AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD);
-        } else {
-           audio_output_flags_t flag = AUDIO_OUTPUT_FLAG_NONE;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+       success = format->findInt32(kKeyBitRate, &avgBitRate);
+       if (mOffload) {
+           ALOGV("Opening compress offload sink");
+           err = mAudioSink->open(
+                   mSampleRate, numChannels, channelMask,
+                   avgBitRate,
+                   mOffloadFormat,
+                   DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                   &AudioPlayer::AudioSinkCallback,
+                   this,
+                   AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD);
+       }
+       else {
+#endif
+          audio_output_flags_t flag = AUDIO_OUTPUT_FLAG_NONE;
 #ifdef BGM_ENABLED
-           flag = mAllowBackgroundPlayback ?
-                    AUDIO_OUTPUT_FLAG_REMOTE_BGM : AUDIO_OUTPUT_FLAG_NONE;
-#endif //BGM_ENABLED
-           flag = ((mAllowDeepBuffering) && (flag & AUDIO_OUTPUT_FLAG_NONE)) ?
+          flag = mAllowBackgroundPlayback ?
+                  AUDIO_OUTPUT_FLAG_REMOTE_BGM : AUDIO_OUTPUT_FLAG_NONE;
+#endif
+          // Deep buffer is not supported when remote BGM is active
+          flag = ((mAllowDeepBuffering) && (!(flag & AUDIO_OUTPUT_FLAG_REMOTE_BGM))) ?
                     AUDIO_OUTPUT_FLAG_DEEP_BUFFER : flag;
 
-           err = mAudioSink->open(
-               mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
-               DEFAULT_AUDIOSINK_BUFFERCOUNT,
-               &AudioPlayer::AudioSinkCallback,
-               this,
-               flag);
-        }
-#else //INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mAudioSink.get() != NULL) {
-           audio_output_flags_t flag = AUDIO_OUTPUT_FLAG_NONE;
-#ifdef BGM_ENABLED
-           flag = mAllowBackgroundPlayback ?
-                    AUDIO_OUTPUT_FLAG_REMOTE_BGM : AUDIO_OUTPUT_FLAG_NONE;
-#endif //BGM_ENABLED
-           flag = ((mAllowDeepBuffering) && (flag & AUDIO_OUTPUT_FLAG_NONE)) ?
-                    AUDIO_OUTPUT_FLAG_DEEP_BUFFER : flag;
-           err = mAudioSink->open(
-               mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
-               DEFAULT_AUDIOSINK_BUFFERCOUNT,
-               &AudioPlayer::AudioSinkCallback,
-               this,
-               flag);
-#endif //INTEL_MUSIC_OFFLOAD_FEATURE
-        if (err != OK) {
-            if (mFirstBuffer != NULL) {
+          err = mAudioSink->open(
+                    mSampleRate, numChannels, channelMask, AUDIO_FORMAT_PCM_16_BIT,
+                    DEFAULT_AUDIOSINK_BUFFERCOUNT,
+                    &AudioPlayer::AudioSinkCallback,
+                    this,
+                    flag);
+
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+       }
+#endif
+       if (err != OK) {
+           if (mFirstBuffer != NULL) {
                 mFirstBuffer->release();
                 mFirstBuffer = NULL;
-            }
+           }
 
-            if (!sourceAlreadyStarted) {
-                mSource->stop();
-            }
+           if (!sourceAlreadyStarted) {
+               mSource->stop();
+           }
 
-            return err;
-        }
+           return err;
+       }
 
-        mLatencyUs = (int64_t)mAudioSink->latency() * 1000;
-        mFrameSize = mAudioSink->frameSize();
+       mLatencyUs = (int64_t)mAudioSink->latency() * 1000;
+       mFrameSize = mAudioSink->frameSize();
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (mOffload) {
-            sendMetaDataToHal(mAudioSink, format);
-        }
+       if (mOffload) {
+           sendMetaDataToHal(mAudioSink, format);
+       }
 #endif
 
-        mAudioSink->start();
-    } else {
+       mAudioSink->start();
+
+    }
+    else {
         // playing to an AudioTrack, set up mask if necessary
         audio_channel_mask_t audioMask = channelMask == CHANNEL_MASK_USE_CHANNEL_ORDER ?
                 audio_channel_out_mask_from_count(numChannels) : channelMask;
@@ -345,17 +336,12 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
             mAudioTrack = new AudioTrackOffload(
                 AUDIO_STREAM_MUSIC, avgBitRate, mSampleRate, mOffloadFormat, audioMask,
                 0, AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD, &AudioCallback, this, 0, 0);
-        } else {
-            mAudioTrack = new AudioTrack(
-                AUDIO_STREAM_MUSIC, mSampleRate, AUDIO_FORMAT_PCM_16_BIT, audioMask,
-                0, AUDIO_OUTPUT_FLAG_NONE, &AudioCallback, this, 0);
-
-        }
-#else
+        } else
+#endif
         mAudioTrack = new AudioTrack(
                 AUDIO_STREAM_MUSIC, mSampleRate, AUDIO_FORMAT_PCM_16_BIT, audioMask,
                 0, AUDIO_OUTPUT_FLAG_NONE, &AudioCallback, this, 0);
-#endif
+
         if ((err = mAudioTrack->initCheck()) != OK) {
             delete mAudioTrack;
             mAudioTrack = NULL;
@@ -526,7 +512,7 @@ status_t AudioPlayer::setPlaybackRatePermille(int32_t ratePermille) {
 void AudioPlayer::notifyAudioEOS() {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     if (mObserver != NULL) {
-        mObserver->postAudioEOS(NULL);
+        mObserver->postAudioEOS(0);
         ALOGV("Notified observer about end of stream! ");
     }
 #endif
@@ -559,13 +545,12 @@ size_t AudioPlayer::AudioSinkCallback(
         ALOGV("AudioSinkCallback: Tear down event");
         me->mObserver->postAudioOffloadTearDown();
     }
-    return 0;
 #endif
     return 0;
 }
 
 void AudioPlayer::AudioCallback(int event, void *info) {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+
     switch (event) {
     case AudioTrack::EVENT_MORE_DATA:
     {
@@ -574,6 +559,7 @@ void AudioPlayer::AudioCallback(int event, void *info) {
 
         buffer->size = numBytesWritten;
     } break;
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     case AudioTrackOffload::EVENT_STREAM_END:
     {
         if (mOffload) {
@@ -582,21 +568,11 @@ void AudioPlayer::AudioCallback(int event, void *info) {
             notifyAudioEOS();
         }
     }   break;
+#endif
     default:
         ALOGE("received unknown event type: %d inside CallbackWrapper !", event);
-        break;
-    }
-#else
-    if (event != AudioTrack::EVENT_MORE_DATA) {
         return;
     }
-
-    AudioTrack::Buffer *buffer = (AudioTrack::Buffer *)info;
-    size_t numBytesWritten = fillBuffer(buffer->raw, buffer->size);
-
-    buffer->size = numBytesWritten;
-
-#endif
 }
 
 uint32_t AudioPlayer::getNumFramesPendingPlayout() const {
@@ -609,12 +585,9 @@ uint32_t AudioPlayer::getNumFramesPendingPlayout() const {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         if (mOffload) {
             err = static_cast<AudioTrackOffload*>(mAudioTrack)->getPosition(&numFramesPlayedOut);
-        } else {
-            err = mAudioTrack->getPosition(&numFramesPlayedOut);
-        }
-#else
-        err = mAudioTrack->getPosition(&numFramesPlayedOut);
+        } else
 #endif
+            err = mAudioTrack->getPosition(&numFramesPlayedOut);
     }
 
     if (err != OK || mNumFramesPlayed < numFramesPlayedOut) {
