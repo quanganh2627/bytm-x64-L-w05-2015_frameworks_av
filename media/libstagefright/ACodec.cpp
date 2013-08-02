@@ -43,6 +43,10 @@
 #include <NuPlayerVPPProcessor.h>
 #endif
 
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "MetaDataExt.h"
+#endif
+
 namespace android {
 
 template<class T>
@@ -942,6 +946,10 @@ status_t ACodec::setComponentRole(
             "video_decoder.mpeg4", "video_encoder.mpeg4" },
         { MEDIA_MIMETYPE_VIDEO_H263,
             "video_decoder.h263", "video_encoder.h263" },
+#ifdef USE_INTEL_ASF_EXTRACTOR
+        { MEDIA_MIMETYPE_VIDEO_WMV,
+            "video_decoder.wmv", NULL },
+#endif
         { MEDIA_MIMETYPE_VIDEO_VPX,
             "video_decoder.vpx", "video_encoder.vpx" },
         { MEDIA_MIMETYPE_AUDIO_RAW,
@@ -1588,6 +1596,9 @@ static const struct VideoCodingMapEntry {
     { MEDIA_MIMETYPE_VIDEO_H263, OMX_VIDEO_CodingH263 },
     { MEDIA_MIMETYPE_VIDEO_MPEG2, OMX_VIDEO_CodingMPEG2 },
     { MEDIA_MIMETYPE_VIDEO_VPX, OMX_VIDEO_CodingVPX },
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    {MEDIA_MIMETYPE_VIDEO_WMV, OMX_VIDEO_CodingWMV},
+#endif
 };
 
 static status_t GetVideoCodingTypeFromMime(
