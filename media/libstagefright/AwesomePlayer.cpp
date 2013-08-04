@@ -215,6 +215,8 @@ AwesomePlayer::AwesomePlayer()
       mExtractorFlags(0),
       mVideoBuffer(NULL),
       mDecryptHandle(NULL),
+      mDeepBufferAudio(false),
+      mDeepBufferTearDown(false),
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDClient(NULL),
       mFramesToDirty(0),
@@ -607,6 +609,7 @@ void AwesomePlayer::reset() {
 }
 
 void AwesomePlayer::reset_l() {
+    mDeepBufferAudio = false;
     mVideoRenderingStarted = false;
     mActiveAudioTrackIndex = -1;
     mDisplayWidth = 0;
@@ -732,6 +735,7 @@ void AwesomePlayer::reset_l() {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     mOffloadTearDown = false;
 #endif
+    mDeepBufferTearDown = false;
     mLastVideoTimeUs = -1;
 
     {
@@ -766,7 +770,7 @@ void AwesomePlayer::notifyListener_l(int msg, int ext1, int ext2) {
     if (mListener != NULL) {
         sp<MediaPlayerBase> listener = mListener.promote();
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (listener != NULL && !mOffloadTearDown) {
+        if (listener != NULL && (!mOffloadTearDown && !mDeepBufferTearDown)) {
 #else
         if (listener != NULL) {
 #endif
@@ -1069,6 +1073,14 @@ status_t AwesomePlayer::play() {
         modifyFlags(PLAYING, CLEAR);
         onAudioOffloadTearDownEvent();
     }
+    if (mDeepBufferAudio && isInCall()) {
+        mDeepBufferTearDown = true;     // to avoid any events posting to upperlayer
+        status = tearDownToNonDeepBufferAudio();
+        if (status != NO_ERROR) {
+            return status;
+        }
+        mDeepBufferTearDown = false;
+    }
 
 #ifdef BGM_ENABLED
     String8 reply;
@@ -1094,6 +1106,7 @@ status_t AwesomePlayer::play() {
        }
      } //(mBGMEnabled)
 #endif //BGM_ENABLED
+
     {
         Mutex::Autolock autoLock(mLock);
 
@@ -1156,11 +1169,14 @@ status_t AwesomePlayer::play_l() {
                 if (mVideoSource == NULL
                         && (mDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US ||
                         (getCachedDuration_l(&cachedDurationUs, &eos) &&
-                        cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))) {
+                        cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))
+                        && !isInCall()) {
                     allowDeepBuffering = true;
                 } else {
                     allowDeepBuffering = false;
                 }
+                mDeepBufferAudio = allowDeepBuffering;
+
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
                 if (!mOffload) {
                     mAudioPlayer = new AudioPlayer(mAudioSink, allowDeepBuffering, this);
@@ -3994,6 +4010,61 @@ void AwesomePlayer::onAudioOffloadTearDownEvent() {
     }
     mOffloadTearDown = false;
 #endif
+}
+
+/*
+ * When call comes, deep Buffer has to be teared down and normal audio path
+ * should be followed.
+ */
+status_t AwesomePlayer::tearDownToNonDeepBufferAudio() {
+    status_t err;
+    ALOGV(" AwesomePlayer::tearDownToNonDeepBufferAudio");
+
+    /* Store the current status and use it while starting for IA decoding
+     * Terminate the active stream by calling reset_l()
+     */
+    {
+        Mutex::Autolock autoLock(mStatsLock);
+        mStats.mURI = mUri;
+        mStats.mUriHeaders = mUriHeaders;
+        mStats.mFileSource = mFileSource;
+        mStats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
+        getPosition(&mStats.mPositionUs);
+    }
+
+    Stats stats = mStats;
+    reset_l();
+
+    mDeepBufferTearDown = true;
+    /* Resume the IA decoding. */
+    if (stats.mFileSource != NULL) {
+        err = setDataSource_l(stats.mFileSource);
+        if (err == OK) {
+            mFileSource = stats.mFileSource;
+        }
+    } else {
+        err = setDataSource_l(stats.mURI, &stats.mUriHeaders);
+    }
+
+    if (err != NO_ERROR) {
+        return err;
+    }
+
+    mIsAsyncPrepare = true;
+    mFlags |= PREPARING;
+    /* Call parepare for the IA decoding */
+    onPrepareAsyncEvent();
+    /* Seek to the position where playback is terminated */
+    err = seekTo(stats.mPositionUs);
+    if (err != NO_ERROR) {
+        return err;
+    }
+
+    if (stats.mFlags & PLAYING) {
+        err = play();
+    }
+    mDeepBufferTearDown = false;
+    return err;
 }
 
 bool AwesomePlayer::isAudioEffectEnabled() {

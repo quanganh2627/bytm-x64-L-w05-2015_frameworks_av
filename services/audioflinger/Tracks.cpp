@@ -856,7 +856,19 @@ void AudioFlinger::PlaybackThread::Track::flush()
             }
             playbackThread->getOutput_l()->stream->flush(
                                       playbackThread->getOutput_l()->stream);
+        } else {
+            // Added for deep buffer
+            if (playbackThread->getOutput_l()->stream->flush) {
+                playbackThread->getOutput_l()->stream->flush(playbackThread->getOutput_l()->stream);
+                ALOGD("Flushed the data ");
+            }
         }
+#else
+    // Added for deep buffer
+    if (playbackThread->getOutput_l()->stream->flush) {
+        playbackThread->getOutput_l()->stream->flush(playbackThread->getOutput_l()->stream);
+        ALOGD("Flushed the data ");
+    }
 #endif
 
         if (mState != STOPPING_1 && mState != STOPPING_2 && mState != STOPPED && mState != PAUSED &&

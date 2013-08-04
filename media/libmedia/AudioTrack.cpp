@@ -477,6 +477,8 @@ void AudioTrack::flush_l()
         // in AudioTrack::obtainBuffer()
 
         mCblk->cv.signal();
+    } else if (mFlags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER) {
+        mAudioTrack->flush();
     }
 }
 

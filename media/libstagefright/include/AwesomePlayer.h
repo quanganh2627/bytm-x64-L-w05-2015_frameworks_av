@@ -130,6 +130,7 @@ struct AwesomePlayer {
     bool mOffloadCalAudioEOS;
     bool mOffloadPostAudioEOS;
     void postAudioOffloadTearDown();
+    status_t tearDownToNonDeepBufferAudio();
 #ifdef BGM_ENABLED
     status_t remoteBGMSuspend();
     status_t remoteBGMResume();
@@ -422,6 +423,9 @@ private:
     bool mBGMEnabled;
     bool mBGMAudioAvailable;
 #endif
+
+    bool mDeepBufferAudio;
+    bool mDeepBufferTearDown;
 
 #ifdef LVSE
     sp<LVAudioSource> mLVAudioSource;
