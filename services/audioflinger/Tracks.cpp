@@ -858,7 +858,7 @@ void AudioFlinger::PlaybackThread::Track::flush()
                                       playbackThread->getOutput_l()->stream);
         }
 #endif
-        if (isDeepBuffer()) {
+        if (isDeepBuffer() && mState == ACTIVE) {
             // Added for deep buffer
             if (playbackThread->getOutput_l()->stream->flush) {
                 playbackThread->getOutput_l()->stream->flush(playbackThread->getOutput_l()->stream);
