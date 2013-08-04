@@ -470,7 +470,7 @@ void AudioTrack::flush_l()
     mMarkerReached = false;
     mUpdatePeriod = 0;
 
-    if (!mActive ) {
+    if (!mActive || (mFlags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER)) {
         mFlushed = true;
         mAudioTrack->flush();
         // Release AudioTrack callback thread in case it was waiting for new buffers
@@ -911,6 +911,9 @@ status_t AudioTrack::createTrack_l(
         trackFlags |= IAudioFlinger::TRACK_OFFLOAD;
     }
 #endif
+    if (flags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER) {
+        trackFlags |= IAudioFlinger::TRACK_DEEPBUFFER;
+    }
     sp<IAudioTrack> track = audioFlinger->createTrack(streamType,
                                                       sampleRate,
                                                       // AudioFlinger only sees 16-bit PCM
