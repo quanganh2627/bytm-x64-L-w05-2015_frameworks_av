@@ -2053,6 +2053,7 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
 #ifdef TARGET_HAS_VPP
 VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
     VPPProcessor* processor = NULL;
+    mVPPInit = false;
 
     if (mNativeWindow == NULL)
         return processor;
