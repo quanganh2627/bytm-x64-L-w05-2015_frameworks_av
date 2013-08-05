@@ -25,6 +25,11 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libbinder
 
+ifeq ($(INTEL_WIDI), true)
+LOCAL_SHARED_LIBRARIES += libdl
+LOCAL_CFLAGS += -DINTEL_WIDI
+endif
+
 LOCAL_STATIC_LIBRARIES := \
 	libregistermsext
 

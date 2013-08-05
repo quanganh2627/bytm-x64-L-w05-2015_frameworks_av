@@ -80,6 +80,10 @@ ifeq ($(TARGET_HAS_VPP), true)
         $(TARGET_OUT_HEADERS)/libva
 endif
 
+ifeq ($(INTEL_WIDI), true)
+LOCAL_CFLAGS += -DINTEL_WIDI
+endif
+
 LOCAL_MODULE:= libmediaplayerservice
 
 include $(BUILD_SHARED_LIBRARY)
