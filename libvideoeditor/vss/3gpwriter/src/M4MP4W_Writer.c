@@ -4253,6 +4253,17 @@ M4OSA_ERR M4MP4W_closeWrite( M4OSA_Context context )
                     mMp4FileDataPtr->videoTrackPtr->DSI[1]);
                 return M4ERR_PARAMETER;
             }
+             /* [BZ 124569]some clips may have nal length size other than 4 as usual.
+              * video encoder's output buffer always has nal length equals 4,
+              * so we uniform it to 4 bytes here, or chunk parsing will have trouble
+              * with incorrect size information.
+              */
+            if((mMp4FileDataPtr->videoTrackPtr->DSI[4] & 0x03) !=0x03) {
+                mMp4FileDataPtr->videoTrackPtr->DSI[4] |=  0x03;
+                M4OSA_TRACE2_2("modify nal length from original %#x to %#x",
+                                                        (mMp4FileDataPtr->videoTrackPtr->DSI[4] & 0x03) +1,
+                                                        mMp4FileDataPtr->videoTrackPtr->DSI[4]+1);
+            }
             // Do not strip the DSI
             CLEANUPonERR( M4MP4W_putBlock(mMp4FileDataPtr->videoTrackPtr->DSI,
                 mMp4FileDataPtr->videoTrackPtr->dsiSize,
