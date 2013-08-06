@@ -31,6 +31,9 @@ LOCAL_C_INCLUDES += \
 
 
 include $(BUILD_SHARED_LIBRARY)
+else
+LOCAL_PATH:= $(call my-dir)
+endif
 
 # reverb wrapper
 include $(CLEAR_VARS)
@@ -59,4 +62,3 @@ LOCAL_C_INCLUDES += \
     $(call include-path-for, audio-effects)
 
 include $(BUILD_SHARED_LIBRARY)
-endif
