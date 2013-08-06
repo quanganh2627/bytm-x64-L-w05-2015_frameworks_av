@@ -160,6 +160,11 @@ struct MyHandler : public AHandler {
         mSessionHost = host;
     }
 
+    ~MyHandler() {
+        ALOGI("MyHandler destroy");
+        mTracks.clear();
+    }
+
     void connect() {
         looper()->registerHandler(mConn);
         (1 ? mNetLooper : looper())->registerHandler(mRTPConn);
@@ -205,9 +210,13 @@ struct MyHandler : public AHandler {
     }
 
     void disconnect() {
-        (new AMessage('abor', id()))->post();
-        sp<AMessage> timeout = new AMessage('tdto', id());
-        timeout->post(kTearDownTimeoutUs);
+        if (mSetupTracksSuccessful) {
+            (new AMessage('abor', id()))->post();
+            sp<AMessage> timeout = new AMessage('tdto', id());
+            timeout->post(kTearDownTimeoutUs);
+        } else {
+            (new AMessage('disc', id()))->post();
+        }
     }
 
     void seek(int64_t timeUs) {
@@ -563,6 +572,7 @@ struct MyHandler : public AHandler {
                                      "tracks. Aborting.");
                                 result = ERROR_UNSUPPORTED;
                             } else {
+                                mTracks.clear();
                                 setupTrack(1);
                             }
                         }
@@ -839,6 +849,11 @@ struct MyHandler : public AHandler {
 
             case 'abor':
             {
+                if (!mSetupTracksSuccessful){
+                    ALOGD("ABORT!!! mSetupTracksSuccessful is FALSE!!");
+                    (new AMessage('disc', id()))->post();
+                    break;
+                }
                 for (size_t i = 0; i < mTracks.size(); ++i) {
                     TrackInfo *info = &mTracks.editItemAt(i);
 
@@ -850,20 +865,8 @@ struct MyHandler : public AHandler {
                         mRTPConn->removeStream(info->mRTPSocket, info->mRTCPSocket, mUIDValid);
                     }
                 }
-                mTracks.clear();
-                mSetupTracksSuccessful = false;
-                mSeekPending = false;
-                mFirstAccessUnit = true;
-                mAllTracksHaveTime = false;
-                mTryFakeRTCP = false;
-                mNTPAnchorUs = -1;
-                mMediaAnchorUs = -1;
-                mNumAccessUnitsReceived = 0;
-                mReceivedFirstRTCPPacket = false;
-                mReceivedFirstRTPPacket = false;
                 mPausing = false;
                 mSeekable = true;
-                mFirstAccessUnitMediaTimeValid = true;
                 sp<AMessage> reply = new AMessage('tear', id());
 
                 int32_t reconnect;
@@ -903,6 +906,18 @@ struct MyHandler : public AHandler {
 
                 ALOGI("TEARDOWN completed with result %d (%s)",
                      result, strerror(-result));
+
+                mSetupTracksSuccessful = false;
+                mSeekPending = false;
+                mFirstAccessUnit = true;
+                mAllTracksHaveTime = false;
+                mTryFakeRTCP = false;
+                mNTPAnchorUs = -1;
+                mMediaAnchorUs = -1;
+                mNumAccessUnitsReceived = 0;
+                mReceivedFirstRTCPPacket = false;
+                mReceivedFirstRTPPacket = false;
+                mFirstAccessUnitMediaTimeValid = true;
 
                 sp<AMessage> reply = new AMessage('disc', id());
 
