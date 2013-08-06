@@ -123,6 +123,9 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/StereoWidening/lib
 
 include $(BUILD_STATIC_LIBRARY)
+else
+LOCAL_PATH:= $(call my-dir)
+endif
 
 # Reverb library
 include $(CLEAR_VARS)
@@ -178,4 +181,3 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/Common/src
 
 include $(BUILD_STATIC_LIBRARY)
-endif
