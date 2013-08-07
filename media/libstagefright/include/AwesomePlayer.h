@@ -127,15 +127,16 @@ struct AwesomePlayer {
     void offloadPauseStartTimer(int64_t time, bool at_pause = false);
     status_t offloadSuspend();
     status_t offloadResume();
+#ifdef BGM_ENABLED
+    status_t remoteBGMSuspend();
+    status_t remoteBGMResume();
+    bool mAudioPlayerPaused;
+#endif
     bool mOffloadCalAudioEOS;
     bool mOffloadPostAudioEOS;
     void postAudioOffloadTearDown();
     status_t tearDownToNonDeepBufferAudio();
     bool mIsDeepBufferPossible;
-#ifdef BGM_ENABLED
-    status_t remoteBGMSuspend();
-    status_t remoteBGMResume();
-#endif
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -421,11 +422,6 @@ private:
     bool mOffloadSinkCreationError;
     bool mDeepBufferAudio;
     bool mDeepBufferTearDown;
-#ifdef BGM_ENABLED
-    bool mRemoteBGMsuspend;
-    bool mBGMEnabled;
-    bool mBGMAudioAvailable;
-#endif
 
 #ifdef LVSE
     sp<LVAudioSource> mLVAudioSource;
