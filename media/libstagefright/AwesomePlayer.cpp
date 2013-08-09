@@ -546,6 +546,12 @@ void AwesomePlayer::setMDSVideoInfo_l() {
         info.frameRate = mStats.mFrameRate;
         info.displayW = mStats.mVideoWidth;
         info.displayH = mStats.mVideoHeight;
+#ifdef TARGET_HAS_VPP
+        // mVPPProcessor is NULL in case of  VPP is off
+        if (mVPPProcessor) {
+            info.frameRate = mVPPProcessor->getVppOutputFps();
+        }
+#endif
     }
     mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
     setMDSVideoState_l(MDS_VIDEO_PREPARED);
