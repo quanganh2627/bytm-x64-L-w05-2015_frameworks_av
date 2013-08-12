@@ -646,8 +646,6 @@ M4OSA_ERR M4VSS3GPP_intClipOpen( M4VSS3GPP_ClipContext *pClipCtxt,
                 "M4VSS3GPP_intClipOpen: Vid dec started; pViDecCtxt=0x%x",
                 pClipCtxt->pViDecCtxt);
 
-            if( M4DA_StreamTypeVideoMpeg4Avc
-                == pClipCtxt->pVideoStream->m_basicProperties.m_streamType )
             {
                 FilterOption.m_pFilterFunction =
                     (M4OSA_Void *) &M4VIFI_ResizeBilinearYUV420toYUV420;
