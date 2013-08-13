@@ -722,7 +722,7 @@ void GraphicBufferSource::onFrameAvailable() {
 void GraphicBufferSource::onBuffersReleased() {
     Mutex::Autolock lock(mMutex);
 
-    uint32_t slotMask;
+    uint64_t slotMask;
     if (mBufferQueue->getReleasedBuffers(&slotMask) != NO_ERROR) {
         ALOGW("onBuffersReleased: unable to get released buffer set");
         slotMask = 0xffffffff;
