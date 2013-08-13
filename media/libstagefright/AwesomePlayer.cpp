@@ -1658,18 +1658,17 @@ status_t AwesomePlayer::setSurfaceTexture(const sp<ISurfaceTexture> &surfaceText
 }
 
 void AwesomePlayer::shutdownVideoDecoder_l() {
+    if (mVideoBuffer) {
+        mVideoBuffer->release();
+        mVideoBuffer = NULL;
+    }
+
 #ifdef TARGET_HAS_VPP
     if (mVPPProcessor != NULL) {
         delete mVPPProcessor;
         mVPPProcessor = NULL;
     }
-    if (mVideoBuffer && mVideoBuffer->refcount() > 0) {
-#else
-    if (mVideoBuffer) {
 #endif
-        mVideoBuffer->release();
-        mVideoBuffer = NULL;
-    }
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
