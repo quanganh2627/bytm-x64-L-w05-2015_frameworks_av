@@ -746,11 +746,22 @@ status_t PreviewPlayer::initVideoDecoder_l(uint32_t flags) {
         return UNKNOWN_ERROR;
     }
 
+    mIsVideoDecoderHW = true;
+
     mVideoSource = OMXCodec::Create(
             mClient.interface(), mVideoTrack->getFormat(),
             false,
             mVideoTrack,
             NULL, flags, mVideoRenderer->getTargetWindow());
+    if(mVideoSource == NULL){
+        ALOGW("No HW Decoder found, fall back to SW Decoder");
+        mVideoSource = OMXCodec::Create(
+            mClient.interface(), mVideoTrack->getFormat(),
+            false,
+            mVideoTrack,
+            NULL, 0, mVideoRenderer->getTargetWindow());
+        mIsVideoDecoderHW = false;
+    }
 
     if (mVideoSource != NULL) {
         int64_t durationUs;
@@ -1062,8 +1073,13 @@ void PreviewPlayer::onVideoEvent() {
     }
 
     if (mVideoRenderer != NULL) {
+        bool isExtBuffer = false;
+        if(mIsVideoSourceJpg || !mIsVideoDecoderHW){
+            isExtBuffer = true;
+            ALOGV("Render external buffer");
+        }
         mVideoRenderer->render(mVideoBuffer, mCurrentVideoEffect,
-                mRenderingMode, mIsVideoSourceJpg);
+                mRenderingMode, isExtBuffer);
     }
 
     mVideoBuffer->release();

@@ -235,6 +235,8 @@ private:
     M4VIFI_UInt8*  mFrameRGBBuffer;
     M4VIFI_UInt8*  mFrameYUVBuffer;
 
+    bool mIsVideoDecoderHW;
+
     void cancelPlayerEvents_l(bool updateProgressCb = false);
     status_t setDataSource_l(const sp<MediaExtractor> &extractor);
     status_t setDataSource_l(const char *path);
