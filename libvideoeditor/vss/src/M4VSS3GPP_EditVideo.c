@@ -266,7 +266,7 @@ M4OSA_ERR M4VSS3GPP_intEditStepVideo( M4VSS3GPP_InternalEditContext *pC )
                 /**
                 * If the AU is good to be written, write it, else just skip it */
                 if( ( M4OSA_FALSE == bSkipFrame)
-                    && (( pC->pC1->VideoAU.m_CTS >= iCts)
+                    && (( (pC->pC1->VideoAU.m_CTS + 1) >= iCts)
                     && (pC->pC1->VideoAU.m_CTS < iNextCts)
                     && (pC->pC1->VideoAU.m_size > 0)) )
                 {
