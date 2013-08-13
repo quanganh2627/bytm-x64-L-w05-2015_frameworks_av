@@ -1413,8 +1413,9 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
 
         case FOURCC('a', 'v', 'c', 'C'):
         {
-            char buffer[256];
+            char buffer[4096];
             if (chunk_data_size > (off64_t)sizeof(buffer)) {
+                ALOGE("The avcC size exceeds predefined buffer size (%d)!", sizeof(buffer));
                 return ERROR_BUFFER_TOO_SMALL;
             }
 
