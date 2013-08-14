@@ -455,9 +455,18 @@ bool AudioTrack::stopped() const
 void AudioTrack::flush()
 {
     AutoMutex lock(mLock);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    ALOGV("flush_l");
+    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
+        static_cast<AudioTrackOffload*>(this)->flush_l();
+    } else if (!mActive && mSharedBuffer == 0) {
+        flush_l();
+    }
+#else
     if (!mActive && mSharedBuffer == 0) {
         flush_l();
     }
+#endif
 }
 
 void AudioTrack::flush_l()
