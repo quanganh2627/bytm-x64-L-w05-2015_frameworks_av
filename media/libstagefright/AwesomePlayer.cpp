@@ -2053,12 +2053,13 @@ void AwesomePlayer::setVideoSource(sp<MediaSource> source) {
 #ifdef TARGET_HAS_VPP
 VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
     VPPProcessor* processor = NULL;
+    mVPPInit = false;
 
     if (mNativeWindow == NULL)
         return processor;
 
     if (VPPProcessor::isVppOn()) {
-        processor = new VPPProcessor(mNativeWindow, omxCodec);
+        processor = VPPProcessor::getInstance(mNativeWindow, omxCodec);
         if (processor != NULL) {
             VPPVideoInfo info;
             sp<MetaData> meta = NULL;
@@ -2398,8 +2399,6 @@ void AwesomePlayer::onVideoEvent() {
             mVideoBuffer = NULL;
         }
 
-        mVPPProcessor->seek();
-
         if (mSeeking == SEEK && isStreamingHTTP() && mAudioSource != NULL
                 && !(mFlags & SEEK_PREVIEW)) {
             // We're going to seek the video source first, followed by
@@ -2433,6 +2432,7 @@ void AwesomePlayer::onVideoEvent() {
                     mSeeking == SEEK_VIDEO_ONLY
                         ? MediaSource::ReadOptions::SEEK_NEXT_SYNC
                         : MediaSource::ReadOptions::SEEK_CLOSEST_SYNC);
+            mVPPProcessor->seek();
         }
         for (;;) {
             status_t err = mVideoSource->read(&mVideoBuffer, &options);

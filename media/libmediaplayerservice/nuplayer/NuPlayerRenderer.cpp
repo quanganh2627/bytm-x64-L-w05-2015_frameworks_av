@@ -345,7 +345,7 @@ bool NuPlayer::Renderer::onDrainAudioQueue() {
 
 void NuPlayer::Renderer::postDrainVideoQueue() {
 #ifdef TARGET_HAS_VPP
-    if (mVPPProcessor != NULL) {
+    if (!mFlushingVideo && mVPPProcessor != NULL) {
         mVPPProcessor->invokeThreads();
         List<QueueEntry>::iterator it;
         for(it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
@@ -557,7 +557,7 @@ sp<NuPlayerVPPProcessor> NuPlayer::Renderer::createVppProcessor(VPPVideoInfo *in
 
     if (NuPlayerVPPProcessor::isVppOn()) {
         if (mVPPProcessor == NULL) {
-            mVPPProcessor = new NuPlayerVPPProcessor(new AMessage(kWhatVPPNotify, id()), nativeWindow);
+            mVPPProcessor = NuPlayerVPPProcessor::getInstance(new AMessage(kWhatVPPNotify, id()), nativeWindow);
             if (mVPPProcessor != NULL) {
                 if (mVPPProcessor->validateVideoInfo(info) != VPP_OK) {
                     releaseVppProcessor();
