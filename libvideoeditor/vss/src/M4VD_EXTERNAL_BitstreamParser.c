@@ -20,6 +20,7 @@
 #include "M4VD_EXTERNAL_Interface.h"
 #include "M4VD_Tools.h"
 #include "M4_VideoEditingCommon.h"
+#include "M4_Common.h"
 #include "OMX_Video.h"
 /**
  ************************************************************************
@@ -504,11 +505,14 @@ M4OSA_ERR getAVCProfileAndLevel(M4OSA_UInt8* pDSI, M4OSA_Int32 DSISize,
         return M4ERR_PARAMETER;
     }
 
-    constraintSet3 = (pDSI[index+2] & 0x10);
-    ALOGV("getAVCProfileAndLevel profile_byte %d, level_byte: %d constrain3flag",
-          pDSI[index+1], pDSI[index+3], constraintSet3);
+    AvcSpecificInfo *pAVCDSI = (AvcSpecificInfo *) pDSI;
+    M4OSA_UInt8 *pSPS = pAVCDSI->m_pSequenceParameterSet->m_pParameterSetUnit;
 
-    switch (pDSI[index+1]) {
+    constraintSet3 = (pSPS[2] & 0x10);
+    ALOGV("getAVCProfileAndLevel profile_byte %d, level_byte: %d constrain3flag = %d",
+          pSPS[1], pSPS[3], constraintSet3);
+
+    switch (pSPS[1]) {
         case 66:
             *pProfile = OMX_VIDEO_AVCProfileBaseline;
             break;
@@ -534,7 +538,7 @@ M4OSA_ERR getAVCProfileAndLevel(M4OSA_UInt8* pDSI, M4OSA_Int32 DSISize,
             *pProfile = M4VIDEOEDITING_VIDEO_UNKNOWN_PROFILE;
     }
 
-    switch (pDSI[index+3]) {
+    switch (pSPS[3]) {
         case 10:
             *pLevel = OMX_VIDEO_AVCLevel1;
             break;
