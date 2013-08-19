@@ -68,6 +68,7 @@ private:
 
     virtual void updatePortDefinitions();
     bool portSettingsChanged();
+    OMX_BUFFERHEADERTYPE* getAvailOutputBuffer();
 
     DISALLOW_EVIL_CONSTRUCTORS(SoftMPEG4);
 };

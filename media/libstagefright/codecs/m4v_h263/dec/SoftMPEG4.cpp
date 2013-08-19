@@ -91,6 +91,18 @@ status_t SoftMPEG4::initDecoder() {
     return OK;
 }
 
+OMX_BUFFERHEADERTYPE* SoftMPEG4::getAvailOutputBuffer()
+{
+    PortInfo *port = editPortInfo(1);
+    for (size_t j = 0; j < port->mBuffers.size(); ++j) {
+        struct BufferInfo* buffer = &(port->mBuffers.editItemAt(j));
+        if(buffer->mOwnedByUs == true){
+            return buffer->mHeader;
+        }
+    }
+    return NULL;
+}
+
 void SoftMPEG4::onQueueFilled(OMX_U32 portIndex) {
     if (mSignalledError || mOutputPortSettingsChange != NONE) {
         return;
@@ -99,14 +111,10 @@ void SoftMPEG4::onQueueFilled(OMX_U32 portIndex) {
     List<BufferInfo *> &inQueue = getPortQueue(0);
     List<BufferInfo *> &outQueue = getPortQueue(1);
 
-    while (!inQueue.empty() && outQueue.size() == kNumOutputBuffers) {
+    while (!inQueue.empty() && outQueue.size()) {
         BufferInfo *inInfo = *inQueue.begin();
         OMX_BUFFERHEADERTYPE *inHeader = inInfo->mHeader;
-
-        PortInfo *port = editPortInfo(1);
-
-        OMX_BUFFERHEADERTYPE *outHeader =
-            port->mBuffers.editItemAt(mNumSamplesOutput & 1).mHeader;
+        OMX_BUFFERHEADERTYPE *outHeader = getAvailOutputBuffer();
 
         if ((inHeader->nFlags & OMX_BUFFERFLAG_EOS) && inHeader->nFilledLen == 0) {
             inQueue.erase(inQueue.begin());
