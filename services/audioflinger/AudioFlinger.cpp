@@ -523,9 +523,13 @@ sp<IAudioTrack> AudioFlinger::createTrack(
         // move effect chain to this output thread if an effect on same session was waiting
         // for a track to be created
         if (lStatus == NO_ERROR && effectThread != NULL) {
-            Mutex::Autolock _dl(thread->mLock);
-            Mutex::Autolock _sl(effectThread->mLock);
-            moveEffectChain_l(lSessionId, effectThread, thread, true);
+            if (!((thread->outDevice() == AUDIO_DEVICE_OUT_AUX_DIGITAL) &&
+                ((thread->type() == ThreadBase::DIRECT)||
+                 (thread->channelCount() > 2)))) {
+                Mutex::Autolock _dl(thread->mLock);
+                Mutex::Autolock _sl(effectThread->mLock);
+                moveEffectChain_l(lSessionId, effectThread, thread, true);
+            }
         }
 
         // Look for sync events awaiting for a session to be used.
