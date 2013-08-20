@@ -1261,10 +1261,39 @@ bool AudioFlinger::EffectChain::isAudioEffectEnabled() const
 }
 
 // Must be called with EffectChain::mLock locked
+
 void AudioFlinger::EffectChain::clearInputBuffer_l(sp<ThreadBase> thread)
 {
-    size_t numSamples = thread->frameCount() * thread->channelCount();
-    memset(mInBuffer, 0, numSamples * sizeof(int16_t));
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+     // For offload the framecount is the one used for allocation the
+     // mInBuffer so modify the numSamples accordingly before memsetting
+     size_t numSamples;
+     PlaybackThread* pBThread = static_cast<PlaybackThread*>(thread.get());
+
+     if (pBThread->type() != ThreadBase::DIRECT) {
+         size_t numSamples = thread->frameCount() * thread->channelCount();
+         memset(mInBuffer, 0, numSamples * sizeof(int16_t));
+     } else {
+         size_t numSamples = thread->frameCount();
+         memset(mInBuffer, 0, numSamples * sizeof(int8_t));
+     }
+#else
+    size_t numSamples;
+    PlaybackThread* pBThread = static_cast<PlaybackThread*>(thread.get());
+     // [WORKAROUND]
+     // for DUT, effects need not be applied
+     // when the number of channels is more than 2, the effects chain
+     // is not supported at present;
+     if((thread->channelCount() > 2) && (pBThread->type() == ThreadBase::DIRECT)) {
+       ALOGI("Effects for multi-channel- NA");
+       numSamples = thread->frameCount();
+       memset(mInBuffer, 0, numSamples * sizeof(int8_t));
+     }
+     else {
+       numSamples = thread->frameCount() * thread->channelCount();
+       memset(mInBuffer, 0, numSamples * sizeof(int16_t));
+     }
+#endif
 
 }
 
