@@ -1466,6 +1466,11 @@ status_t PreviewPlayer::setImageClipProperties(uint32_t width,uint32_t height) {
 status_t PreviewPlayer::readFirstVideoFrame() {
     ALOGV("readFirstVideoFrame");
 
+    if (!(mFlags & PREPARED)) {
+        ALOGE("The player is not prepared");
+        return UNKNOWN_ERROR;
+    }
+
     if (!mVideoBuffer) {
         MediaSource::ReadOptions options;
         if (mSeeking != NO_SEEK) {
