@@ -139,9 +139,10 @@ int main(int argc, char** argv)
             ALOGE("dlopen(libwidiservice) succeeded in opening from main_mediaserver.cpp.");
             dlerror(); // Clear existing errors
             typedef bool (*instantiateFunc_t)();
-            instantiateFunc_t instantiate = (instantiateFunc_t) dlsym(hlibintelwidi, "instantiate");
+            instantiateFunc_t instantiate = NULL;
+            instantiate = (instantiateFunc_t) dlsym(hlibintelwidi, "instantiate");
             const char* error = dlerror();
-            if(error == NULL) {
+            if((error == NULL) && (instantiate != NULL)) {
                 bool ret = (*instantiate)();
                 if(!ret) {
                     ALOGI("Could not invoke instantiate() on libwidiservice.so! Intel widi will not be used.");
