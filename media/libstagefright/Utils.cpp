@@ -685,10 +685,10 @@ status_t setAACParameters(sp<MetaData> meta, audio_format_t *aFormat, uint32_t *
         return BAD_VALUE;
     }
 
-    // If channel info found is not suitable, return unsupported format
+    // If channel info found is invalid, return bad value
     numChannels = (data[1] >> 3) & 15;  // Bits 10 to 13
-    if ((numChannels != 1) && (numChannels !=2)) {
-        ALOGW("setAACParameters: Unsupported channel_cnt %d, no offload", numChannels);
+    if ((numChannels == 0) || (numChannels > 8)) {
+        ALOGW("setAACParameters: Channel count invalid, numChannels %d", numChannels);
         return BAD_VALUE;
     }
 
