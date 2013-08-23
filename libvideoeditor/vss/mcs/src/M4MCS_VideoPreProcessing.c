@@ -244,6 +244,8 @@ M4OSA_ERR M4MCS_intApplyVPP(M4VPP_Context pContext, M4VIFI_ImagePlane* pPlaneIn,
                              (M4OSA_UInt32)
                              ((pC->pPreResizeFrame->u_height * pPlaneOut->u_width)\
                              /pC->pPreResizeFrame->u_width);
+                        /*output height need to be multiple of 4 so that AIR can perform scaling correctly*/
+                        Params.m_outputSize.m_height = ((Params.m_outputSize.m_height+3) >> 2) << 2;
                         /*number of lines at the top*/
                         pImagePlanesTemp[0].u_topleft =
                              (M4MCS_ABS((M4OSA_Int32)
