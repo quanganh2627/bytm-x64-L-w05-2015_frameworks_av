@@ -189,6 +189,7 @@ NuCachedSource2::NuCachedSource2(
       mFinalStatus(OK),
       mLastAccessPos(0),
       mFetching(true),
+      mForceStop(false),
       mLastFetchTimeUs(-1),
       mNumRetriesLeft(kMaxNumRetries),
       mHighwaterThresholdBytes(kDefaultHighWaterThreshold),
