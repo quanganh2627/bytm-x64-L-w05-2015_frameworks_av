@@ -478,6 +478,10 @@ status_t MatroskaSource::readBlock() {
     const mkvparser::Track *track = tracks->GetTrackByNumber(block->GetTrackNumber());
     int64_t nextBlkTimeUs, diffTimeUs, frameTimeUs;
     int64_t timeUs = mBlockIter.blockTimeUs();
+    if (timeUs < 0) {
+        ALOGW("mBlockIter.blockTimeUs() is negative, hence exiting");
+        return UNKNOWN_ERROR;
+    }
     mBlockIter.advance();
     enum { VIDEO_TRACK = 1, AUDIO_TRACK = 2 };
     frameTimeUs = timeUs;
@@ -488,6 +492,10 @@ status_t MatroskaSource::readBlock() {
     if (track->GetType() == AUDIO_TRACK) {
         if (!mBlockIter.eos()) {
             nextBlkTimeUs = mBlockIter.blockTimeUs();
+            if (nextBlkTimeUs < 0) {
+                ALOGW("mBlockIter.blockTimeUs() is negative, hence exiting");
+                return UNKNOWN_ERROR;
+            }
             diffTimeUs = (nextBlkTimeUs - timeUs) / block->GetFrameCount();
         }
      }
