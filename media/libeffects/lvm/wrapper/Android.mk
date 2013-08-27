@@ -1,4 +1,3 @@
-ifneq ($(strip $(USE_INTEL_LVSE)),true)
 LOCAL_PATH:= $(call my-dir)
 
 # music bundle wrapper
@@ -31,9 +30,6 @@ LOCAL_C_INCLUDES += \
 
 
 include $(BUILD_SHARED_LIBRARY)
-else
-LOCAL_PATH:= $(call my-dir)
-endif
 
 # reverb wrapper
 include $(CLEAR_VARS)

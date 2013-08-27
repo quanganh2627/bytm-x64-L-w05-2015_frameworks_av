@@ -34,9 +34,6 @@ struct NuPlayer::StreamingSource : public NuPlayer::Source {
     virtual status_t feedMoreTSData();
 
     virtual status_t dequeueAccessUnit(bool audio, sp<ABuffer> *accessUnit);
-    virtual bool isIStreamSource() {
-        return true;
-    }
 
     virtual uint32_t flags() const;
 

@@ -86,11 +86,6 @@ void NuPlayer::RTSPSource::start() {
 }
 
 void NuPlayer::RTSPSource::stop() {
-    if (mState == DISCONNECTED) {
-        ALOGI("already disconnected.");
-        return;
-    }
-
     sp<AMessage> msg = new AMessage(kWhatDisconnect, mReflector->id());
 
     sp<AMessage> dummy;
@@ -176,7 +171,7 @@ sp<AnotherPacketSource> NuPlayer::RTSPSource::getSource(bool audio) {
 }
 
 status_t NuPlayer::RTSPSource::getDuration(int64_t *durationUs) {
-    *durationUs = -1ll;
+    *durationUs = 0ll;
 
     int64_t audioDurationUs;
     if (mAudioTrack != NULL
@@ -345,13 +340,6 @@ void NuPlayer::RTSPSource::onMessageReceived(const sp<AMessage> &msg) {
 
         case MyHandler::kWhatEOS:
         {
-            // If it is in conecting process, when receive bye rtcp,
-            // since mTracks has not been established, break the
-            // operation to mTracks.
-            if (mState == CONNECTING ) {
-                break;
-            }
-
             int32_t finalResult;
             CHECK(msg->findInt32("finalResult", &finalResult));
             CHECK_NE(finalResult, (status_t)OK);
@@ -475,10 +463,8 @@ void NuPlayer::RTSPSource::onDisconnected(const sp<AMessage> &msg) {
     CHECK(msg->findInt32("result", &err));
     CHECK_NE(err, (status_t)OK);
 
-    if (mHandler != NULL) {
-        mLooper->unregisterHandler(mHandler->id());
-        mHandler.clear();
-    }
+    mLooper->unregisterHandler(mHandler->id());
+    mHandler.clear();
 
     mState = DISCONNECTED;
     mFinalResult = err;
@@ -498,12 +484,4 @@ void NuPlayer::RTSPSource::finishDisconnectIfPossible() {
     mDisconnectReplyID = 0;
 }
 
-bool NuPlayer::RTSPSource::isStreamValid(bool audio) {
-    sp<AnotherPacketSource> source = getSource(audio);
-    if(source == NULL) {
-        return false;
-    }
-
-    return true;
-}
 }  // namespace android

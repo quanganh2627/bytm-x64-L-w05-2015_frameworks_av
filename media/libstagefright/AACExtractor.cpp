@@ -166,6 +166,7 @@ AACExtractor::AACExtractor(
     channel = (header[0] & 0x1) << 2 | (header[1] >> 6);
 
     mMeta = MakeAACCodecSpecificData(profile, sf_index, channel);
+
     off64_t streamSize, numFrames = 0;
     size_t frameSize = 0;
     int64_t duration = 0;
@@ -173,7 +174,7 @@ AACExtractor::AACExtractor(
     if (mDataSource->getSize(&streamSize) == OK) {
          while (offset < streamSize) {
             if ((frameSize = getAdtsFrameLength(source, offset, NULL)) == 0) {
-                break;
+                return;
             }
 
             mOffsetVector.push(offset);
@@ -287,15 +288,8 @@ status_t AACSource::read(
     *out = NULL;
 
     int64_t seekTimeUs;
-    int64_t durationUs = 0;
     ReadOptions::SeekMode mode;
     if (options && options->getSeekTo(&seekTimeUs, &mode)) {
-        mMeta->findInt64(kKeyDuration, &durationUs);
-        if (durationUs > 0 && durationUs <= seekTimeUs) {
-            ALOGE("seekTime more than the total duration of File");
-            return ERROR_END_OF_STREAM;
-        }
-
         if (mFrameDurationUs > 0) {
             int64_t seekFrame = seekTimeUs / mFrameDurationUs;
             mCurrentTimeUs = seekFrame * mFrameDurationUs;

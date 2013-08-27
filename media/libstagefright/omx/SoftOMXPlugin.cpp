@@ -51,13 +51,8 @@ static const struct {
     { "OMX.google.mp3.decoder", "mp3dec", "audio_decoder.mp3" },
     { "OMX.google.vorbis.decoder", "vorbisdec", "audio_decoder.vorbis" },
     { "OMX.google.vpx.decoder", "vpxdec", "video_decoder.vpx" },
-    { "OMX.Intel.alac.decoder", "alacdec", "audio_decoder.alac" },
     { "OMX.google.raw.decoder", "rawdec", "audio_decoder.raw" },
-#ifdef USE_INTEL_MDP
-    { "OMX.Intel.mp3.decoder", "mp3dec_mdp", "audio_decoder.mp3" },
-    { "OMX.Intel.aac.decoder", "aacdec_mdp", "audio_decoder.aac" },
-#endif
-    { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" }
+    { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" },
 };
 
 static const size_t kNumComponents =
@@ -127,8 +122,6 @@ OMX_ERRORTYPE SoftOMXPlugin::makeComponentInstance(
 
         codec->incStrong(this);
         codec->setLibHandle(libHandle);
-
-        ALOGI("Created OMXPlugin : %s", kComponents[i].mName);
 
         return OMX_ErrorNone;
     }

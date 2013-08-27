@@ -54,14 +54,6 @@ class VideoEditorPlayer : public MediaPlayerInterface {
                 audio_format_t format, int bufferCount,
                 AudioCallback cb, void *cookie, audio_output_flags_t flags);
 
-        // Overloaded function
-        virtual status_t        open(
-                uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
-                int bitRate,
-                audio_format_t format, int bufferCount,
-                AudioCallback2 cb, void *cookie,
-                audio_output_flags_t flags) { return NO_ERROR; }
-
         virtual void            start();
         virtual ssize_t         write(const void* buffer, size_t size);
         virtual void            stop();

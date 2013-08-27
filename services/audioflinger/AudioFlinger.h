@@ -53,10 +53,6 @@
 
 #include <powermanager/IPowerManager.h>
 
-#ifdef AUDIO_DUMP_ENABLE
-#include "AudioDumpUtils.h"
-#endif
-
 namespace android {
 
 class audio_track_cblk_t;
@@ -219,15 +215,7 @@ public:
                                 const Parcel& data,
                                 Parcel* reply,
                                 uint32_t flags);
-    //Get Offload buffer size
-    size_t getOffloadBufferSize(
-            uint32_t bitRate,
-            uint32_t sampleRate,
-            uint32_t channel,
-            int output);
 
-    virtual bool isAudioEffectEnabled(int sessionId) const;
-    virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
     class SyncEvent;
@@ -270,9 +258,11 @@ public:
                                         sync_event_callback_t callBack,
                                         void *cookie);
 
-
 private:
-   class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
+    class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
+
+               audio_mode_t getMode() const { return mMode; }
+
                 bool        btNrecIsOff() const { return mBtNrecIsOff; }
 
                             AudioFlinger();
@@ -384,8 +374,7 @@ private:
                 TERMINATED,
                 FLUSHED,
                 STOPPED,
-                // next 2 states are currently used for fast tracks
-                // and offloaded audio only
+                // next 2 states are currently used for fast tracks only
                 STOPPING_1,     // waiting for first underrun
                 STOPPING_2,     // waiting for presentation complete
                 RESUMING,
@@ -447,7 +436,7 @@ private:
                 return (mState == STOPPED || mState == FLUSHED);
             }
 
-            // for fast tracks and offloaded tracks only
+            // for fast tracks only
             bool isStopping() const {
                 return mState == STOPPING_1 || mState == STOPPING_2;
             }
@@ -460,10 +449,6 @@ private:
 
             bool isTerminated() const {
                 return mState == TERMINATED;
-            }
-
-            bool isFlushed() const {
-                return mState == FLUSHED;
             }
 
             bool step();
@@ -812,9 +797,7 @@ private:
                     void        destroy();
                     void        mute(bool);
                     int         name() const { return mName; }
-                    void        setVolume(float left, float right);
-                    status_t    setParameters(const String8& keyValuePairs);
-                    status_t    setOffloadEOSReached(bool value);
+
                     audio_stream_type_t streamType() const {
                         return mStreamType;
                     }
@@ -828,9 +811,6 @@ private:
         // implement FastMixerState::VolumeProvider interface
             virtual uint32_t    getVolumeLR();
             virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
-
-                    bool        isOffloaded() const { return mFlags & IAudioFlinger::TRACK_OFFLOAD; }
-                    bool        isDeepBuffer() const { return mFlags & IAudioFlinger::TRACK_DEEPBUFFER; }
 
         protected:
             // for numerous
@@ -857,9 +837,6 @@ private:
             bool isResuming() const {
                 return mState == RESUMING;
             }
-            bool isActive() const {
-                return (mState == ACTIVE || mState == RESUMING);
-            }
             bool isReady() const;
             void setPaused() { mState = PAUSED; }
             void reset();
@@ -876,9 +853,7 @@ private:
             void triggerEvents(AudioSystem::sync_event_t type);
             virtual bool isTimedTrack() const { return false; }
             bool isFastTrack() const { return (mFlags & IAudioFlinger::TRACK_FAST) != 0; }
-            bool                            mOffloadDrain;
-            bool                            mOffloadDrained;
-            bool                            mInOffloadEOS;
+
         protected:
 
             // written by Track::mute() called by binder thread(s), without a mutex or barrier.
@@ -1111,7 +1086,6 @@ public:
                                     status_t *status);
 
                     AudioStreamOut* getOutput() const;
-                    AudioStreamOut* getOutput_l() const { return mOutput; }
                     AudioStreamOut* clearOutput();
                     virtual audio_stream_t* stream() const;
 
@@ -1142,7 +1116,6 @@ public:
                     virtual status_t addEffectChain_l(const sp<EffectChain>& chain);
                     virtual size_t removeEffectChain_l(const sp<EffectChain>& chain);
                     virtual uint32_t hasAudioSession(int sessionId) const;
-                    void getEffectSessionIds(Vector<int> &sessionIds);
                     virtual uint32_t getStrategyForSession_l(int sessionId);
 
 
@@ -1150,8 +1123,6 @@ public:
                     virtual bool     isValidSyncEvent(const sp<SyncEvent>& event) const;
                             void     invalidateTracks(audio_stream_type_t streamType);
 
-                    virtual status_t setParametersMusicOffload(
-                                      const String8& keyValuePairs);
 
     protected:
         int16_t*                        mMixBuffer;
@@ -1164,7 +1135,6 @@ public:
         volatile int32_t                mSuspended;
 
         int                             mBytesWritten;
-
     private:
         // mMasterMute is in both PlaybackThread and in AudioFlinger.  When a
         // PlaybackThread needs to find out if master-muted, it checks it's local
@@ -1253,6 +1223,7 @@ public:
 
         // DUPLICATING only
         uint32_t                        writeFrames;
+
     private:
         // The HAL output sink is treated as non-blocking, but current implementation is blocking
         sp<NBAIO_Sink>          mOutputSink;
@@ -1272,11 +1243,6 @@ public:
     protected:
                     // accessed by both binder threads and within threadLoop(), lock on mutex needed
                     unsigned    mFastTrackAvailMask;    // bit i set if fast track [i] is available
-                    bool        isOffloadTrack() const;
-#ifdef AUDIO_DUMP_ENABLE
-    private:
-       AudioDump *mPlaybackAudioDump;
-#endif
 
     };
 
@@ -1312,11 +1278,8 @@ public:
 
                     AudioMixer* mAudioMixer;    // normal mixer
     private:
-#ifdef SOAKER
-                    sp<Thread>     mSoaker;
-#endif
                     // one-time initialization, no locks required
-                    sp<FastMixer>  mFastMixer;         // non-NULL if there is also a fast mixer
+                    FastMixer*  mFastMixer;         // non-NULL if there is also a fast mixer
                     sp<AudioWatchdog> mAudioWatchdog; // non-0 if there is an audio watchdog thread
 
                     // contents are not guaranteed to be consistent, no locks required
@@ -1347,7 +1310,7 @@ public:
         virtual                 ~DirectOutputThread();
 
         // Thread virtuals
-                    void        invalidateTracks(audio_stream_type_t streamType);
+
         virtual     bool        checkForNewParameters_l();
 
     protected:
@@ -1370,13 +1333,8 @@ public:
 private:
         // prepareTracks_l() tells threadLoop_mix() the name of the single active track
         sp<Track>               mActiveTrack;
-        sp<Track>               mLastTrack;
     public:
         virtual     bool        hasFastMixer() const { return false; }
-
-                    bool        mDraining;
-    private:
-                    bool        mIsOffloaded;   // if current track is offloaded
     };
 
     class DuplicatingThread : public MixerThread {
@@ -1452,7 +1410,6 @@ private:
         virtual void        flush();
         virtual void        mute(bool);
         virtual void        pause();
-        virtual void        setVolume(float left, float right);
         virtual status_t    attachAuxEffect(int effectId);
         virtual status_t    allocateTimedBuffer(size_t size,
                                                 sp<IMemory>* buffer);
@@ -1462,10 +1419,6 @@ private:
                                                   int target);
         virtual status_t onTransact(
             uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
-
-        virtual status_t    setParameters(const String8& keyValuePairs);
-        virtual status_t    setOffloadEOSReached(bool value);
-
     private:
         const sp<PlaybackThread::Track> mTrack;
     };
@@ -1619,9 +1572,6 @@ private:
                 // when < 0, maximum frames to drop before starting capture even if sync event is
                 // not received
                 ssize_t                             mFramestoDrop;
-#ifdef AUDIO_DUMP_ENABLE
-                AudioDump *mRecordAudioDump;
-#endif
     };
 
     // server side of the client's IAudioRecord
@@ -1748,7 +1698,6 @@ private:
 
         status_t start_l();
         status_t stop_l();
-        status_t stop_effect_l();
 
 mutable Mutex               mLock;      // mutex for process, commands and handles list protection
         wp<ThreadBase>      mThread;    // parent thread
@@ -1766,7 +1715,6 @@ mutable Mutex               mLock;      // mutex for process, commands and handl
                                         // sending disable command.
         uint32_t mDisableWaitCnt;       // current process() calls count during disable period.
         bool     mSuspended;            // effect is suspended: temporarily disabled by framework
-        bool     mStopped;              // effect has been stopped. permamently disabled by framework
     };
 
     // The EffectHandle class implements the IEffect interface. It provides resources
@@ -1882,7 +1830,6 @@ mutable Mutex               mLock;      // mutex for process, commands and handl
         sp<EffectModule> getEffectFromDesc_l(effect_descriptor_t *descriptor);
         sp<EffectModule> getEffectFromId_l(int id);
         sp<EffectModule> getEffectFromType_l(const effect_uuid_t *type);
-        bool isAudioEffectEnabled() const;
         bool setVolume_l(uint32_t *left, uint32_t *right);
         void setDevice_l(audio_devices_t device);
         void setMode_l(audio_mode_t mode);
@@ -2056,7 +2003,6 @@ mutable Mutex               mLock;      // mutex for process, commands and handl
 
                 // These two fields are immutable after onFirstRef(), so no lock needed to access
                 AudioHwDevice*                      mPrimaryHardwareDev; // mAudioHwDevs[0] or NULL
-                audio_hw_device_t*                  mOffloadDev;
                 DefaultKeyedVector<audio_module_handle_t, AudioHwDevice*>  mAudioHwDevs;
 
     // for dump, indicates which hardware operation is currently in progress (but not stream ops)

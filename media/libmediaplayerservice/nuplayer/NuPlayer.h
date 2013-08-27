@@ -21,12 +21,6 @@
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/foundation/AHandler.h>
 #include <media/stagefright/NativeWindowWrapper.h>
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#include <display/MultiDisplayClient.h>
-#endif
-#ifdef TARGET_HAS_VPP
-#include <NuPlayerVPPProcessor.h>
-#endif
 
 namespace android {
 
@@ -63,9 +57,6 @@ struct NuPlayer : public AHandler {
 
     status_t setVideoScalingMode(int32_t mode);
 
-    // Will notify the driver through "notifyPrepareComplete" once finished.
-    void prepareAsync();
-
 protected:
     virtual ~NuPlayer();
 
@@ -96,8 +87,6 @@ private:
         kWhatReset                      = 'rset',
         kWhatSeek                       = 'seek',
         kWhatPause                      = 'paus',
-        kWhatPrepare                    = 'prep',
-        kWhatWaitPrepareDone            = 'preD',
         kWhatResume                     = 'rsme',
         kWhatPollDuration               = 'polD',
     };
@@ -112,21 +101,9 @@ private:
     bool mVideoIsAVC;
     sp<Decoder> mAudioDecoder;
     sp<Renderer> mRenderer;
-#ifdef TARGET_HAS_VPP
-    sp<NuPlayerVPPProcessor> mVPPProcessor;
-    bool mIsVppInit;
-    sp<NuPlayerVPPProcessor> createVppProcessor();
-#endif
+
     bool mAudioEOS;
     bool mVideoEOS;
-
-    bool mAudioEosPending;
-    bool mVideoEosPending;
-    int32_t mAudioEosErr;
-    int32_t mVideoEosErr;
-
-    bool mPreparePending;
-    bool mSourceAlreadyStart;
 
     bool mScanSourcesPending;
     int32_t mScanSourcesGeneration;
@@ -157,13 +134,6 @@ private:
 
     int64_t mVideoLateByUs;
     int64_t mNumFramesTotal, mNumFramesDropped;
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    MultiDisplayClient* mMDClient;
-    sp<ANativeWindow> mANativeWindow;
-    int mVideoSessionId;
-    void setMDSVideoInfo_l();
-    void setMDSVideoState_l(int state);
-#endif
 
     int32_t mVideoScalingMode;
 
@@ -180,9 +150,7 @@ private:
 
     static bool IsFlushingState(FlushStatus state, bool *needShutdown = NULL);
 
-    void finishPrepare();
     void finishReset();
-    void postWaitPrepare();
     void postScanSources();
 
     void schedulePollDuration();

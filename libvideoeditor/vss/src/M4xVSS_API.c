@@ -51,10 +51,6 @@ Begin of xVSS API
 #include "M4VSS3GPP_InternalTypes.h"
 #include <utils/Log.h>
 
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-#include "M4xVSS_NV12.h"
-#endif
-
 /**
  ******************************************************************************
  * prototype    M4OSA_ERR M4xVSS_Init(M4OSA_Context* pContext, M4xVSS_InitParams* pParams)
@@ -1381,31 +1377,17 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
                                  been decoded -> no nedd to decode it again */
                                 if( alphaSettings->blendingthreshold == 0 )
                                 {
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                                    xVSS_context->pSettings->
-                                        pTransitionList[i]->
-                                        ExtVideoTransitionFct =
-                                        M4xVSS_AlphaMagic_NV12;
-#else
                                     xVSS_context->pSettings->
                                         pTransitionList[i]->
                                         ExtVideoTransitionFct =
                                         M4xVSS_AlphaMagic;
-#endif
                                 }
                                 else
                                 {
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                                    xVSS_context->pSettings->
-                                        pTransitionList[i]->
-                                        ExtVideoTransitionFct =
-                                        M4xVSS_AlphaMagicBlending_NV12;
-#else
                                     xVSS_context->pSettings->
                                         pTransitionList[i]->
                                         ExtVideoTransitionFct =
                                         M4xVSS_AlphaMagicBlending;
-#endif
                                 }
                                 xVSS_context->pSettings->pTransitionList[i]->
                                     pExtVideoTransitionFctCtxt = alphaSettings;
@@ -1479,25 +1461,19 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
                             /**/
                             return M4ERR_ALLOC;
                         }
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                        outputPlane[1].u_width = width;
-                        outputPlane[1].u_stride = width;
-#else
                         outputPlane[1].u_width = width >> 1;
-                        outputPlane[1].u_stride = width >> 1;
-#endif
                         outputPlane[1].u_height = height >> 1;
                         outputPlane[1].u_topleft = 0;
+                        outputPlane[1].u_stride = width >> 1;
                         outputPlane[1].pac_data = outputPlane[0].pac_data
                             + outputPlane[0].u_width * outputPlane[0].u_height;
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
                         outputPlane[2].u_width = width >> 1;
                         outputPlane[2].u_height = height >> 1;
                         outputPlane[2].u_topleft = 0;
                         outputPlane[2].u_stride = width >> 1;
                         outputPlane[2].pac_data = outputPlane[1].pac_data
                             + outputPlane[1].u_width * outputPlane[1].u_height;
-#endif
+
                         pDecodedPath =
                             xVSS_context->pSettings->pTransitionList[i]->xVSS.
                             transitionSpecific.pAlphaMagicSettings->
@@ -1531,22 +1507,15 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
                                 xVSS_context->UTFConversionContext.
                                 pTempOutConversionBuffer;
                         }
-
                         /**
-                                            End of the conversion, use the decoded path*/
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                        /*  To support ARGB8888 : convert + resizing from ARGB8888 to NV12 */
-                        err = M4xVSS_internalConvertAndResizeARGB8888toNV12(
-                            pDecodedPath,
-                            xVSS_context->pFileReadPtr, outputPlane,
-                            width_ARGB888, height_ARGB888);
-#else
-                        /*  To support ARGB8888 : convert + resizing from ARGB8888 to yuv420 */
+                        End of the conversion, use the decoded path*/
+                        /*To support ARGB8888 : convert + resizing from ARGB8888 to yuv420 */
+
                         err = M4xVSS_internalConvertAndResizeARGB8888toYUV420(
                             pDecodedPath,
                             xVSS_context->pFileReadPtr, outputPlane,
                             width_ARGB888, height_ARGB888);
-#endif
+
                         if( err != M4NO_ERROR )
                         {
                             free(outputPlane[0].pac_data);
@@ -1603,25 +1572,14 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
 
                         if( alphaSettings->blendingthreshold == 0 )
                         {
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                            xVSS_context->pSettings->pTransitionList[i]->
-                                ExtVideoTransitionFct = M4xVSS_AlphaMagic_NV12;
-#else
                             xVSS_context->pSettings->pTransitionList[i]->
                                 ExtVideoTransitionFct = M4xVSS_AlphaMagic;
-#endif
                         }
                         else
                         {
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                            xVSS_context->pSettings->pTransitionList[i]->
-                                ExtVideoTransitionFct =
-                                M4xVSS_AlphaMagicBlending_NV12;
-#else
                             xVSS_context->pSettings->pTransitionList[i]->
                                 ExtVideoTransitionFct =
                                 M4xVSS_AlphaMagicBlending;
-#endif
                         }
                         xVSS_context->pSettings->pTransitionList[i]->
                             pExtVideoTransitionFctCtxt = alphaSettings;
@@ -1659,13 +1617,8 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
                         xVSS_context->pSettings->pTransitionList[i]->
                             xVSS.transitionSpecific.pSlideTransitionSettings =
                             M4OSA_NULL;
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                        xVSS_context->pSettings->pTransitionList[i]->
-                            ExtVideoTransitionFct = &M4xVSS_SlideTransition_NV12;
-#else
                         xVSS_context->pSettings->pTransitionList[i]->
                             ExtVideoTransitionFct = &M4xVSS_SlideTransition;
-#endif
                         xVSS_context->pSettings->pTransitionList[i]->
                             pExtVideoTransitionFctCtxt = slideSettings;
                     }
@@ -1673,13 +1626,8 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
 
                 case M4xVSS_kVideoTransitionType_FadeBlack:
                     {
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                        xVSS_context->pSettings->pTransitionList[i]->
-                            ExtVideoTransitionFct = &M4xVSS_FadeBlackTransition_NV12;
-#else
                         xVSS_context->pSettings->pTransitionList[i]->
                             ExtVideoTransitionFct = &M4xVSS_FadeBlackTransition;
-#endif
                     }
                     break;
 
@@ -3401,18 +3349,11 @@ replace3GP_3GP:
                         framingCtx->aFramingCtx->height);
 
 #endif
-                    framingCtx->aFramingCtx->exportmode = 1;
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                    err = M4xVSS_internalConvertARGB888toNV12_FrammingEffect(
-                        xVSS_context,
-                        &(xVSS_context->pSettings->Effects[j]),
-                        framingCtx->aFramingCtx,xVSS_context->pSettings->xVSS.outputVideoSize);
-#else
+
                     err = M4xVSS_internalConvertARGB888toYUV420_FrammingEffect(
                         xVSS_context,
                         &(xVSS_context->pSettings->Effects[j]),
                         framingCtx->aFramingCtx,xVSS_context->pSettings->xVSS.outputVideoSize);
-#endif
                     M4OSA_TRACE3_1("FRAMING WIDTH BEFORE M4xVSS_SendCommand  %d",
                         framingCtx->aFramingCtx->width);
                     M4OSA_TRACE3_1("FRAMING HEIGHT BEFORE M4xVSS_SendCommand  %d",
@@ -3479,11 +3420,7 @@ replace3GP_3GP:
                     framingCtx->aFramingCtx->FramingRgb->u_height & ~1;
                 /* Input RGB plane is provided, let's convert it to YUV420, and update framing
                 structure  */
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                err = M4xVSS_internalConvertRGBtoNV12(framingCtx->aFramingCtx);
-#else
                 err = M4xVSS_internalConvertRGBtoYUV(framingCtx->aFramingCtx);
-#endif
 
 #else
 
@@ -3496,11 +3433,8 @@ replace3GP_3GP:
                     framingCtx->FramingRgb.u_height & ~1;
                 /* Input RGB plane is provided, let's convert it to YUV420, and update framing
                  structure  */
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                err = M4xVSS_internalConvertRGBtoNV12(framingCtx->aFramingCtx);
-#else
                 err = M4xVSS_internalConvertRGBtoYUV(framingCtx);
-#endif
+
 #endif
 
                 if( err != M4NO_ERROR )
@@ -3871,11 +3805,8 @@ replace3GP_3GP:
                 }
 
                 /* Convert RGB plane to YUV420 and update framing structure */
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                err = M4xVSS_internalConvertRGBtoNV12(framingCtx->aFramingCtx);
-#else
                 err = M4xVSS_internalConvertRGBtoYUV(framingCtx->aFramingCtx);
-#endif
+
                 if( err != M4NO_ERROR )
                 {
                     M4OSA_TRACE1_1(
@@ -3914,11 +3845,8 @@ replace3GP_3GP:
                 }
 
                 /* Convert RGB plane to YUV420 and update framing structure */
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                err = M4xVSS_internalConvertRGBtoNV12(framingCtx->aFramingCtx);
-#else
                 err = M4xVSS_internalConvertRGBtoYUV(framingCtx);
-#endif
+
                 if( err != M4NO_ERROR )
                 {
                     M4OSA_TRACE1_1(

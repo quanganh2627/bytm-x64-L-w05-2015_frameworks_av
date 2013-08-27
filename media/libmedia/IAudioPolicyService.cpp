@@ -55,8 +55,7 @@ enum {
     IS_SOURCE_ACTIVE,
     GET_DEVICES_FOR_STREAM,
     QUERY_DEFAULT_PRE_PROCESSING,
-    SET_EFFECT_ENABLED,
-    IS_OFFLOAD_SUPPORTED
+    SET_EFFECT_ENABLED
 };
 
 class BpAudioPolicyService : public BpInterface<IAudioPolicyService>
@@ -364,33 +363,6 @@ public:
         *count = retCount;
         return status;
     }
-
-    virtual bool isOffloadSupported(uint32_t format,
-                                    audio_stream_type_t stream,
-                                    uint32_t samplingRate,
-                                    uint32_t bitRate,
-                                    int64_t duration,
-                                    int sessionId,
-                                    bool isVideo,
-                                    bool isStreaming) const
-    {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        Parcel data, reply;
-        data.writeInterfaceToken(IAudioPolicyService::getInterfaceDescriptor());
-        data.writeInt32(static_cast <uint32_t>(format));
-        data.writeInt32(static_cast <uint32_t>(stream));
-        data.writeInt32(static_cast <uint32_t>(samplingRate));
-        data.writeInt32(static_cast <uint32_t>(bitRate));
-        data.writeInt64(static_cast <int64_t>(duration));
-        data.writeInt32(sessionId);
-        data.writeInt32(isVideo);
-        data.writeInt32(isStreaming);
-        remote()->transact(IS_OFFLOAD_SUPPORTED, data, &reply);
-        return reply.readInt32();
-#else
-        return 0;
-#endif
-    }
 };
 
 IMPLEMENT_META_INTERFACE(AudioPolicyService, "android.media.IAudioPolicyService");
@@ -658,25 +630,8 @@ status_t BnAudioPolicyService::onTransact(
             }
             delete[] descriptors;
             return status;
-        }break;
-        case IS_OFFLOAD_SUPPORTED: {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-            CHECK_INTERFACE(IAudioPolicyService, data, reply);
-            uint32_t format = data.readInt32();
-            audio_stream_type_t stream =
-                    static_cast <audio_stream_type_t>(data.readInt32());
-            uint32_t samplingRate = data.readInt32();
-           uint32_t bitRate = data.readInt32();
-            int64_t duration = data.readInt64();
-            int sessionId = data.readInt32();
-            bool isVideo = data.readInt32();
-            bool isStreaming = data.readInt32();
-            bool isSupported = isOffloadSupported(format, stream, samplingRate,
-                                   bitRate, duration, sessionId, isVideo, isStreaming);
-            reply->writeInt32(isSupported);
-#endif
-            return NO_ERROR;
-        }break;
+        }
+
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

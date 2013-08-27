@@ -262,11 +262,4 @@ uint32_t NuPlayer::GenericSource::flags() const {
     return FLAG_SEEKABLE;
 }
 
-bool NuPlayer::GenericSource::isStreamValid(bool audio) {
-    if (audio)
-        return (mAudioTrack.mSource != NULL);
-    else
-        return (mVideoTrack.mSource != NULL);
-}
-
 }  // namespace android

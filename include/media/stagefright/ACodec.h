@@ -31,9 +31,6 @@ namespace android {
 
 struct ABuffer;
 struct MemoryDealer;
-#ifdef TARGET_HAS_VPP
-struct NuPlayerVPPProcessor;
-#endif
 
 struct ACodec : public AHierarchicalStateMachine {
     enum {
@@ -62,11 +59,6 @@ struct ACodec : public AHierarchicalStateMachine {
     void initiateStart();
 
     void signalRequestIDRFrame();
-
-#ifdef TARGET_HAS_VPP
-    void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
-    bool isVppBufferAvail();
-#endif
 
     struct PortDescription : public RefBase {
         size_t countBuffers();
@@ -131,9 +123,6 @@ private:
             OWNED_BY_UPSTREAM,
             OWNED_BY_DOWNSTREAM,
             OWNED_BY_NATIVE_WINDOW,
-#ifdef TARGET_HAS_VPP
-            OWNED_BY_VPP,
-#endif
         };
 
         IOMX::buffer_id mBufferID;
@@ -142,13 +131,6 @@ private:
         sp<ABuffer> mData;
         sp<GraphicBuffer> mGraphicBuffer;
     };
-
-#ifdef TARGET_HAS_VPP
-    friend struct NuPlayerVPPProcessor;
-    uint32_t mVppInBufNum;
-    uint32_t mVppOutBufNum;
-#endif
-
 
 #if TRACK_BUFFER_TIMING
     struct BufferStats {
@@ -188,7 +170,6 @@ private:
     List<sp<AMessage> > mDeferredQueue;
 
     bool mSentFormat;
-    bool mFirstFrame;
     bool mIsEncoder;
 
     bool mShutdownInProgress;

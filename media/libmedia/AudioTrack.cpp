@@ -44,13 +44,6 @@
 #include <system/audio_policy.h>
 
 #include <audio_utils/primitives.h>
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-#include <media/AudioTrackOffload.h>
-#endif
-
-#ifdef USE_INTEL_SRC
-#include "iasrc_resampler.h"
-#endif
 
 namespace android {
 // ---------------------------------------------------------------------------
@@ -143,7 +136,8 @@ AudioTrack::AudioTrack(
       mIsTimed(false),
       mPreviousPriority(ANDROID_PRIORITY_NORMAL), mPreviousSchedulingGroup(SP_DEFAULT)
 {
-    mStatus = set((audio_stream_type_t)streamType, sampleRate, (audio_format_t)format, channelMask,
+    mStatus = set((audio_stream_type_t)streamType, sampleRate, (audio_format_t)format,
+            (audio_channel_mask_t) channelMask,
             frameCount, (audio_output_flags_t)flags, cbf, user, notificationFrames,
             0 /*sharedBuffer*/, false /*threadCanCallJava*/, sessionId);
 }
@@ -183,7 +177,6 @@ AudioTrack::~AudioTrack()
             mAudioTrackThread->requestExitAndWait();
             mAudioTrackThread.clear();
         }
-
         mAudioTrack.clear();
         IPCThreadState::self()->flushCommands();
         AudioSystem::releaseAudioSessionId(mSessionId);
@@ -204,6 +197,7 @@ status_t AudioTrack::set(
         bool threadCanCallJava,
         int sessionId)
 {
+
     ALOGV_IF(sharedBuffer != 0, "sharedBuffer: %p, size: %d", sharedBuffer->pointer(), sharedBuffer->size());
 
     ALOGV("set() streamType %d frameCount %d flags %04x", streamType, frameCount, flags);
@@ -264,7 +258,6 @@ status_t AudioTrack::set(
     }
     uint32_t channelCount = popcount(channelMask);
 
-
     audio_io_handle_t output = AudioSystem::getOutput(
                                     streamType,
                                     sampleRate, format, channelMask,
@@ -285,6 +278,11 @@ status_t AudioTrack::set(
     mFlags = flags;
     mCbf = cbf;
 
+    if (cbf != NULL) {
+        mAudioTrackThread = new AudioTrackThread(*this, threadCanCallJava);
+        mAudioTrackThread->run("AudioTrack", ANDROID_PRIORITY_AUDIO, 0 /*stack*/);
+    }
+
     // create the IAudioTrack
     status_t status = createTrack_l(streamType,
                                   sampleRate,
@@ -301,11 +299,6 @@ status_t AudioTrack::set(
             mAudioTrackThread.clear();
         }
         return status;
-    }
-
-    if (cbf != NULL) {
-        mAudioTrackThread = new AudioTrackThread(*this, threadCanCallJava);
-        mAudioTrackThread->run("AudioTrack", ANDROID_PRIORITY_AUDIO, 0 /*stack*/);
     }
 
     mStatus = NO_ERROR;
@@ -333,7 +326,6 @@ status_t AudioTrack::initCheck() const
 {
     return mStatus;
 }
-
 
 // -------------------------------------------------------------------------
 
@@ -433,6 +425,7 @@ void AudioTrack::start()
             }
         }
     }
+
 }
 
 void AudioTrack::stop()
@@ -455,15 +448,7 @@ void AudioTrack::stop()
         // Force flush if a shared buffer is used otherwise audioflinger
         // will not stop before end of buffer is reached.
         if (mSharedBuffer != 0) {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-            static_cast<AudioTrackOffload*>(this)->flush_l();
-        } else {
             flush_l();
-        }
-#else
-        flush_l();
-#endif
         }
         if (t != 0) {
             t->pause();
@@ -472,16 +457,7 @@ void AudioTrack::stop()
             set_sched_policy(0, mPreviousSchedulingGroup);
         }
     }
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-      else if(mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        ALOGV("stop: Offload");
-        // For Offload, music may be in paused (!mActive) state. We have to issue stop.
-        // TODO need a check in AudioFlinger that stream_end is not delivered if stop is
-        // called after pause
-        mCblk->cv.signal();
-        mAudioTrack->stop();
-    }
-#endif
+
 }
 
 bool AudioTrack::stopped() const
@@ -493,33 +469,24 @@ bool AudioTrack::stopped() const
 void AudioTrack::flush()
 {
     AutoMutex lock(mLock);
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        static_cast<AudioTrackOffload*>(this)->flush_l();
-    } else {
-        flush_l();
-    }
-#else
     flush_l();
-#endif
 }
 
 // must be called with mLock held
 void AudioTrack::flush_l()
 {
-    ALOGV("flush_l");
+    ALOGV("flush");
 
     // clear playback marker and periodic update counter
     mMarkerPosition = 0;
     mMarkerReached = false;
     mUpdatePeriod = 0;
 
-    if (!mActive || (mFlags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER)) {
+    if (!mActive) {
         mFlushed = true;
         mAudioTrack->flush();
         // Release AudioTrack callback thread in case it was waiting for new buffers
         // in AudioTrack::obtainBuffer()
-
         mCblk->cv.signal();
     }
 }
@@ -605,11 +572,7 @@ status_t AudioTrack::setSampleRate(int rate)
         return NO_INIT;
     }
     // Resampler implementation limits input sampling rate to 2 x output sampling rate.
-    if ((rate <= 0 || rate > afSamplingRate*2)
-#ifdef USE_INTEL_SRC
-    && !iaresamplib_supported_conversion(rate, afSamplingRate)
-#endif
-    ) return BAD_VALUE;
+    if (rate <= 0 || rate > afSamplingRate*2 ) return BAD_VALUE;
 
     AutoMutex lock(mLock);
     mCblk->sampleRate = rate;
@@ -735,6 +698,7 @@ status_t AudioTrack::getPosition(uint32_t *position)
     if (position == NULL) return BAD_VALUE;
     AutoMutex lock(mLock);
     *position = mFlushed ? 0 : mCblk->server;
+
     return NO_ERROR;
 }
 
@@ -744,15 +708,7 @@ status_t AudioTrack::reload()
 
     if (!stopped_l()) return INVALID_OPERATION;
 
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        static_cast<AudioTrackOffload*>(this)->flush_l();
-    } else {
-        flush_l();
-    }
-#else
     flush_l();
-#endif
 
     mCblk->stepUser(mCblk->frameCount);
 
@@ -801,7 +757,6 @@ status_t AudioTrack::createTrack_l(
         audio_io_handle_t output)
 {
     status_t status;
-
     const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
     if (audioFlinger == 0) {
         ALOGE("Could not get audioflinger");
@@ -842,11 +797,6 @@ status_t AudioTrack::createTrack_l(
             }
             frameCount = afFrameCount;
         }
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (mNotificationFramesAct == 0 && (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)) {
-            mNotificationFramesAct = frameCount;
-        }
-#endif
 
     } else if (sharedBuffer != 0) {
 
@@ -883,16 +833,10 @@ status_t AudioTrack::createTrack_l(
         }
 
         // Ensure that buffer depth covers at least audio hardware latency
-        uint32_t minBufCount = 0;
-        if (( afFrameCount != 0) && (afSampleRate != 0)) {
-            minBufCount = afLatency / ((1000 * afFrameCount)/afSampleRate);
-        }
+        uint32_t minBufCount = afLatency / ((1000 * afFrameCount)/afSampleRate);
         if (minBufCount < 2) minBufCount = 2;
 
-        int minFrameCount = 0;
-        if (afSampleRate != 0) {
-            minFrameCount = (afFrameCount*sampleRate*minBufCount)/afSampleRate;
-        }
+        int minFrameCount = (afFrameCount*sampleRate*minBufCount)/afSampleRate;
         ALOGV("minFrameCount: %d, afFrameCount=%d, minBufCount=%d, sampleRate=%d, afSampleRate=%d"
                 ", afLatency=%d",
                 minFrameCount, afFrameCount, minBufCount, sampleRate, afSampleRate, afLatency);
@@ -930,15 +874,6 @@ status_t AudioTrack::createTrack_l(
         if (mAudioTrackThread != 0) {
             tid = mAudioTrackThread->getTid();
         }
-    }
-
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        trackFlags |= IAudioFlinger::TRACK_OFFLOAD;
-    }
-#endif
-    if (flags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER) {
-        trackFlags |= IAudioFlinger::TRACK_DEEPBUFFER;
     }
 
     sp<IAudioTrack> track = audioFlinger->createTrack(getpid(),
@@ -1168,16 +1103,8 @@ ssize_t AudioTrack::write(const void* buffer, size_t userSize)
 
     do {
         audioBuffer.frameCount = userSize/frameSz;
-        status_t err;
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-            err = static_cast<AudioTrackOffload*>(this)->obtainBuffer(&audioBuffer, -1);
-        } else {
-            err = obtainBuffer(&audioBuffer, -1);
-        }
-#else
-        err = obtainBuffer(&audioBuffer, -1);
-#endif
+
+        status_t err = obtainBuffer(&audioBuffer, -1);
         if (err < 0) {
             // out of buffers, return #bytes written
             if (err == status_t(NO_MORE_BUFFERS))
@@ -1268,7 +1195,7 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
 {
     Buffer audioBuffer;
     uint32_t frames;
-    size_t writtenSize = 0;
+    size_t writtenSize;
 
     mLock.lock();
     // acquire a strong reference on the IMemory and IAudioTrack so that they cannot be destroyed
@@ -1279,10 +1206,8 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
     bool active = mActive;
     mLock.unlock();
 
-
     // Manage underrun callback
     if (active && (cblk->framesAvailable() == cblk->frameCount)) {
-
         ALOGV("Underrun user: %x, server: %x, flags %04x", cblk->user, cblk->server, cblk->flags);
         if (!(android_atomic_or(CBLK_UNDERRUN_ON, &cblk->flags) & CBLK_UNDERRUN_MSK)) {
             mCbf(EVENT_UNDERRUN, mUserData, 0);
@@ -1336,16 +1261,8 @@ bool AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
     do {
 
         audioBuffer.frameCount = frames;
-        status_t err;
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-            err = static_cast<AudioTrackOffload*>(this)->obtainBuffer(&audioBuffer, waitCount);
-        } else {
-            err = obtainBuffer(&audioBuffer, waitCount);
-        }
-#else
-        err = obtainBuffer(&audioBuffer, waitCount);
-#endif
+
+        status_t err = obtainBuffer(&audioBuffer, waitCount);
         if (err < NO_ERROR) {
             if (err != TIMED_OUT) {
                 ALOGE_IF(err != status_t(NO_MORE_BUFFERS), "Error obtaining an audio buffer, giving up.");
@@ -1427,13 +1344,6 @@ status_t AudioTrack::restoreTrack_l(audio_track_cblk_t*& cblk, bool fromStart)
         // if the new IAudioTrack is created, createTrack_l() will modify the
         // following member variables: mAudioTrack, mCblkMemory and mCblk.
         // It will also delete the strong references on previous IAudioTrack and IMemory
-        audio_io_handle_t output = getOutput_l();
-
-        if (output == 0) {
-            ALOGE("Could not get audio output");
-            return BAD_VALUE;
-        }
-
         result = createTrack_l(mStreamType,
                                cblk->sampleRate,
                                mFormat,
@@ -1441,7 +1351,7 @@ status_t AudioTrack::restoreTrack_l(audio_track_cblk_t*& cblk, bool fromStart)
                                mFrameCount,
                                mFlags,
                                mSharedBuffer,
-                               output);
+                               getOutput_l());
 
         if (result == NO_ERROR) {
             uint32_t user = cblk->user;
@@ -1562,21 +1472,9 @@ bool AudioTrack::AudioTrackThread::threadLoop()
             return true;
         }
     }
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mReceiver.mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        if (!(static_cast<AudioTrackOffload&>(mReceiver).processAudioBuffer(this))) {
-            pause();
-        }
-    } else {
-        if (!mReceiver.processAudioBuffer(this)) {
-            pause();
-        }
-    }
-#else
     if (!mReceiver.processAudioBuffer(this)) {
         pause();
     }
-#endif
     return true;
 }
 
@@ -1623,15 +1521,7 @@ uint32_t audio_track_cblk_t::stepUser(uint32_t frameCount)
     if (flags & CBLK_DIRECTION_MSK) {
         // If stepServer() has been called once, switch to normal obtainBuffer() timeout period
         if (bufferTimeoutMs == MAX_STARTUP_TIMEOUT_MS-1) {
-            // if your using larger buffers for offloading change the wait time accordingly.
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-            if (flags & CBLK_OFFLOAD_USES_DEEP_BUFFER) {
-                bufferTimeoutMs = MAX_OFFLOAD_DEEP_BUFFER_TIMEOUT_MS;
-            } else
-#endif
-            {
-                bufferTimeoutMs = MAX_RUN_TIMEOUT_MS;
-            }
+            bufferTimeoutMs = MAX_RUN_TIMEOUT_MS;
         }
     } else if (u > server) {
         ALOGW("stepUser occurred after track reset");

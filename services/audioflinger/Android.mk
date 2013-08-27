@@ -2,10 +2,6 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
-  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
-endif
-
 LOCAL_SRC_FILES := \
     ISchedulingPolicyService.cpp \
     SchedulingPolicyService.cpp
@@ -16,10 +12,6 @@ LOCAL_MODULE := libscheduling_policy
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
-
-ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
-  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
-endif
 
 LOCAL_SRC_FILES:=               \
     AudioFlinger.cpp            \
@@ -60,10 +52,6 @@ LOCAL_STATIC_LIBRARIES := \
     libcpustats \
     libmedia_helper
 
-ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
-  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
-endif
-
 LOCAL_MODULE:= libaudioflinger
 
 LOCAL_SRC_FILES += FastMixer.cpp FastMixerState.cpp
@@ -87,20 +75,6 @@ LOCAL_CFLAGS += -UFAST_TRACKS_AT_NON_NATIVE_SAMPLE_RATE
 # uncomment to enable the audio watchdog
 # LOCAL_SRC_FILES += AudioWatchdog.cpp
 # LOCAL_CFLAGS += -DAUDIO_WATCHDOG
-
-ifeq ($(USE_INTEL_SRC),true)
-  LOCAL_CFLAGS += -DUSE_INTEL_SRC
-  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
-  LOCAL_SRC_FILES += AudioResamplerIA.cpp
-  LOCAL_SHARED_LIBRARIES += libaudioresample
-endif
-
-ifeq ($(AUDIO_DUMP_ENABLE),true)
-  LOCAL_C_INCLUDES += $(TOP)/frameworks/av/media/libstagefright/include
-  LOCAL_STATIC_LIBRARIES += libaudiodumputil
-  LOCAL_CFLAGS += -DAUDIO_DUMP_ENABLE
-endif
-
 
 include $(BUILD_SHARED_LIBRARY)
 

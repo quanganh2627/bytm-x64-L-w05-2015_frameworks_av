@@ -358,27 +358,27 @@ void SoftAAC2::onQueueFilled(OMX_U32 portIndex) {
             inInfo->mOwnedByUs = false;
             notifyEmptyBufferDone(inHeader);
 
-            // flush out the decoder's delayed data by calling DecodeFrame
-            // one more time, with the AACDEC_FLUSH flag set
-            INT_PCM *outBuffer =
-                    reinterpret_cast<INT_PCM *>(
-                            outHeader->pBuffer + outHeader->nOffset);
-
-            AAC_DECODER_ERROR decoderErr =
-                aacDecoder_DecodeFrame(mAACDecoder,
-                                       outBuffer,
-                                       outHeader->nAllocLen,
-                                       AACDEC_FLUSH);
-
-            if (decoderErr != AAC_DEC_OK) {
-                mSignalledError = true;
-
-                notify(OMX_EventError, OMX_ErrorUndefined, decoderErr, NULL);
-
-                return;
-            }
-
             if (!mIsFirst) {
+                // flush out the decoder's delayed data by calling DecodeFrame
+                // one more time, with the AACDEC_FLUSH flag set
+                INT_PCM *outBuffer =
+                        reinterpret_cast<INT_PCM *>(
+                                outHeader->pBuffer + outHeader->nOffset);
+
+                AAC_DECODER_ERROR decoderErr =
+                    aacDecoder_DecodeFrame(mAACDecoder,
+                                           outBuffer,
+                                           outHeader->nAllocLen,
+                                           AACDEC_FLUSH);
+
+                if (decoderErr != AAC_DEC_OK) {
+                    mSignalledError = true;
+
+                    notify(OMX_EventError, OMX_ErrorUndefined, decoderErr,
+                           NULL);
+
+                    return;
+                }
 
                 outHeader->nFilledLen =
                         mStreamInfo->frameSize

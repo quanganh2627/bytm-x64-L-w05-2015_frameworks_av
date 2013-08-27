@@ -93,10 +93,6 @@ struct MediaSource : public virtual RefBase {
         int64_t mLatenessUs;
     };
 
-    enum {
-        kMaxMediaBufferSize = 20,
-    };
-
     // Causes this source to suspend pulling data from its upstream source
     // until a subsequent read-with-seek. Currently only supported by
     // OMXCodec.

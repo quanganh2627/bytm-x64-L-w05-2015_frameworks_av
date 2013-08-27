@@ -91,10 +91,6 @@ AudioPolicyService::AudioPolicyService()
     if (rc)
         return;
 
-    property_get("ro.camera.sound.forced", value, "0");
-    forced_val = strtol(value, NULL, 0);
-    mpAudioPolicy->set_can_mute_enforced_audible(mpAudioPolicy, !forced_val);
-
     ALOGI("Loaded audio policy from %s (%s)", module->name, module->id);
 
     // load audio pre processing modules
@@ -902,7 +898,6 @@ void AudioPolicyService::AudioCommandThread::insertCommand_l(AudioCommand *comma
         // commands are sorted by increasing time stamp: no need to scan the rest of mAudioCommands
         if (command2->mTime <= command->mTime) break;
         if (command2->mCommand != command->mCommand) continue;
-        if (command2->mWaitStatus) continue;
 
         switch (command->mCommand) {
         case SET_PARAMETERS: {
@@ -1046,33 +1041,6 @@ int AudioPolicyService::stopTone()
 int AudioPolicyService::setVoiceVolume(float volume, int delayMs)
 {
     return (int)mAudioCommandThread->voiceVolumeCommand(volume, delayMs);
-}
-
-bool AudioPolicyService::isOffloadSupported(uint32_t format,
-                                    audio_stream_type_t stream,
-                                    uint32_t samplingRate,
-                                    uint32_t bitRate,
-                                    int64_t duration,
-                                    int sessionId,
-                                    bool isVideo,
-                                    bool isStreaming) const
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mpAudioPolicy == NULL) {
-        return false;
-    }
-
-    return mpAudioPolicy->is_offload_supported(mpAudioPolicy,
-                                               format,
-                                               stream,
-                                               samplingRate,
-                                               bitRate,
-                                               duration,
-                                               sessionId,
-                                               isVideo,
-                                               isStreaming);
-#endif
-    return false;
 }
 
 // ----------------------------------------------------------------------------

@@ -297,9 +297,6 @@ status_t LiveSession::fetchFile(
                 maxBytesToRead);
 
         if (n < 0) {
-            if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
-                source.clear();
-            }
             return n;
         }
 
@@ -312,9 +309,6 @@ status_t LiveSession::fetchFile(
 
     *out = buffer;
 
-    if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
-        source.clear();
-    }
     return OK;
 }
 
@@ -568,12 +562,6 @@ rinse_repeat:
             } else {
                 ALOGE("failed to load playlist at url '%s'", url.c_str());
                 mDataSource->queueEOS(ERROR_IO);
-                if (mSeekTimeUs >= 0) {
-                    mSeekTimeUs = -1;
-                    Mutex::Autolock autoLock(mLock);
-                    mSeekDone = true;
-                    mCondition.broadcast();
-                }
                 return;
             }
         } else {

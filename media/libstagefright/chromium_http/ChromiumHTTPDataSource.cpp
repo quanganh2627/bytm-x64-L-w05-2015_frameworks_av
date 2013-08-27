@@ -37,7 +37,6 @@ ChromiumHTTPDataSource::ChromiumHTTPDataSource(uint32_t flags)
       mIOResult(OK),
       mContentSize(-1),
       mDecryptHandle(NULL),
-      mDisconnectExternal(false),
       mDrmManagerClient(NULL) {
     mDelegate->setOwner(this);
 }
@@ -87,11 +86,6 @@ status_t ChromiumHTTPDataSource::connect_l(
                 "connect to <URL suppressed> @%lld", offset);
 #endif
 
-    if (mDisconnectExternal) {
-        LOG_PRI(ANDROID_LOG_INFO, LOG_TAG,
-                "should not connect when disconnect is already called in another thread");
-        return mIOResult;
-    }
     mURI = uri;
     mContentType = String8("application/octet-stream");
 
@@ -142,9 +136,7 @@ void ChromiumHTTPDataSource::onConnectionFailed(status_t err) {
 
 void ChromiumHTTPDataSource::disconnect() {
     Mutex::Autolock autoLock(mLock);
-    mDisconnectExternal = true;
     disconnect_l();
-    mDisconnectExternal = false;
 }
 
 void ChromiumHTTPDataSource::disconnect_l() {
