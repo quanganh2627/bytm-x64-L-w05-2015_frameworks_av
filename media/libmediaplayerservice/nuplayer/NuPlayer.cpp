@@ -1052,6 +1052,12 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
     sp<AMessage> reply;
     CHECK(msg->findMessage("reply", &reply));
 
+    // if one track is in FLUSHED state, it means the other track has not finished flush,
+    // return -EWOULDBLOCK to wait all tracks finish flushed and become NONE state.
+    if ( (audio && mFlushingAudio == FLUSHED) || (!audio && mFlushingVideo == FLUSHED)) {
+        return -EWOULDBLOCK;
+    }
+ 
     if ((audio && IsFlushingState(mFlushingAudio))
             || (!audio && IsFlushingState(mFlushingVideo))) {
         reply->setInt32("err", INFO_DISCONTINUITY);
