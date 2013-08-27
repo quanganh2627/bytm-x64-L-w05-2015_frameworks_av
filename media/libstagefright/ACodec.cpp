@@ -2325,6 +2325,14 @@ void ACodec::waitUntilAllPossibleNativeWindowBuffersAreReturnedToUs() {
         minUndequeuedBufs = 0;
     }
 
+    // XXX: should hold extra two buffers in surface texture back end.
+    // Currently, intel hw overlay need always hold output buffer until
+    // flip to another buffer. So we should hold more buffers to avoid
+    // buffer overwrite by decoder.
+    if (mQuirks & OMXCodec::kRequiresHoldExtraBuffers) {
+        minUndequeuedBufs += 2;
+    }
+
     while (countBuffersOwnedByNativeWindow() > (size_t)minUndequeuedBufs
             && dequeueBufferFromNativeWindow() != NULL) {
     }
