@@ -35,6 +35,8 @@ enum {
     kKeyHeight            = 'heig',  // int32_t, image pixel
     kKeyDisplayWidth      = 'dWid',  // int32_t, display/presentation
     kKeyDisplayHeight     = 'dHgt',  // int32_t, display/presentation
+    kKeySARWidth          = 'sarW',  // int32_t, sampleAspectRatio width
+    kKeySARHeight         = 'sarH',  // int32_t, sampleAspectRatio height
 
     // a rectangle, if absent assumed to be (0, 0, width - 1, height - 1)
     kKeyCropRect          = 'crop',
@@ -51,11 +53,14 @@ enum {
     kKeyESDS              = 'esds',  // raw data
     kKeyAACProfile        = 'aacp',  // int32_t
     kKeyAVCC              = 'avcc',  // raw data
+    kKeyHVCC              = 'hvcc',  // raw data
     kKeyD263              = 'd263',  // raw data
+    kKeyAlacMagicCookie   = 'almc',  // raw data
     kKeyVorbisInfo        = 'vinf',  // raw data
     kKeyVorbisBooks       = 'vboo',  // raw data
     kKeyWantsNALFragments = 'NALf',
     kKeyIsSyncFrame       = 'sync',  // int32_t (bool)
+    kKeyIsFakeSync        = 'fake',  // int32_t (bool)
     kKeyIsCodecConfig     = 'conf',  // int32_t (bool)
     kKeyTime              = 'time',  // int64_t (usecs)
     kKeyDecodingTime      = 'decT',  // int64_t (decoding timestamp in usecs)
@@ -92,6 +97,7 @@ enum {
     kKeyCompilation       = 'cpil',  // cstring
     kKeyLocation          = 'loc ',  // cstring
     kKeyTimeScale         = 'tmsl',  // int32_t
+    KKeyCropChange        = 'crch',  // int32_t (bool)
 
     // video profile and level
     kKeyVideoProfile      = 'vprf',  // int32_t
@@ -110,7 +116,7 @@ enum {
     // kKeyTrackTimeStatus is used to track progress in elapsed time
     kKeyTrackTimeStatus   = 'tktm',  // int64_t
 
-    kKeyNotRealTime       = 'ntrt',  // bool (int32_t)
+    kKeyRealTimeRecording = 'rtrc',  // bool (int32_t)
     kKeyNumBuffers        = 'nbbf',  // int32_t
 
     // Ogg files can be tagged to be automatically looping...
@@ -155,11 +161,22 @@ enum {
     kKeyCryptoKey         = 'cryK',  // uint8_t[16]
     kKeyCryptoIV          = 'cryI',  // uint8_t[16]
     kKeyCryptoMode        = 'cryM',  // int32_t
+
+    kKeyCryptoDefaultIVSize = 'cryS',  // int32_t
+
+    kKeyPssh              = 'pssh',  // raw data
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    kKeyWmaBlockAlign     = 'blka',
+    kKeyWmaFormatTag      = 'frmt',
+    kKeyBitPerSample      = 'btps',
+#endif //ifdef USE_INTEL_ASF_EXTRACTOR
+
 };
 
 enum {
     kTypeESDS        = 'esds',
     kTypeAVCC        = 'avcc',
+    kTypeHVCC        = 'hvcc',
     kTypeD263        = 'd263',
 };
 

@@ -1,3 +1,4 @@
+ifneq ($(strip $(USE_INTEL_LVSE)),true)
 LOCAL_PATH:= $(call my-dir)
 
 # Music bundle
@@ -105,8 +106,6 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_MODULE:= libmusicbundle
 
-
-
 LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/Eq/lib \
     $(LOCAL_PATH)/Eq/src \
@@ -121,7 +120,11 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/StereoWidening/src \
     $(LOCAL_PATH)/StereoWidening/lib
 
+LOCAL_CFLAGS += -fvisibility=hidden
+
 include $(BUILD_STATIC_LIBRARY)
+
+
 
 # Reverb library
 include $(CLEAR_VARS)
@@ -168,12 +171,12 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_MODULE:= libreverb
 
-
-
 LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/Reverb/lib \
     $(LOCAL_PATH)/Reverb/src \
     $(LOCAL_PATH)/Common/lib \
     $(LOCAL_PATH)/Common/src
 
+LOCAL_CFLAGS += -fvisibility=hidden
 include $(BUILD_STATIC_LIBRARY)
+endif

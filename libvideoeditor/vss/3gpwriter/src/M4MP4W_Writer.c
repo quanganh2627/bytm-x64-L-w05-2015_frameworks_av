@@ -1144,22 +1144,22 @@ M4OSA_ERR M4MP4W_addStream(M4OSA_Context context,
                         PPSLength = DSI[10];
                         memcpy(
                             (void *)mMp4FileDataPtr->videoTrackPtr->DSI,
-                            (void *)((streamDescPtr->
+                            (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+12), 2);
                         memcpy(
                             (void *)((mMp4FileDataPtr->videoTrackPtr->
-                            DSI)+2), (void *)((streamDescPtr->
+                            DSI)+2), (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+28), SPSLength);
 
                         memcpy(
                             (void *)((mMp4FileDataPtr->videoTrackPtr->
                             DSI)+2 + SPSLength),
-                            (void *)((streamDescPtr->
+                            (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+20), 2);
                         memcpy(
                             (void *)((mMp4FileDataPtr->videoTrackPtr->
                             DSI)+4 + SPSLength),
-                            (void *)((streamDescPtr->
+                            (void *)((M4OSA_UInt8 *)(streamDescPtr->
                             decoderSpecificInfo)+28 + SPSLength),
                             PPSLength);
                         /* - H.264 trimming */
@@ -2485,6 +2485,12 @@ M4OSA_ERR M4MP4W_processAU( M4OSA_Context context, M4SYS_StreamID streamID,
         }
 
 #endif
+
+        if ((M4MP4W_Time32)auPtr->CTS < mMp4FileDataPtr->videoTrackPtr->CommonData.lastCTS) {
+            // Do not report as error, it will abort the entire filewrite. Just skip this frame.
+            M4OSA_TRACE1_0("Skip frame. Video frame has too old timestamp.");
+            return M4NO_ERROR;
+        }
 
         mMp4FileDataPtr->videoTrackPtr->currentPos += auPtr->size;
 
@@ -4246,6 +4252,17 @@ M4OSA_ERR M4MP4W_closeWrite( M4OSA_Context context )
                     mMp4FileDataPtr->videoTrackPtr->DSI[0],
                     mMp4FileDataPtr->videoTrackPtr->DSI[1]);
                 return M4ERR_PARAMETER;
+            }
+             /* [BZ 124569]some clips may have nal length size other than 4 as usual.
+              * video encoder's output buffer always has nal length equals 4,
+              * so we uniform it to 4 bytes here, or chunk parsing will have trouble
+              * with incorrect size information.
+              */
+            if((mMp4FileDataPtr->videoTrackPtr->DSI[4] & 0x03) !=0x03) {
+                mMp4FileDataPtr->videoTrackPtr->DSI[4] |=  0x03;
+                M4OSA_TRACE2_2("modify nal length from original %#x to %#x",
+                                                        (mMp4FileDataPtr->videoTrackPtr->DSI[4] & 0x03) +1,
+                                                        mMp4FileDataPtr->videoTrackPtr->DSI[4]+1);
             }
             // Do not strip the DSI
             CLEANUPonERR( M4MP4W_putBlock(mMp4FileDataPtr->videoTrackPtr->DSI,

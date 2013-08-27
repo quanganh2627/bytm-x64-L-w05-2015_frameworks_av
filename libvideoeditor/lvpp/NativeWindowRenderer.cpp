@@ -20,8 +20,8 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <cutils/log.h>
-#include <gui/SurfaceTexture.h>
-#include <gui/SurfaceTextureClient.h>
+#include <gui/GLConsumer.h>
+#include <gui/Surface.h>
 #include <media/stagefright/MediaBuffer.h>
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/foundation/ADebug.h>
@@ -315,8 +315,13 @@ NativeWindowRenderer::~NativeWindowRenderer() {
 }
 
 void NativeWindowRenderer::render(RenderInput* input) {
-    sp<SurfaceTexture> ST = input->mST;
-    sp<SurfaceTextureClient> STC = input->mSTC;
+    sp<GLConsumer> ST = input->mST;
+    sp<Surface> STC = input->mSTC;
+    int err;
+    err = native_window_set_buffers_transform(STC.get(), input->mTransform);
+    if (err != 0) {
+        LOGE("native_window_set_buffers_transform failed!");
+    }
 
     if (input->mIsExternalBuffer) {
         queueExternalBuffer(STC.get(), input->mBuffer,
@@ -396,6 +401,14 @@ void NativeWindowRenderer::queueExternalBuffer(ANativeWindow* anw,
     MediaBuffer* buffer, int width, int height) {
     native_window_set_buffers_geometry(anw, width, height,
             HAL_PIXEL_FORMAT_YV12);
+
+    android_native_rect_t crop;
+    crop.left = 0;
+    crop.top = 0;
+    crop.right = width - 1;
+    crop.bottom = height - 1;
+    native_window_set_crop(anw, &crop);
+
     native_window_set_usage(anw, GRALLOC_USAGE_SW_WRITE_OFTEN);
 
     ANativeWindowBuffer* anb;
@@ -568,8 +581,8 @@ void NativeWindowRenderer::destroyRenderInput(RenderInput* input) {
 RenderInput::RenderInput(NativeWindowRenderer* renderer, GLuint textureId)
     : mRenderer(renderer)
     , mTextureId(textureId) {
-    mST = new SurfaceTexture(mTextureId);
-    mSTC = new SurfaceTextureClient(mST);
+    mST = new GLConsumer(mTextureId);
+    mSTC = new Surface(mST->getBufferQueue());
     native_window_connect(mSTC.get(), NATIVE_WINDOW_API_MEDIA);
 }
 
@@ -601,6 +614,14 @@ void RenderInput::updateVideoSize(sp<MetaData> meta) {
         int tmp = mWidth;
         mWidth = mHeight;
         mHeight = tmp;
+    }
+
+    switch (rotationDegrees) {
+        case 0: mTransform= 0; break;
+        case 90: mTransform = HAL_TRANSFORM_ROT_90; break;
+        case 180: mTransform = HAL_TRANSFORM_ROT_180; break;
+        case 270: mTransform = HAL_TRANSFORM_ROT_270; break;
+        default: mTransform = 0; break;
     }
 }
 

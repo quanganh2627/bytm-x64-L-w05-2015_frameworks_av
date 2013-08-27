@@ -44,9 +44,10 @@ public:
                                               audio_policy_dev_state_t state,
                                               const char *device_address) = 0;
     virtual audio_policy_dev_state_t getDeviceConnectionState(audio_devices_t device,
-                                                                          const char *device_address) = 0;
+                                                                  const char *device_address) = 0;
     virtual status_t setPhoneState(audio_mode_t state) = 0;
-    virtual status_t setForceUse(audio_policy_force_use_t usage, audio_policy_forced_cfg_t config) = 0;
+    virtual status_t setForceUse(audio_policy_force_use_t usage,
+                                    audio_policy_forced_cfg_t config) = 0;
     virtual audio_policy_forced_cfg_t getForceUse(audio_policy_force_use_t usage) = 0;
     virtual audio_io_handle_t getOutput(audio_stream_type_t stream,
                                         uint32_t samplingRate = 0,
@@ -88,10 +89,21 @@ public:
     virtual status_t unregisterEffect(int id) = 0;
     virtual status_t setEffectEnabled(int id, bool enabled) = 0;
     virtual bool     isStreamActive(audio_stream_type_t stream, uint32_t inPastMs = 0) const = 0;
+    virtual bool     isStreamActiveRemotely(audio_stream_type_t stream, uint32_t inPastMs = 0)
+                             const = 0;
     virtual bool     isSourceActive(audio_source_t source) const = 0;
     virtual status_t queryDefaultPreProcessing(int audioSession,
                                               effect_descriptor_t *descriptors,
                                               uint32_t *count) = 0;
+
+    virtual bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    int sessionId,
+                                    bool hasVideo = false,
+                                    bool hasStreaming = false) const = 0;
 };
 
 

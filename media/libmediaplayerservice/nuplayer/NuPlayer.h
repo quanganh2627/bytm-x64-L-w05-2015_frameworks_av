@@ -21,6 +21,12 @@
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/foundation/AHandler.h>
 #include <media/stagefright/NativeWindowWrapper.h>
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayClient.h>
+#endif
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#endif
 
 namespace android {
 
@@ -35,14 +41,18 @@ struct NuPlayer : public AHandler {
 
     void setDriver(const wp<NuPlayerDriver> &driver);
 
-    void setDataSource(const sp<IStreamSource> &source);
+    void setDataSourceAsync(const sp<IStreamSource> &source);
 
-    void setDataSource(
+    void setDataSourceAsync(
             const char *url, const KeyedVector<String8, String8> *headers);
 
-    void setDataSource(int fd, int64_t offset, int64_t length);
+    void setDataSourceAsync(int fd, int64_t offset, int64_t length);
 
-    void setVideoSurfaceTexture(const sp<ISurfaceTexture> &surfaceTexture);
+    void prepareAsync();
+
+    void setVideoSurfaceTextureAsync(
+            const sp<IGraphicBufferProducer> &bufferProducer);
+
     void setAudioSink(const sp<MediaPlayerBase::AudioSink> &sink);
     void start();
 
@@ -73,9 +83,14 @@ private:
     struct Renderer;
     struct RTSPSource;
     struct StreamingSource;
+    struct Action;
+    struct SeekAction;
+    struct SetSurfaceAction;
+    struct SimpleAction;
 
     enum {
         kWhatSetDataSource              = '=DaS',
+        kWhatPrepare                    = 'prep',
         kWhatSetVideoNativeWindow       = '=NaW',
         kWhatSetAudioSink               = '=AuS',
         kWhatMoreDataQueued             = 'more',
@@ -89,12 +104,14 @@ private:
         kWhatPause                      = 'paus',
         kWhatResume                     = 'rsme',
         kWhatPollDuration               = 'polD',
+        kWhatSourceNotify               = 'srcN',
     };
 
     wp<NuPlayerDriver> mDriver;
     bool mUIDValid;
     uid_t mUID;
     sp<Source> mSource;
+    uint32_t mSourceFlags;
     sp<NativeWindowWrapper> mNativeWindow;
     sp<MediaPlayerBase::AudioSink> mAudioSink;
     sp<Decoder> mVideoDecoder;
@@ -102,8 +119,20 @@ private:
     sp<Decoder> mAudioDecoder;
     sp<Renderer> mRenderer;
 
+    List<sp<Action> > mDeferredActions;
+
+#ifdef TARGET_HAS_VPP
+    sp<NuPlayerVPPProcessor> mVPPProcessor;
+    bool mIsVppInit;
+    sp<NuPlayerVPPProcessor> createVppProcessor();
+#endif
     bool mAudioEOS;
     bool mVideoEOS;
+
+    bool mAudioEosPending;
+    bool mVideoEosPending;
+    int32_t mAudioEosErr;
+    int32_t mVideoEosErr;
 
     bool mScanSourcesPending;
     int32_t mScanSourcesGeneration;
@@ -126,16 +155,23 @@ private:
 
     FlushStatus mFlushingAudio;
     FlushStatus mFlushingVideo;
-    bool mResetInProgress;
-    bool mResetPostponed;
 
     int64_t mSkipRenderingAudioUntilMediaTimeUs;
     int64_t mSkipRenderingVideoUntilMediaTimeUs;
 
     int64_t mVideoLateByUs;
     int64_t mNumFramesTotal, mNumFramesDropped;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    MultiDisplayClient* mMDClient;
+    sp<ANativeWindow> mANativeWindow;
+    int mVideoSessionId;
+    void setMDSVideoInfo_l();
+    void setMDSVideoState_l(int state);
+#endif
 
     int32_t mVideoScalingMode;
+
+    bool mStarted;
 
     status_t instantiateDecoder(bool audio, sp<Decoder> *decoder);
 
@@ -150,11 +186,21 @@ private:
 
     static bool IsFlushingState(FlushStatus state, bool *needShutdown = NULL);
 
-    void finishReset();
     void postScanSources();
 
     void schedulePollDuration();
     void cancelPollDuration();
+
+    void processDeferredActions();
+
+    void performSeek(int64_t seekTimeUs);
+    void performDecoderFlush();
+    void performDecoderShutdown();
+    void performReset();
+    void performScanSources();
+    void performSetSurface(const sp<NativeWindowWrapper> &wrapper);
+
+    void onSourceNotify(const sp<AMessage> &msg);
 
     DISALLOW_EVIL_CONSTRUCTORS(NuPlayer);
 };

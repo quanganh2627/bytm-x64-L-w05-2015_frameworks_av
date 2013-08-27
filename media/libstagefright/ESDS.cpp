@@ -94,7 +94,7 @@ status_t ESDS::skipDescriptorHeader(
     ALOGV("tag=0x%02x data_size=%d", *tag, *data_size);
 
     if (*data_size > size) {
-        return ERROR_MALFORMED;
+        *data_size = size;
     }
 
     *data_offset = offset;
@@ -220,6 +220,32 @@ status_t ESDS::parseDecoderConfigDescriptor(size_t offset, size_t size) {
     mDecoderSpecificOffset = sub_offset;
     mDecoderSpecificLength = sub_size;
 
+    return OK;
+}
+
+status_t ESDS::getCodecSpecificOffset(size_t *offset, size_t *size) const {
+    if (mInitCheck != OK) {
+        return mInitCheck;
+    }
+    *offset = mDecoderSpecificOffset;
+    *size = mDecoderSpecificLength;
+    return OK;
+}
+
+status_t ESDS::getBitRate(uint32_t *brateMax, uint32_t *brateAvg) const {
+    if (mInitCheck != OK) {
+        return mInitCheck;
+    }
+    *brateMax = mBitRateMax;
+    *brateAvg = mBitRateAvg;
+    return OK;
+}
+
+status_t ESDS::getStreamType(uint8_t *streamType) const {
+    if (mInitCheck != OK) {
+        return mInitCheck;
+    }
+    *streamType = mStreamType;
     return OK;
 }
 

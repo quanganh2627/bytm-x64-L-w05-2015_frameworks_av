@@ -36,8 +36,11 @@ enum {
     kAVCProfileCAVLC444Intra = 0x2c
 };
 
+// Optionally returns sample aspect ratio as well.
 void FindAVCDimensions(
-        const sp<ABuffer> &seqParamSet, int32_t *width, int32_t *height);
+        const sp<ABuffer> &seqParamSet,
+        int32_t *width, int32_t *height,
+        int32_t *sarWidth = NULL, int32_t *sarHeight = NULL);
 
 unsigned parseUE(ABitReader *br);
 
@@ -61,6 +64,9 @@ sp<MetaData> MakeAACCodecSpecificData(
 // Given an MPEG4 video VOL-header chunk (starting with 0x00 0x00 0x01 0x2?)
 // parse it and fill in dimensions, returns true iff successful.
 bool ExtractDimensionsFromVOLHeader(
+        const uint8_t *data, size_t size, int32_t *width, int32_t *height);
+
+bool ExtractDimensionsFromH263Header(
         const uint8_t *data, size_t size, int32_t *width, int32_t *height);
 
 bool GetMPEGAudioFrameSize(

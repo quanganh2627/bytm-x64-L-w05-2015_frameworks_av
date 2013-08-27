@@ -23,6 +23,9 @@
 #include "support.h"
 
 #include "android/net/android_network_library_impl.h"
+#include "base/file_path.h"
+#include "base/file_util.h"
+#include "base/path_service.h"
 #include "base/logging.h"
 #include "base/threading/thread.h"
 #include "net/base/cert_verifier.h"
@@ -38,14 +41,23 @@
 #include <cutils/log.h>
 #include <cutils/properties.h>
 #include <media/stagefright/MediaErrors.h>
+#include <media/stagefright/Utils.h>
 #include <string>
+#include <ctype.h>
 
 namespace android {
 
 static Mutex gNetworkThreadLock;
 static base::Thread *gNetworkThread = NULL;
-static scoped_refptr<net::URLRequestContext> gReqContext;
+static Mutex gCacheThreadLock;
+static base::Thread *gCacheThread = NULL;
+static scoped_refptr<SfRequestContext> gReqContext;
+static scoped_refptr<SfRequestContext> gReqContextCache;
 static scoped_ptr<net::NetworkChangeNotifier> gNetworkChangeNotifier;
+static char gCacheFilePath[PROPERTY_VALUE_MAX];
+static bool gCacheEnable;
+static bool gCacheBootClear;
+static int gCacheMaxBytes;
 
 bool logMessageHandler(
         int severity,
@@ -92,6 +104,68 @@ private:
     DISALLOW_EVIL_CONSTRUCTORS(AutoPrioritySaver);
 };
 
+static void MY_LOGI(const char *s) {
+    LOG_PRI(ANDROID_LOG_INFO, LOG_TAG, "%s", s);
+}
+
+static void MY_LOGV(const char *s) {
+#if !defined(LOG_NDEBUG) || LOG_NDEBUG == 0
+    LOG_PRI(ANDROID_LOG_VERBOSE, LOG_TAG, "%s", s);
+#endif
+}
+
+static int GetIntProperty(const char *prop_name, const int default_value) {
+    char prop_buf[PROPERTY_VALUE_MAX];
+    char default_buf[PROPERTY_VALUE_MAX];
+    sprintf(default_buf, "%d", default_value);
+    property_get(prop_name, prop_buf, default_buf);
+    if (isdigit(prop_buf[0])) {
+        return atoi(prop_buf);
+    }
+    else {
+        return default_value;
+    }
+}
+
+static void LoadCacheProperties() {
+    property_get("persist.mediacache.filepath", gCacheFilePath, "/data/media/cache");
+    gCacheEnable = GetIntProperty("persist.mediacache.enable", 1) ? true : false;
+    gCacheBootClear = GetIntProperty("persist.mediacache.bootclear", 1) ? true : false;
+    gCacheMaxBytes = GetIntProperty("persist.mediacache.maxbytes", 0);
+    gCacheMaxBytes = gCacheMaxBytes>0 ? gCacheMaxBytes : 0;
+    MY_LOGI(StringPrintf(
+                "Cache enable=%s filepath=%s clearonboot=%s maxbytes=%d",
+                gCacheEnable ? "true" : "false",
+                gCacheFilePath,
+                gCacheBootClear ? "true" : "false",
+                gCacheMaxBytes).c_str());
+}
+
+static void DeleteCacheDirectory() {
+    FilePath fp(gCacheFilePath);
+    file_util::Delete(fp, true);
+}
+
+static void InitializeCacheDirectoryIfNecessary() {
+    FilePath fp(gCacheFilePath);
+    if (!file_util::DirectoryExists(fp)) {
+        MY_LOGI("cache directory not exist, try to create");
+        if (!file_util::CreateDirectory(fp))
+            MY_LOGI("cache directory create error");
+    }
+}
+
+static void InitializeCacheThreadIfNecessary() {
+    Mutex::Autolock autoLock(gCacheThreadLock);
+
+    if (gCacheThread == NULL) {
+        gCacheThread = new base::Thread("cache");
+        base::Thread::Options options;
+        options.message_loop_type = MessageLoop::TYPE_IO;
+        CHECK(gCacheThread->StartWithOptions(options));
+    }
+}
+
 static void InitializeNetworkThreadIfNecessary() {
     Mutex::Autolock autoLock(gNetworkThreadLock);
 
@@ -105,7 +179,20 @@ static void InitializeNetworkThreadIfNecessary() {
         options.message_loop_type = MessageLoop::TYPE_IO;
         CHECK(gNetworkThread->StartWithOptions(options));
 
-        gReqContext = new SfRequestContext;
+        gReqContext = new SfRequestContext(false);
+
+        LoadCacheProperties();
+        if (gCacheEnable) {
+            if (gCacheBootClear) {
+                DeleteCacheDirectory();
+            }
+            InitializeCacheThreadIfNecessary();
+            InitializeCacheDirectoryIfNecessary();
+            gReqContextCache = new SfRequestContext(true);
+        }
+        else {
+            gReqContextCache = NULL;
+        }
 
         gNetworkChangeNotifier.reset(net::NetworkChangeNotifier::Create());
 
@@ -113,16 +200,6 @@ static void InitializeNetworkThreadIfNecessary() {
                 new SfNetworkLibrary);
         logging::SetLogMessageHandler(logMessageHandler);
     }
-}
-
-static void MY_LOGI(const char *s) {
-    LOG_PRI(ANDROID_LOG_INFO, LOG_TAG, "%s", s);
-}
-
-static void MY_LOGV(const char *s) {
-#if !defined(LOG_NDEBUG) || LOG_NDEBUG == 0
-    LOG_PRI(ANDROID_LOG_VERBOSE, LOG_TAG, "%s", s);
-#endif
 }
 
 SfNetLog::SfNetLog()
@@ -150,25 +227,13 @@ uint32 SfNetLog::NextID() {
 }
 
 net::NetLog::LogLevel SfNetLog::GetLogLevel() const {
-    return LOG_ALL;
+    return LOG_BASIC;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-SfRequestContext::SfRequestContext() {
-    AString ua;
-    ua.append("stagefright/1.2 (Linux;Android ");
-
-#if (PROPERTY_VALUE_MAX < 8)
-#error "PROPERTY_VALUE_MAX must be at least 8"
-#endif
-
-    char value[PROPERTY_VALUE_MAX];
-    property_get("ro.build.version.release", value, "Unknown");
-    ua.append(value);
-    ua.append(")");
-
-    mUserAgent = ua.c_str();
+SfRequestContext::SfRequestContext(bool bCacheEnable) {
+    mUserAgent = MakeUserAgent().c_str();
 
     set_net_log(new SfNetLog());
 
@@ -181,8 +246,10 @@ SfRequestContext::SfRequestContext() {
     set_ssl_config_service(
         net::SSLConfigService::CreateSystemSSLConfigService());
 
+    mProxyConfigService = new net::ProxyConfigServiceAndroid;
+
     set_proxy_service(net::ProxyService::CreateWithoutProxyResolver(
-        new net::ProxyConfigServiceAndroid, net_log()));
+        mProxyConfigService, net_log()));
 
     set_http_transaction_factory(new net::HttpCache(
             host_resolver(),
@@ -194,13 +261,41 @@ SfRequestContext::SfRequestContext() {
             net::HttpAuthHandlerFactory::CreateDefault(host_resolver()),
             network_delegate(),
             net_log(),
-            NULL));  // backend_factory
+            bCacheEnable ? new net::HttpCache::DefaultBackend(net::DISK_CACHE,
+                                                                FilePath(gCacheFilePath),
+                                                                gCacheMaxBytes,
+                                                                gCacheThread->message_loop_proxy()) : NULL));
 
     set_cookie_store(new net::CookieMonster(NULL, NULL));
 }
 
 const std::string &SfRequestContext::GetUserAgent(const GURL &url) const {
     return mUserAgent;
+}
+
+status_t SfRequestContext::updateProxyConfig(
+        const char *host, int32_t port, const char *exclusionList) {
+    Mutex::Autolock autoLock(mProxyConfigLock);
+
+    if (host == NULL || *host == '\0') {
+        MY_LOGV("updateProxyConfig NULL");
+
+        std::string proxy;
+        std::string exList;
+        mProxyConfigService->UpdateProxySettings(proxy, exList);
+    } else {
+#if !defined(LOG_NDEBUG) || LOG_NDEBUG == 0
+        LOG_PRI(ANDROID_LOG_VERBOSE, LOG_TAG,
+                "updateProxyConfig %s:%d, exclude '%s'",
+                host, port, exclusionList);
+#endif
+
+        std::string proxy = StringPrintf("%s:%d", host, port).c_str();
+        std::string exList = exclusionList;
+        mProxyConfigService->UpdateProxySettings(proxy, exList);
+    }
+
+    return OK;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -229,6 +324,14 @@ SfDelegate::SfDelegate()
 
 SfDelegate::~SfDelegate() {
     CHECK(mURLRequest == NULL);
+}
+
+// static
+status_t SfDelegate::UpdateProxyConfig(
+        const char *host, int32_t port, const char *exclusionList) {
+    InitializeNetworkThreadIfNecessary();
+
+    return gReqContext->updateProxyConfig(host, port, exclusionList);
 }
 
 void SfDelegate::setOwner(ChromiumHTTPDataSource *owner) {
@@ -471,7 +574,33 @@ void SfDelegate::onInitiateConnection(
         mURLRequest->SetExtraRequestHeaders(headers);
     }
 
-    mURLRequest->set_context(gReqContext);
+    const std::string aAudioExtension[] = {"mp3","aac","m4a","flac","mid","ota","ogg","wav","xmf","mxmf","rttl","rtx","imy",""}; // last empty string for termination
+    bool bCacheType = false;
+    std::string sFileName = url.ExtractFileName();
+    int iDotPos = sFileName.rfind(".");
+    std::string sExtension = "";
+    if (iDotPos != std::string::npos) {
+        sExtension = sFileName.substr(iDotPos+1);
+        std::transform(sExtension.begin(),sExtension.end(),sExtension.begin(),::tolower);
+    }
+
+    if (!sExtension.empty()) {
+        int i = 0;
+        while (!aAudioExtension[i].empty()) {
+            if (!sExtension.compare(aAudioExtension[i])) {
+                bCacheType = true;
+                break;
+            }
+            i++;
+        }
+    }
+
+    if (gCacheEnable && bCacheType && gReqContextCache) {
+        mURLRequest->set_context(gReqContextCache);
+    }
+    else {
+        mURLRequest->set_context(gReqContext);
+    }
 
     mURLRequest->Start();
 }

@@ -33,12 +33,15 @@ enum {
     START,
     STOP,
     FLUSH,
-    MUTE,
+    RESERVED, // was MUTE
     PAUSE,
     ATTACH_AUX_EFFECT,
     ALLOCATE_TIMED_BUFFER,
     QUEUE_TIMED_BUFFER,
     SET_MEDIA_TIME_TRANSFORM,
+    SET_VOLUME,
+    SET_PARAMETERS,
+    SET_OFFLOAD_EOS_REACHED
 };
 
 class BpAudioTrack : public BpInterface<IAudioTrack>
@@ -86,14 +89,6 @@ public:
         Parcel data, reply;
         data.writeInterfaceToken(IAudioTrack::getInterfaceDescriptor());
         remote()->transact(FLUSH, data, &reply);
-    }
-
-    virtual void mute(bool e)
-    {
-        Parcel data, reply;
-        data.writeInterfaceToken(IAudioTrack::getInterfaceDescriptor());
-        data.writeInt32(e);
-        remote()->transact(MUTE, data, &reply);
     }
 
     virtual void pause()
@@ -162,6 +157,42 @@ public:
         }
         return status;
     }
+    virtual void setVolume(float left,float right)
+    {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioTrack::getInterfaceDescriptor());
+        data.writeFloat(left);
+        data.writeFloat(right);
+        remote()->transact(SET_VOLUME, data, &reply);
+#endif
+    }
+    virtual status_t setParameters(const String8& keyValuePairs) {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioTrack::getInterfaceDescriptor());
+        data.writeString8(keyValuePairs);
+        status_t status = remote()->transact(SET_PARAMETERS, data, &reply);
+        if (status == NO_ERROR) {
+            status = reply.readInt32();
+        }
+        return status;
+#else
+        return NO_ERROR;
+#endif
+    }
+    virtual status_t setOffloadEOSReached(bool value)
+    {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioTrack::getInterfaceDescriptor());
+        data.writeInt32(value);
+        remote()->transact(SET_OFFLOAD_EOS_REACHED, data, &reply);
+        return reply.readInt32();
+#else
+        return 0;
+#endif
+    }
 };
 
 IMPLEMENT_META_INTERFACE(AudioTrack, "android.media.IAudioTrack");
@@ -190,11 +221,6 @@ status_t BnAudioTrack::onTransact(
         case FLUSH: {
             CHECK_INTERFACE(IAudioTrack, data, reply);
             flush();
-            return NO_ERROR;
-        } break;
-        case MUTE: {
-            CHECK_INTERFACE(IAudioTrack, data, reply);
-            mute( data.readInt32() );
             return NO_ERROR;
         } break;
         case PAUSE: {
@@ -234,6 +260,31 @@ status_t BnAudioTrack::onTransact(
             xform.a_to_b_denom = data.readInt32();
             int target = data.readInt32();
             reply->writeInt32(setMediaTimeTransform(xform, target));
+            return NO_ERROR;
+        } break;
+        case SET_VOLUME:{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            CHECK_INTERFACE(IAudioTrack, data, reply);
+            float left = data.readFloat();
+            float right = data.readFloat();
+            setVolume(left, right) ;
+#endif
+            return NO_ERROR;
+        } break;
+        case SET_PARAMETERS: {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            CHECK_INTERFACE(IAudioTrack, data, reply);
+            String8 keyValuePairs(data.readString8());
+            reply->writeInt32(setParameters(keyValuePairs));
+#endif
+            return NO_ERROR;
+        } break;
+        case SET_OFFLOAD_EOS_REACHED: {
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+            CHECK_INTERFACE(IAudioFlinger, data, reply);
+            int value = data.readInt32();
+            reply->writeInt32(setOffloadEOSReached(value));
+#endif
             return NO_ERROR;
         } break;
         default:

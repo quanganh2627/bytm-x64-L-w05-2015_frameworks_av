@@ -19,14 +19,22 @@
 #define NUPLAYER_RENDERER_H_
 
 #include "NuPlayer.h"
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#include <VPPBuffer.h>
+#endif
 
 namespace android {
 
 struct ABuffer;
 
 struct NuPlayer::Renderer : public AHandler {
+    enum Flags {
+        FLAG_REAL_TIME = 1,
+    };
     Renderer(const sp<MediaPlayerBase::AudioSink> &sink,
-             const sp<AMessage> &notify);
+             const sp<AMessage> &notify,
+             uint32_t flags = 0);
 
     void queueBuffer(
             bool audio,
@@ -43,6 +51,11 @@ struct NuPlayer::Renderer : public AHandler {
 
     void pause();
     void resume();
+
+#ifdef TARGET_HAS_VPP
+    sp<NuPlayerVPPProcessor> createVppProcessor(VPPVideoInfo *info, const sp<NativeWindowWrapper> &nativeWindow);
+    void releaseVppProcessor();
+#endif
 
     enum {
         kWhatEOS                 = 'eos ',
@@ -66,6 +79,9 @@ private:
         kWhatAudioSinkChanged   = 'auSC',
         kWhatPause              = 'paus',
         kWhatResume             = 'resm',
+#ifdef TARGET_HAS_VPP
+        kWhatVPPNotify          = 'vppN',
+#endif
     };
 
     struct QueueEntry {
@@ -79,6 +95,7 @@ private:
 
     sp<MediaPlayerBase::AudioSink> mAudioSink;
     sp<AMessage> mNotify;
+    uint32_t mFlags;
     List<QueueEntry> mAudioQueue;
     List<QueueEntry> mVideoQueue;
     uint32_t mNumFramesWritten;
@@ -105,6 +122,14 @@ private:
     int64_t mLastPositionUpdateUs;
     int64_t mVideoLateByUs;
 
+#ifdef TARGET_HAS_VPP
+    uint32_t mDecodeCount;
+    uint32_t mVPPProcCount;
+    uint32_t mVPPRenderCount;
+    sp<NuPlayerVPPProcessor> mVPPProcessor;
+    void onUpdateVideoQueue(const sp<AMessage> &msg);
+    void onUpdateVPPInput(const sp<AMessage> &msg);
+#endif
     bool onDrainAudioQueue();
     void postDrainAudioQueue(int64_t delayUs = 0);
 

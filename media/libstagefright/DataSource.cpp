@@ -19,11 +19,11 @@
 #if CHROMIUM_AVAILABLE
 #include "include/chromium_http_stub.h"
 #endif
+#include "include/AVIExtractor.h"
 
 #include "include/AACExtractor.h"
 #include "include/DRMExtractor.h"
 #include "include/FLACExtractor.h"
-#include "include/FragmentedMP4Extractor.h"
 #include "include/HTTPBase.h"
 #include "include/MP3Extractor.h"
 #include "include/MPEG2PSExtractor.h"
@@ -33,6 +33,9 @@
 #include "include/OggExtractor.h"
 #include "include/WAVExtractor.h"
 #include "include/WVMExtractor.h"
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#endif
 
 #include "matroska/MatroskaExtractor.h"
 
@@ -55,6 +58,45 @@ bool DataSource::getUInt16(off64_t offset, uint16_t *x) {
     }
 
     *x = (byte[0] << 8) | byte[1];
+
+    return true;
+}
+
+bool DataSource::getUInt24(off64_t offset, uint32_t *x) {
+    *x = 0;
+
+    uint8_t byte[3];
+    if (readAt(offset, byte, 3) != 3) {
+        return false;
+    }
+
+    *x = (byte[0] << 16) | (byte[1] << 8) | byte[2];
+
+    return true;
+}
+
+bool DataSource::getUInt32(off64_t offset, uint32_t *x) {
+    *x = 0;
+
+    uint32_t tmp;
+    if (readAt(offset, &tmp, 4) != 4) {
+        return false;
+    }
+
+    *x = ntohl(tmp);
+
+    return true;
+}
+
+bool DataSource::getUInt64(off64_t offset, uint64_t *x) {
+    *x = 0;
+
+    uint64_t tmp;
+    if (readAt(offset, &tmp, 8) != 8) {
+        return false;
+    }
+
+    *x = ntoh64(tmp);
 
     return true;
 }
@@ -111,7 +153,6 @@ void DataSource::RegisterSniffer(SnifferFunc func) {
 // static
 void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer(SniffMPEG4);
-    RegisterSniffer(SniffFragmentedMP4);
     RegisterSniffer(SniffMatroska);
     RegisterSniffer(SniffOgg);
     RegisterSniffer(SniffWAV);
@@ -122,7 +163,10 @@ void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer(SniffAAC);
     RegisterSniffer(SniffMPEG2PS);
     RegisterSniffer(SniffWVM);
-
+    RegisterSniffer(SniffAVI);
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    RegisterSniffer(SniffAsf);
+#endif
     char value[PROPERTY_VALUE_MAX];
     if (property_get("drm.service.enabled", value, NULL)
             && (!strcmp(value, "1") || !strcasecmp(value, "true"))) {
@@ -183,6 +227,9 @@ sp<DataSource> DataSource::CreateFromURI(
     }
 
     if (source == NULL || source->initCheck() != OK) {
+        if (source != NULL) {
+            source.clear();
+        }
         return NULL;
     }
 

@@ -2,6 +2,10 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES := \
     ISchedulingPolicyService.cpp \
     SchedulingPolicyService.cpp
@@ -13,13 +17,20 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES:=               \
     AudioFlinger.cpp            \
+    Threads.cpp                 \
+    Tracks.cpp                  \
+    Effects.cpp                 \
     AudioMixer.cpp.arm          \
     AudioResampler.cpp.arm      \
     AudioPolicyService.cpp      \
     ServiceUtilities.cpp        \
-	AudioResamplerCubic.cpp.arm \
+    AudioResamplerCubic.cpp.arm \
     AudioResamplerSinc.cpp.arm
 
 LOCAL_SRC_FILES += StateQueue.cpp
@@ -31,15 +42,14 @@ LOCAL_C_INCLUDES := \
     $(call include-path-for, audio-effects) \
     $(call include-path-for, audio-utils)
 
-# FIXME keep libmedia_native but remove libmedia after split
 LOCAL_SHARED_LIBRARIES := \
     libaudioutils \
     libcommon_time_client \
     libcutils \
     libutils \
+    liblog \
     libbinder \
     libmedia \
-    libmedia_native \
     libnbaio \
     libhardware \
     libhardware_legacy \
@@ -51,6 +61,10 @@ LOCAL_STATIC_LIBRARIES := \
     libscheduling_policy \
     libcpustats \
     libmedia_helper
+
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
 
 LOCAL_MODULE:= libaudioflinger
 
@@ -65,16 +79,33 @@ LOCAL_CFLAGS += -DSTATE_QUEUE_INSTANTIATIONS='"StateQueueInstantiations.cpp"'
 
 LOCAL_CFLAGS += -UFAST_TRACKS_AT_NON_NATIVE_SAMPLE_RATE
 
-# uncomment for systrace
-# LOCAL_CFLAGS += -DATRACE_TAG=ATRACE_TAG_AUDIO
-
-# uncomment for dumpsys to write most recent audio output to .wav file
-# 47.5 seconds at 44.1 kHz, 8 megabytes
-# LOCAL_CFLAGS += -DTEE_SINK_FRAMES=0x200000
+# uncomment to allow tee sink debugging to be enabled by property
+# LOCAL_CFLAGS += -DTEE_SINK
 
 # uncomment to enable the audio watchdog
 # LOCAL_SRC_FILES += AudioWatchdog.cpp
 # LOCAL_CFLAGS += -DAUDIO_WATCHDOG
+
+# Define ANDROID_SMP appropriately. Used to get inline tracing fast-path.
+ifeq ($(TARGET_CPU_SMP),true)
+    LOCAL_CFLAGS += -DANDROID_SMP=1
+else
+    LOCAL_CFLAGS += -DANDROID_SMP=0
+endif
+
+ifeq ($(USE_INTEL_SRC),true)
+  LOCAL_CFLAGS += -DUSE_INTEL_SRC
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
+  LOCAL_SRC_FILES += AudioResamplerIA.cpp
+  LOCAL_SHARED_LIBRARIES += libaudioresample
+endif
+
+ifeq ($(AUDIO_DUMP_ENABLE),true)
+  LOCAL_C_INCLUDES += $(TOP)/frameworks/av/media/libstagefright/include
+  LOCAL_STATIC_LIBRARIES += libaudiodumputil
+  LOCAL_CFLAGS += -DAUDIO_DUMP_ENABLE
+endif
+
 
 include $(BUILD_SHARED_LIBRARY)
 
@@ -90,15 +121,15 @@ LOCAL_SRC_FILES:=               \
     AudioResamplerSinc.cpp.arm
 
 LOCAL_SHARED_LIBRARIES := \
-	libdl \
+    libdl \
     libcutils \
-    libutils
+    libutils \
+    liblog
 
 LOCAL_MODULE:= test-resample
 
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_EXECUTABLE)
-
 
 include $(call all-makefiles-under,$(LOCAL_PATH))

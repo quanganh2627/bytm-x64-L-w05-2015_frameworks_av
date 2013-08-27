@@ -18,13 +18,14 @@
 #include <utils/Log.h>
 
 #include "../include/SoftwareRenderer.h"
+#include "../include/AwesomePlayer.h"
 
 #include <cutils/properties.h> // for property_get
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/MetaData.h>
 #include <system/window.h>
 #include <ui/GraphicBufferMapper.h>
-#include <gui/ISurfaceTexture.h>
+#include <gui/IGraphicBufferProducer.h>
 
 namespace android {
 
@@ -229,6 +230,14 @@ void SoftwareRenderer::render(
     }
 
     CHECK_EQ(0, mapper.unlock(buf->handle));
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (platformPrivate != NULL) {
+        struct IntelPlatformPrivate *p =
+            (struct IntelPlatformPrivate *)platformPrivate;
+        buf->usage |= p->usage;
+    }
+#endif
 
     if ((err = mNativeWindow->queueBuffer(mNativeWindow.get(), buf,
             -1)) != 0) {

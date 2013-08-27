@@ -19,9 +19,9 @@
 #include <utils/Log.h>
 
 #include "include/AMRExtractor.h"
+#include "include/AVIExtractor.h"
 #include "include/MP3Extractor.h"
 #include "include/MPEG4Extractor.h"
-#include "include/FragmentedMP4Extractor.h"
 #include "include/WAVExtractor.h"
 #include "include/OggExtractor.h"
 #include "include/MPEG2PSExtractor.h"
@@ -31,6 +31,10 @@
 #include "include/FLACExtractor.h"
 #include "include/AACExtractor.h"
 
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#include "MetaDataExt.h"
+#endif
 #include "matroska/MatroskaExtractor.h"
 
 #include <media/stagefright/foundation/AMessage.h>
@@ -94,12 +98,7 @@ sp<MediaExtractor> MediaExtractor::Create(
     MediaExtractor *ret = NULL;
     if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG4)
             || !strcasecmp(mime, "audio/mp4")) {
-        int fragmented = 0;
-        if (meta != NULL && meta->findInt32("fragmented", &fragmented) && fragmented) {
-            ret = new FragmentedMP4Extractor(source);
-        } else {
-            ret = new MPEG4Extractor(source);
-        }
+        ret = new MPEG4Extractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG)) {
         ret = new MP3Extractor(source, meta);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_NB)
@@ -115,6 +114,12 @@ sp<MediaExtractor> MediaExtractor::Create(
         ret = new MatroskaExtractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG2TS)) {
         ret = new MPEG2TSExtractor(source);
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)) {
+        return new AsfExtractor(source);
+#endif
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_AVI)) {
+        ret = new AVIExtractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_WVM)) {
         // Return now.  WVExtractor should not have the DrmFlag set in the block below.
         return new WVMExtractor(source);

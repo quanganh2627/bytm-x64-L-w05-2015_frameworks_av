@@ -18,9 +18,11 @@
 
 #define UTILS_H_
 
+#include <media/stagefright/foundation/AString.h>
 #include <stdint.h>
 #include <utils/Errors.h>
 #include <utils/RefBase.h>
+#include <media/MediaPlayerInterface.h>
 
 namespace android {
 
@@ -45,6 +47,11 @@ status_t convertMetaDataToMessage(
 void convertMessageToMetaData(
         const sp<AMessage> &format, sp<MetaData> &meta);
 
+AString MakeUserAgent();
+// Send information from MetaData to the HAL via AudioSink
+status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink,
+                            const sp<MetaData>& meta);
+bool isInCall();
 }  // namespace android
 
 #endif  // UTILS_H_

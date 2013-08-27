@@ -104,6 +104,7 @@ public:
     virtual status_t unregisterEffect(int id);
     virtual status_t setEffectEnabled(int id, bool enabled);
     virtual bool isStreamActive(audio_stream_type_t stream, uint32_t inPastMs = 0) const;
+    virtual bool isStreamActiveRemotely(audio_stream_type_t stream, uint32_t inPastMs = 0) const;
     virtual bool isSourceActive(audio_source_t source) const;
 
     virtual status_t queryDefaultPreProcessing(int audioSession,
@@ -134,6 +135,14 @@ public:
     virtual status_t startTone(audio_policy_tone_t tone, audio_stream_type_t stream);
     virtual status_t stopTone();
     virtual status_t setVoiceVolume(float volume, int delayMs = 0);
+    virtual bool isOffloadSupported(uint32_t format,
+                                    audio_stream_type_t stream,
+                                    uint32_t samplingRate,
+                                    uint32_t bitRate,
+                                    int64_t duration,
+                                    int sessionId,
+                                    bool isVideo = false,
+                                    bool isStreaming = false) const;
 
 private:
                         AudioPolicyService();
@@ -142,11 +151,11 @@ private:
             status_t dumpInternals(int fd);
 
     // Thread used for tone playback and to send audio config commands to audio flinger
-    // For tone playback, using a separate thread is necessary to avoid deadlock with mLock because startTone()
-    // and stopTone() are normally called with mLock locked and requesting a tone start or stop will cause
-    // calls to AudioPolicyService and an attempt to lock mLock.
-    // For audio config commands, it is necessary because audio flinger requires that the calling process (user)
-    // has permission to modify audio settings.
+    // For tone playback, using a separate thread is necessary to avoid deadlock with mLock because
+    // startTone() and stopTone() are normally called with mLock locked and requesting a tone start
+    // or stop will cause calls to AudioPolicyService and an attempt to lock mLock.
+    // For audio config commands, it is necessary because audio flinger requires that the calling
+    // process (user) has permission to modify audio settings.
     class AudioCommandThread : public Thread {
         class AudioCommand;
     public:

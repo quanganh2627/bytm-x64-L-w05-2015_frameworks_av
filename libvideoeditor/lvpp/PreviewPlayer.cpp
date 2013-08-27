@@ -31,8 +31,8 @@
 #include <media/stagefright/OMXCodec.h>
 #include <media/stagefright/foundation/ADebug.h>
 #include <gui/Surface.h>
-#include <gui/ISurfaceTexture.h>
-#include <gui/SurfaceTextureClient.h>
+#include <gui/IGraphicBufferProducer.h>
+#include <gui/Surface.h>
 
 #include "VideoEditorPreviewController.h"
 #include "DummyAudioSource.h"
@@ -1092,7 +1092,10 @@ void PreviewPlayer::onVideoEvent() {
         }
 
         if(!mIsVideoSourceJpg) {
-            postVideoEvent_l(0);
+            // The next video event scheduling will occur after 10ms so that
+            // any attempts to cancel future video events could take effect within
+            // this 10ms interval
+            postVideoEvent_l();
         }
         else {
             postVideoEvent_l(33000);
@@ -1470,7 +1473,7 @@ status_t PreviewPlayer::readFirstVideoFrame() {
                     mSeekTimeUs / 1E6);
 
             options.setSeekTo(
-                    mSeekTimeUs, MediaSource::ReadOptions::SEEK_CLOSEST);
+                    mSeekTimeUs, MediaSource::ReadOptions::SEEK_PREVIOUS_SYNC);
         }
         for (;;) {
             status_t err = mVideoSource->read(&mVideoBuffer, &options);
@@ -1743,7 +1746,7 @@ status_t PreviewPlayer::pause_l(bool at_eos) {
         return OK;
     }
 
-    cancelPlayerEvents_l();
+    cancelPlayerEvents_l(true);
 
     if (mAudioPlayer != NULL && (mFlags & AUDIO_RUNNING)) {
         if (at_eos) {
@@ -1775,12 +1778,12 @@ void PreviewPlayer::setSurface(const sp<Surface> &surface) {
     setNativeWindow_l(surface);
 }
 
-void PreviewPlayer::setSurfaceTexture(const sp<ISurfaceTexture> &surfaceTexture) {
+void PreviewPlayer::setSurfaceTexture(const sp<IGraphicBufferProducer> &bufferProducer) {
     Mutex::Autolock autoLock(mLock);
 
     mSurface.clear();
-    if (surfaceTexture != NULL) {
-        setNativeWindow_l(new SurfaceTextureClient(surfaceTexture));
+    if (bufferProducer != NULL) {
+        setNativeWindow_l(new Surface(bufferProducer));
     }
 }
 

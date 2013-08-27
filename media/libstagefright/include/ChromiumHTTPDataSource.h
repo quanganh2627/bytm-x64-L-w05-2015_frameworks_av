@@ -53,6 +53,9 @@ struct ChromiumHTTPDataSource : public HTTPBase {
 
     virtual status_t reconnectAtOffset(off64_t offset);
 
+    static status_t UpdateProxyConfig(
+            const char *host, int32_t port, const char *exclusionList);
+
 protected:
     virtual ~ChromiumHTTPDataSource();
 
@@ -86,6 +89,8 @@ private:
     ssize_t mIOResult;
 
     int64_t mContentSize;
+
+    bool mDisconnectExternal;
 
     String8 mContentType;
 

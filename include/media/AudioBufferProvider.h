@@ -18,6 +18,7 @@
 #define ANDROID_AUDIO_BUFFER_PROVIDER_H
 
 #include <utils/Errors.h>
+#include <stdlib.h>
 
 namespace android {
 // ----------------------------------------------------------------------------
@@ -36,11 +37,8 @@ public:
         size_t frameCount;
     };
 
-protected:
-    AudioBufferProvider() : mValid(kValid) { }
-    virtual ~AudioBufferProvider() { mValid = kDead; }
+    virtual ~AudioBufferProvider() {}
 
-public:
     // value representing an invalid presentation timestamp
     static const int64_t kInvalidPTS = 0x7FFFFFFFFFFFFFFFLL;    // <stdint.h> is too painful
 
@@ -50,13 +48,6 @@ public:
     virtual status_t getNextBuffer(Buffer* buffer, int64_t pts = kInvalidPTS) = 0;
 
     virtual void releaseBuffer(Buffer* buffer) = 0;
-
-    int getValid() const { return mValid; }
-    static const int kValid = 'GOOD';
-    static const int kDead = 'DEAD';
-
-private:
-    int mValid;
 };
 
 // ----------------------------------------------------------------------------

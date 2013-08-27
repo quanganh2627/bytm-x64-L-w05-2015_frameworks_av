@@ -6,9 +6,14 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES:=               \
     ActivityManager.cpp         \
     Crypto.cpp                  \
+    Drm.cpp                     \
     HDCP.cpp                    \
     MediaPlayerFactory.cpp      \
     MediaPlayerService.cpp      \
@@ -17,6 +22,7 @@ LOCAL_SRC_FILES:=               \
     MidiFile.cpp                \
     MidiMetadataRetriever.cpp   \
     RemoteDisplay.cpp           \
+    SharedLibrary.cpp           \
     StagefrightPlayer.cpp       \
     StagefrightRecorder.cpp     \
     TestPlayerStub.cpp          \
@@ -25,10 +31,10 @@ LOCAL_SHARED_LIBRARIES :=       \
     libbinder                   \
     libcamera_client            \
     libcutils                   \
+    liblog                      \
     libdl                       \
     libgui                      \
     libmedia                    \
-    libmedia_native             \
     libsonivox                  \
     libstagefright              \
     libstagefright_foundation   \
@@ -41,6 +47,14 @@ LOCAL_STATIC_LIBRARIES :=       \
     libstagefright_nuplayer     \
     libstagefright_rtsp         \
 
+ifeq ($(TARGET_HAS_VPP),true)
+LOCAL_SHARED_LIBRARIES += libva \
+                          libva-android \
+                          libva-tpi \
+                          libui
+LOCAL_STATIC_LIBRARIES += libvpp
+endif
+
 LOCAL_C_INCLUDES :=                                                 \
     $(call include-path-for, graphics corecg)                       \
     $(TOP)/frameworks/av/media/libstagefright/include               \
@@ -48,6 +62,27 @@ LOCAL_C_INCLUDES :=                                                 \
     $(TOP)/frameworks/av/media/libstagefright/wifi-display          \
     $(TOP)/frameworks/native/include/media/openmax                  \
     $(TOP)/external/tremolo/Tremolo                                 \
+
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
+ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
+    LOCAL_SHARED_LIBRARIES += libmultidisplay
+    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+endif
+#VPP support on MRFLD only
+ifeq ($(TARGET_HAS_VPP), true)
+    LOCAL_CFLAGS += -DTARGET_HAS_VPP -DGFX_BUF_EXT
+    LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libmedia_utils_vpp \
+        $(TARGET_OUT_HEADERS)/libva
+endif
+
+ifeq ($(INTEL_WIDI), true)
+LOCAL_CFLAGS += -DINTEL_WIDI
+endif
 
 LOCAL_MODULE:= libmediaplayerservice
 

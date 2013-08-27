@@ -345,6 +345,17 @@ status_t OMX::useGraphicBuffer(
             port_index, graphicBuffer, buffer);
 }
 
+status_t OMX::createInputSurface(
+        node_id node, OMX_U32 port_index,
+        sp<IGraphicBufferProducer> *bufferProducer) {
+    return findInstance(node)->createInputSurface(
+            port_index, bufferProducer);
+}
+
+status_t OMX::signalEndOfInputStream(node_id node) {
+    return findInstance(node)->signalEndOfInputStream();
+}
+
 status_t OMX::allocateBuffer(
         node_id node, OMX_U32 port_index, size_t size,
         buffer_id *buffer, void **buffer_data) {
@@ -393,6 +404,9 @@ OMX_ERRORTYPE OMX::OnEvent(
         OMX_IN OMX_PTR pEventData) {
     ALOGV("OnEvent(%d, %ld, %ld)", eEvent, nData1, nData2);
 
+    // Forward to OMXNodeInstance.
+    findInstance(node)->onEvent(eEvent, nData1, nData2);
+
     omx_message msg;
     msg.type = omx_message::EVENT;
     msg.node = node;
@@ -400,7 +414,12 @@ OMX_ERRORTYPE OMX::OnEvent(
     msg.u.event_data.data1 = nData1;
     msg.u.event_data.data2 = nData2;
 
-    findDispatcher(node)->post(msg);
+    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
+    if (cbd == NULL) {
+        LOGE("CallbackDispatcher for this node is not found");
+        return OMX_ErrorUndefined;
+    }
+    cbd->post(msg);
 
     return OMX_ErrorNone;
 }
@@ -414,7 +433,12 @@ OMX_ERRORTYPE OMX::OnEmptyBufferDone(
     msg.node = node;
     msg.u.buffer_data.buffer = pBuffer;
 
-    findDispatcher(node)->post(msg);
+    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
+    if (cbd == NULL) {
+        LOGE("CallbackDispatcher for this node is not found");
+        return OMX_ErrorUndefined;
+    }
+    cbd->post(msg);
 
     return OMX_ErrorNone;
 }
@@ -434,7 +458,12 @@ OMX_ERRORTYPE OMX::OnFillBufferDone(
     msg.u.extended_buffer_data.platform_private = pBuffer->pPlatformPrivate;
     msg.u.extended_buffer_data.data_ptr = pBuffer->pBuffer;
 
-    findDispatcher(node)->post(msg);
+    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
+    if (cbd == NULL) {
+        LOGE("CallbackDispatcher for this node is not found");
+        return OMX_ErrorUndefined;
+    }
+    cbd->post(msg);
 
     return OMX_ErrorNone;
 }

@@ -31,6 +31,9 @@ namespace android {
 
 struct ABuffer;
 struct MemoryDealer;
+#ifdef TARGET_HAS_VPP
+struct NuPlayerVPPProcessor;
+#endif
 
 struct ACodec : public AHierarchicalStateMachine {
     enum {
@@ -43,7 +46,10 @@ struct ACodec : public AHierarchicalStateMachine {
         kWhatError               = 'erro',
         kWhatComponentAllocated  = 'cAll',
         kWhatComponentConfigured = 'cCon',
+        kWhatInputSurfaceCreated = 'isfc',
+        kWhatSignaledInputEOS    = 'seos',
         kWhatBuffersAllocated    = 'allc',
+        kWhatOMXDied             = 'OMXd',
     };
 
     ACodec();
@@ -54,11 +60,20 @@ struct ACodec : public AHierarchicalStateMachine {
     void signalResume();
     void initiateShutdown(bool keepComponentAllocated = false);
 
+    void signalSetParameters(const sp<AMessage> &msg);
+    void signalEndOfInputStream();
+
     void initiateAllocateComponent(const sp<AMessage> &msg);
     void initiateConfigureComponent(const sp<AMessage> &msg);
+    void initiateCreateInputSurface();
     void initiateStart();
 
     void signalRequestIDRFrame();
+
+#ifdef TARGET_HAS_VPP
+    void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
+    bool isVppBufferAvail();
+#endif
 
     struct PortDescription : public RefBase {
         size_t countBuffers();
@@ -91,6 +106,7 @@ private:
     struct ExecutingToIdleState;
     struct IdleToLoadedState;
     struct FlushingState;
+    struct DeathNotifier;
 
     enum {
         kWhatSetup                   = 'setu',
@@ -103,8 +119,11 @@ private:
         kWhatDrainDeferredMessages   = 'drai',
         kWhatAllocateComponent       = 'allo',
         kWhatConfigureComponent      = 'conf',
+        kWhatCreateInputSurface      = 'cisf',
+        kWhatSignalEndOfInputStream  = 'eois',
         kWhatStart                   = 'star',
         kWhatRequestIDRFrame         = 'ridr',
+        kWhatSetParameters           = 'setP',
     };
 
     enum {
@@ -123,6 +142,9 @@ private:
             OWNED_BY_UPSTREAM,
             OWNED_BY_DOWNSTREAM,
             OWNED_BY_NATIVE_WINDOW,
+#ifdef TARGET_HAS_VPP
+            OWNED_BY_VPP,
+#endif
         };
 
         IOMX::buffer_id mBufferID;
@@ -131,6 +153,13 @@ private:
         sp<ABuffer> mData;
         sp<GraphicBuffer> mGraphicBuffer;
     };
+
+#ifdef TARGET_HAS_VPP
+    friend struct NuPlayerVPPProcessor;
+    uint32_t mVppInBufNum;
+    uint32_t mVppOutBufNum;
+#endif
+
 
 #if TRACK_BUFFER_TIMING
     struct BufferStats {
@@ -253,23 +282,31 @@ private:
 
     status_t pushBlankBuffersToNativeWindow();
 
-    // Returns true iff all buffers on the given port have status OWNED_BY_US.
+    // Returns true iff all buffers on the given port have status
+    // OWNED_BY_US or OWNED_BY_NATIVE_WINDOW.
     bool allYourBuffersAreBelongToUs(OMX_U32 portIndex);
 
     bool allYourBuffersAreBelongToUs();
 
+    void waitUntilAllPossibleNativeWindowBuffersAreReturnedToUs();
+
     size_t countBuffersOwnedByComponent(OMX_U32 portIndex) const;
+    size_t countBuffersOwnedByNativeWindow() const;
 
     void deferMessage(const sp<AMessage> &msg);
     void processDeferredMessages();
 
-    void sendFormatChange();
+    void sendFormatChange(const sp<AMessage> &reply);
 
     void signalError(
             OMX_ERRORTYPE error = OMX_ErrorUndefined,
             status_t internalError = UNKNOWN_ERROR);
 
     status_t requestIDRFrame();
+    status_t setParameters(const sp<AMessage> &params);
+
+    // Send EOS on input stream.
+    void onSignalEndOfInputStream();
 
     DISALLOW_EVIL_CONSTRUCTORS(ACodec);
 };

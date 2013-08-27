@@ -65,7 +65,7 @@ public:
             uint32_t sampleIndex,
             off64_t *offset,
             size_t *size,
-            uint32_t *compositionTime,
+            int64_t *compositionTime,
             bool *isSyncSample = NULL);
 
     enum {
@@ -81,6 +81,8 @@ public:
             uint32_t flags);
 
     status_t findThumbnailSample(uint32_t *sample_index);
+
+    bool isSyncTableValid() const;
 
 protected:
     ~SampleTable();

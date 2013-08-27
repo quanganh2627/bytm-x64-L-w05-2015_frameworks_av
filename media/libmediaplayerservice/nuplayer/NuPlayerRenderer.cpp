@@ -31,9 +31,11 @@ const int64_t NuPlayer::Renderer::kMinPositionUpdateDelayUs = 100000ll;
 
 NuPlayer::Renderer::Renderer(
         const sp<MediaPlayerBase::AudioSink> &sink,
-        const sp<AMessage> &notify)
+        const sp<AMessage> &notify,
+        uint32_t flags)
     : mAudioSink(sink),
       mNotify(notify),
+      mFlags(flags),
       mNumFramesWritten(0),
       mDrainAudioQueuePending(false),
       mDrainVideoQueuePending(false),
@@ -49,10 +51,20 @@ NuPlayer::Renderer::Renderer(
       mPaused(false),
       mVideoRenderingStarted(false),
       mLastPositionUpdateUs(-1ll),
+#ifdef TARGET_HAS_VPP
+      mDecodeCount(0),
+      mVPPProcCount(0),
+      mVPPRenderCount(0),
+      mVPPProcessor(NULL),
+#endif
       mVideoLateByUs(0ll) {
 }
 
 NuPlayer::Renderer::~Renderer() {
+#ifdef TARGET_HAS_VPP
+    LOGI("===== mVPPProcCount = %d, mVPPRenderCount = %d =====", mVPPProcCount, mVPPRenderCount);
+    LOGI("===== decode %d frames totally =====", mDecodeCount);
+#endif
 }
 
 void NuPlayer::Renderer::queueBuffer(
@@ -193,6 +205,20 @@ void NuPlayer::Renderer::onMessageReceived(const sp<AMessage> &msg) {
             break;
         }
 
+#ifdef TARGET_HAS_VPP
+        case kWhatVPPNotify:
+        {
+            int32_t what;
+            CHECK(msg->findInt32("what", &what));
+            if (what == NuPlayerVPPProcessor::kWhatUpdateVppOutput) {
+                onUpdateVideoQueue(msg);
+                postDrainVideoQueue();
+            } else if (what == NuPlayerVPPProcessor::kWhatUpdateVppInput)
+                onUpdateVPPInput(msg);
+            break;
+        }
+#endif
+
         default:
             TRESPASS();
             break;
@@ -220,8 +246,23 @@ void NuPlayer::Renderer::signalAudioSinkChanged() {
 
 bool NuPlayer::Renderer::onDrainAudioQueue() {
     uint32_t numFramesPlayed;
-    if (mAudioSink->getPosition(&numFramesPlayed) != OK) {
-        return false;
+    status_t positionStatus = mAudioSink->getPosition(&numFramesPlayed);
+    if (positionStatus == NO_INIT) {
+        // The AudioSink track may not have been created yet, which returns NO_INIT.
+        // Check if EOS has been reached and call notifyEOS, so that this message
+        // is not lost before this funtion returns false below.
+        if (!mAudioQueue.empty()) {
+            QueueEntry *firstEntry = &*mAudioQueue.begin();
+            if (firstEntry->mBuffer == NULL) {
+                // EOS is reached
+                notifyEOS(true /*audio */, firstEntry->mFinalResult);
+                mAudioQueue.erase(mAudioQueue.begin());
+            }
+            firstEntry = NULL;
+         }
+         return false;
+    } else if (positionStatus != OK) {
+               return false;
     }
 
     ssize_t numFramesAvailableToWrite =
@@ -264,7 +305,7 @@ bool NuPlayer::Renderer::onDrainAudioQueue() {
             CHECK_EQ(mAudioSink->getPosition(&numFramesPlayed), (status_t)OK);
 
             uint32_t numFramesPendingPlayout =
-                mNumFramesWritten - numFramesPlayed;
+                (mNumFramesWritten > numFramesPlayed) ? (mNumFramesWritten - numFramesPlayed) : 0;
 
             int64_t realTimeOffsetUs =
                 (mAudioSink->latency() / 2  /* XXX */
@@ -305,6 +346,30 @@ bool NuPlayer::Renderer::onDrainAudioQueue() {
 }
 
 void NuPlayer::Renderer::postDrainVideoQueue() {
+#ifdef TARGET_HAS_VPP
+    if (!mFlushingVideo && mVPPProcessor != NULL) {
+        mVPPProcessor->invokeThreads();
+        List<QueueEntry>::iterator it;
+        for(it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
+            if ((*it).mBuffer == NULL || (*it).mNotifyConsumed == NULL) break;
+            sp<AMessage> notifyConsumed = (*it).mNotifyConsumed;
+            int32_t input, output, notInput;
+            if (notifyConsumed->findInt32("vppInput", &input)
+                    || notifyConsumed->findInt32("vppOutput", &output)
+                    || notifyConsumed->findInt32("notVppInput", &notInput)) {
+                continue;
+            }
+            if (mVPPProcessor->canSetBufferToVPP() == VPP_OK) {
+                if (mVPPProcessor->setBufferToVPP((*it).mBuffer, notifyConsumed) == VPP_FAIL)
+                    break;
+            } else {
+                break;
+            }
+        }
+        mVPPProcessor->getBufferFromVPP();
+    }
+#endif
+
     if (mDrainVideoQueuePending || mSyncQueues || mPaused) {
         return;
     }
@@ -323,6 +388,11 @@ void NuPlayer::Renderer::postDrainVideoQueue() {
     if (entry.mBuffer == NULL) {
         // EOS doesn't carry a timestamp.
         delayUs = 0;
+    } else if (mFlags & FLAG_REAL_TIME) {
+        int64_t mediaTimeUs;
+        CHECK(entry.mBuffer->meta()->findInt64("timeUs", &mediaTimeUs));
+
+        delayUs = mediaTimeUs - ALooper::GetNowUs();
     } else {
         int64_t mediaTimeUs;
         CHECK(entry.mBuffer->meta()->findInt64("timeUs", &mediaTimeUs));
@@ -341,6 +411,7 @@ void NuPlayer::Renderer::postDrainVideoQueue() {
             delayUs = realTimeUs - ALooper::GetNowUs();
         }
     }
+
 
     msg->post(delayUs);
 
@@ -368,12 +439,17 @@ void NuPlayer::Renderer::onDrainVideoQueue() {
         return;
     }
 
-    int64_t mediaTimeUs;
-    CHECK(entry->mBuffer->meta()->findInt64("timeUs", &mediaTimeUs));
+    int64_t realTimeUs;
+    if (mFlags & FLAG_REAL_TIME) {
+        CHECK(entry->mBuffer->meta()->findInt64("timeUs", &realTimeUs));
+    } else {
+        int64_t mediaTimeUs;
+        CHECK(entry->mBuffer->meta()->findInt64("timeUs", &mediaTimeUs));
 
-    int64_t realTimeUs = mediaTimeUs - mAnchorTimeMediaUs + mAnchorTimeRealUs;
+        realTimeUs = mediaTimeUs - mAnchorTimeMediaUs + mAnchorTimeRealUs;
+    }
+
     mVideoLateByUs = ALooper::GetNowUs() - realTimeUs;
-
     bool tooLate = (mVideoLateByUs > 40000);
 
     if (tooLate) {
@@ -442,6 +518,10 @@ void NuPlayer::Renderer::onQueueBuffer(const sp<AMessage> &msg) {
     } else {
         mVideoQueue.push_back(entry);
         postDrainVideoQueue();
+
+#ifdef TARGET_HAS_VPP
+        mDecodeCount++;
+#endif
     }
 
     if (!mSyncQueues || mAudioQueue.empty() || mVideoQueue.empty()) {
@@ -480,6 +560,141 @@ void NuPlayer::Renderer::onQueueBuffer(const sp<AMessage> &msg) {
     syncQueuesDone();
 }
 
+#ifdef TARGET_HAS_VPP
+sp<NuPlayerVPPProcessor> NuPlayer::Renderer::createVppProcessor(VPPVideoInfo *info,
+        const sp<NativeWindowWrapper> &nativeWindow) {
+    if (info == NULL)
+        return NULL;
+
+    if (NuPlayerVPPProcessor::isVppOn()) {
+        if (mVPPProcessor == NULL) {
+            mVPPProcessor = NuPlayerVPPProcessor::getInstance(new AMessage(kWhatVPPNotify, id()), nativeWindow);
+            if (mVPPProcessor != NULL) {
+                if (mVPPProcessor->validateVideoInfo(info) != VPP_OK) {
+                    releaseVppProcessor();
+                }
+            }
+        }
+        return mVPPProcessor;
+    }
+    return NULL;
+}
+
+void NuPlayer::Renderer::releaseVppProcessor() {
+    if (mVPPProcessor != NULL)
+        mVPPProcessor.clear();
+}
+
+void NuPlayer::Renderer::onUpdateVPPInput(const sp<AMessage> &msg) {
+    sp<AMessage> notifyConsumed;
+    CHECK(msg->findMessage("notifyConsumed", &notifyConsumed));
+    /*
+     * in normal playback case, we vpp input comes, the original input in VideoQueue is replaced or rendered
+     * but when seeking, the input may still in VideoQueue, so remove it
+     */
+    List<QueueEntry>::iterator it;
+    if (!mVideoQueue.empty()) {
+        for(it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
+            if ((*it).mNotifyConsumed == notifyConsumed) {
+                LOGV("erase vpp input in video queue maybe in seeking");
+                mVideoQueue.erase(it);
+            }
+        }
+    }
+
+    notifyConsumed->post();
+}
+
+
+void NuPlayer::Renderer::onUpdateVideoQueue(const sp<AMessage> &msg) {
+    sp<ABuffer> buffer;
+    CHECK(msg->findBuffer("buffer", &buffer));
+
+    sp<AMessage> notifyConsumed;
+    CHECK(msg->findMessage("notifyConsumed", &notifyConsumed));
+
+    int64_t timeUs;
+    CHECK(buffer->meta()->findInt64("timeUs", &timeUs));
+    CHECK(timeUs >= 0);
+
+    List<QueueEntry>::iterator it;
+    int64_t timeRenderList = 0;
+
+    if (mVideoQueue.empty()) {
+        LOGV("0. no item in render list, drop vpp buffer directly");
+        // ask NuPlayer::VPPProcessor to release buffer
+        sp<AMessage> vppNotifyConsumed;
+        CHECK(notifyConsumed->findMessage("vppNotifyConsumed", &vppNotifyConsumed));
+        vppNotifyConsumed->setInt32("reuse", true);
+        vppNotifyConsumed->post();
+        return;
+    }
+
+    for (it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
+        if ((*it).mBuffer == NULL) {
+            // eos
+            break;
+        }
+        CHECK((*it).mBuffer->meta()->findInt64("timeUs", &timeRenderList));
+        if (timeUs <= timeRenderList)
+            break;
+    }
+
+    if (it == mVideoQueue.begin() && timeUs < timeRenderList) {
+        LOGV("1. vpp output comes too late, drop it. timeUs = %lld, timeRenderList = %lld", timeUs, timeRenderList);
+        // ask NuPlayer::VPPProcessor to release buffer
+        sp<AMessage> vppNotifyConsumed;
+        CHECK(notifyConsumed->findMessage("vppNotifyConsumed", &vppNotifyConsumed));
+        vppNotifyConsumed->setInt32("reuse", true);
+        vppNotifyConsumed->post();
+    } else if (timeUs > timeRenderList) {
+        LOGV("6. timeUs bigger than last frame, backward seek just happen, drop this frame");
+        // ask NuPlayer::VPPProcessor to release buffer
+        sp<AMessage> vppNotifyConsumed;
+        CHECK(notifyConsumed->findMessage("vppNotifyConsumed", &vppNotifyConsumed));
+        vppNotifyConsumed->setInt32("reuse", true);
+        vppNotifyConsumed->post();
+    } else {
+        QueueEntry entry;
+        entry.mBuffer = buffer;
+        entry.mNotifyConsumed = notifyConsumed;
+        entry.mOffset = 0;
+        entry.mFinalResult = OK;
+
+        if (timeUs == timeRenderList) {
+            int32_t notInput, output;
+            if (((*it).mNotifyConsumed->findInt32("notVppInput", &notInput) && (notInput == 1))
+                    || ((*it).mNotifyConsumed->findInt32("vppOutput", &output) && (output == 1))) {
+                LOGV("5. NEVER REPLACE \"NOT VPP INPUT FRAME\" or \"VPP OUTPUT FRAME\" , drop this output directly");
+
+                sp<AMessage> vppNotifyConsumed;
+                CHECK(notifyConsumed->findMessage("vppNotifyConsumed", &vppNotifyConsumed));
+                vppNotifyConsumed->setInt32("reuse", true);
+                vppNotifyConsumed->post();
+            }
+            else {
+                LOGV("2. insert into renderList, timeRenderList = %lld, timeUs = %lld, erase decoder buffer = %p, insert vpp buffer = %p", timeRenderList, timeUs, &*it, &entry);
+                List<QueueEntry>::iterator erase = mVideoQueue.erase(it);
+                mVideoQueue.insert(erase, entry);
+                mVPPProcCount ++;
+                mVPPRenderCount ++;
+            }
+
+        } else if (timeUs < timeRenderList) {
+            LOGV("3. insert into renderList, timeRenderList = %lld, timeUs = %lld, insert %p", timeRenderList, timeUs, &entry);
+            mVideoQueue.insert(it, entry);
+            mVPPRenderCount++;
+        } else if ((*it).mBuffer == NULL) {
+            LOGV("4. insert before eos, timeUs = %lld, insert %p", timeUs, &entry);
+            mVideoQueue.insert(it, entry);
+            mVPPRenderCount++;
+        }
+    }
+
+    return;
+}
+#endif
+
 void NuPlayer::Renderer::syncQueuesDone() {
     if (!mSyncQueues) {
         return;
@@ -512,11 +727,21 @@ void NuPlayer::Renderer::onQueueEOS(const sp<AMessage> &msg) {
     entry.mFinalResult = finalResult;
 
     if (audio) {
+        if (mAudioQueue.empty() && mSyncQueues) {
+            syncQueuesDone();
+        }
         mAudioQueue.push_back(entry);
         postDrainAudioQueue();
     } else {
+        if (mVideoQueue.empty() && mSyncQueues) {
+            syncQueuesDone();
+        }
         mVideoQueue.push_back(entry);
         postDrainVideoQueue();
+#ifdef TARGET_HAS_VPP
+        if (mVPPProcessor != NULL)
+            mVPPProcessor->setEOS();
+#endif
     }
 }
 
@@ -539,7 +764,7 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
 
         Mutex::Autolock autoLock(mFlushLock);
         mFlushingAudio = false;
-
+        mHasAudio = false;
         mDrainAudioQueuePending = false;
         ++mAudioQueueGeneration;
     } else {
@@ -547,7 +772,7 @@ void NuPlayer::Renderer::onFlush(const sp<AMessage> &msg) {
 
         Mutex::Autolock autoLock(mFlushLock);
         mFlushingVideo = false;
-
+        mHasVideo = false;
         mDrainVideoQueuePending = false;
         ++mVideoQueueGeneration;
     }
@@ -560,7 +785,14 @@ void NuPlayer::Renderer::flushQueue(List<QueueEntry> *queue) {
         QueueEntry *entry = &*queue->begin();
 
         if (entry->mBuffer != NULL) {
+#ifdef TARGET_HAS_VPP
+            int32_t vppInput, vppOutput, render;
+            if (!entry->mNotifyConsumed->findInt32("vppInput", &vppInput)) {
+                entry->mNotifyConsumed->post();
+            }
+#else
             entry->mNotifyConsumed->post();
+#endif
         }
 
         queue->erase(queue->begin());
@@ -642,6 +874,9 @@ void NuPlayer::Renderer::onPause() {
 
     if (mHasAudio) {
         mAudioSink->pause();
+    } else {
+        // if no audio, we need to clear mAnchorTimeMediaUs, reset it when first video buffer comes
+        mAnchorTimeMediaUs = -1;
     }
 
     ALOGV("now paused audio queue has %d entries, video has %d entries",

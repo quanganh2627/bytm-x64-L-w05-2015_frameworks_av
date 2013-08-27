@@ -396,8 +396,8 @@ status_t ATSParser::Program::parseProgramMap(ABitReader *br) {
         }
 
         if (!success) {
-            ALOGI("Stream PIDs changed and we cannot recover.");
-            return ERROR_MALFORMED;
+            mStreams.clear();
+            ALOGI("Stream PIDs changed and we try to recover.");
         }
     }
 
@@ -450,6 +450,10 @@ int64_t ATSParser::Program::convertPTSToTimestamp(uint64_t PTS) {
 
     if (mParser->mAbsoluteTimeAnchorUs >= 0ll) {
         timeUs += mParser->mAbsoluteTimeAnchorUs;
+    }
+
+    if (mParser->mTimeOffsetValid) {
+        timeUs += mParser->mTimeOffsetUs;
     }
 
     return timeUs;
@@ -528,13 +532,22 @@ status_t ATSParser::Stream::parse(
 
     if (mExpectedContinuityCounter >= 0
             && (unsigned)mExpectedContinuityCounter != continuity_counter) {
-        ALOGI("discontinuity on stream pid 0x%04x", mElementaryPID);
-
+        ALOGI("discontinuity on stream pid 0x%04x,expected = %d, got = %d",
+            mElementaryPID, mExpectedContinuityCounter, continuity_counter);
         mPayloadStarted = false;
-        mBuffer->setRange(0, 0);
+        // check if there's a complete PES in current payload buffer
+        flush();
         mExpectedContinuityCounter = -1;
 
-        return OK;
+#if 0
+        // Uncomment this if you'd rather see no corruption whatsoever on
+        // screen and suspend updates until we come across another IDR frame.
+
+        if (mStreamType == STREAMTYPE_H264) {
+            ALOGI("clearing video queue");
+            mQueue->clear(true /* clearFormat */);
+        }
+#endif
     }
 
     mExpectedContinuityCounter = (continuity_counter + 1) & 0x0f;
@@ -920,6 +933,8 @@ sp<MediaSource> ATSParser::Stream::getSource(SourceType type) {
 ATSParser::ATSParser(uint32_t flags)
     : mFlags(flags),
       mAbsoluteTimeAnchorUs(-1ll),
+      mTimeOffsetValid(false),
+      mTimeOffsetUs(0ll),
       mNumTSPacketsParsed(0),
       mNumPCRs(0) {
     mPSISections.add(0 /* PID */, new PSISection);
@@ -949,6 +964,13 @@ void ATSParser::signalDiscontinuity(
 
         CHECK(mPrograms.empty());
         mAbsoluteTimeAnchorUs = timeUs;
+        return;
+    } else if (type == DISCONTINUITY_TIME_OFFSET) {
+        int64_t offset;
+        CHECK(extra->findInt64("offset", &offset));
+
+        mTimeOffsetValid = true;
+        mTimeOffsetUs = offset;
         return;
     }
 
@@ -1036,7 +1058,7 @@ status_t ATSParser::parsePID(
     ssize_t sectionIndex = mPSISections.indexOfKey(PID);
 
     if (sectionIndex >= 0) {
-        const sp<PSISection> &section = mPSISections.valueAt(sectionIndex);
+        sp<PSISection> section = mPSISections.valueAt(sectionIndex);
 
         if (payload_unit_start_indicator) {
             CHECK(section->isEmpty());
@@ -1044,7 +1066,6 @@ status_t ATSParser::parsePID(
             unsigned skip = br->getBits(8);
             br->skipBits(skip * 8);
         }
-
 
         CHECK((br->numBitsLeft() % 8) == 0);
         status_t err = section->append(br->data(), br->numBitsLeft() / 8);
@@ -1080,10 +1101,13 @@ status_t ATSParser::parsePID(
 
             if (!handled) {
                 mPSISections.removeItem(PID);
+                section.clear();
             }
         }
 
-        section->clear();
+        if (section != NULL) {
+            section->clear();
+        }
 
         return OK;
     }

@@ -45,7 +45,11 @@ struct AnotherPacketSource : public MediaSource {
 
     // Returns the difference between the last and the first queued
     // presentation timestamps since the last discontinuity (if any).
+#ifndef TARGET_HAS_VPP
     int64_t getBufferedDurationUs(status_t *finalResult);
+#else
+    int64_t getBufferedDurationUs(status_t *finalResult, size_t *sampleCount = NULL);
+#endif
 
     status_t nextBufferTime(int64_t *timeUs);
 
@@ -56,7 +60,11 @@ struct AnotherPacketSource : public MediaSource {
 
     void signalEOS(status_t result);
 
+    void resetEOS();
+
     status_t dequeueAccessUnit(sp<ABuffer> *buffer);
+
+    bool isFinished(int64_t duration) const;
 
 protected:
     virtual ~AnotherPacketSource();
@@ -67,6 +75,7 @@ private:
 
     bool mIsAudio;
     sp<MetaData> mFormat;
+    int64_t mLastQueuedTimeUs;
     List<sp<ABuffer> > mBuffers;
     status_t mEOSResult;
 

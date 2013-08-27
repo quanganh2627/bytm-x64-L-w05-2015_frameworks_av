@@ -1281,7 +1281,7 @@ int PreProcessingFx_Process(effect_handle_t     self,
         session->procFrame->_payloadDataLengthInSamples =
                 session->apmFrameCount * session->inChannelCount;
 
-        effect->session->apm->ProcessStream(session->procFrame);
+        status = effect->session->apm->ProcessStream(session->procFrame);
 
         if (session->outBufSize < session->framesOut + session->frameCount) {
             session->outBufSize = session->framesOut + session->frameCount;
@@ -1325,11 +1325,10 @@ int PreProcessingFx_Process(effect_handle_t     self,
               (session->framesOut - fr) * session->outChannelCount * sizeof(int16_t));
         session->framesOut -= fr;
         outBuffer->frameCount += fr;
-
-        return 0;
     } else {
-        return -ENODATA;
+        status = -ENODATA;
     }
+    return status;
 }
 
 int PreProcessingFx_Command(effect_handle_t  self,
@@ -1791,11 +1790,11 @@ int PreProcessingFx_ProcessReverse(effect_handle_t     self,
         }
         session->revFrame->_payloadDataLengthInSamples =
                 session->apmFrameCount * session->inChannelCount;
-        effect->session->apm->AnalyzeReverseStream(session->revFrame);
-        return 0;
+        status = effect->session->apm->AnalyzeReverseStream(session->revFrame);
     } else {
-        return -ENODATA;
+        status = -ENODATA;
     }
+    return status;
 }
 
 
@@ -1817,30 +1816,6 @@ const struct effect_interface_s sEffectInterfaceReverse = {
 //------------------------------------------------------------------------------
 // Effect Library Interface Implementation
 //------------------------------------------------------------------------------
-
-int PreProcessingLib_QueryNumberEffects(uint32_t *pNumEffects)
-{
-    if (PreProc_Init() != 0) {
-        return sInitStatus;
-    }
-    if (pNumEffects == NULL) {
-        return -EINVAL;
-    }
-    *pNumEffects = PREPROC_NUM_EFFECTS;
-    return sInitStatus;
-}
-
-int PreProcessingLib_QueryEffect(uint32_t index, effect_descriptor_t *pDescriptor)
-{
-    if (PreProc_Init() != 0) {
-        return sInitStatus;
-    }
-    if (index >= PREPROC_NUM_EFFECTS) {
-        return -EINVAL;
-    }
-    *pDescriptor = *sDescriptors[index];
-    return 0;
-}
 
 int PreProcessingLib_Create(const effect_uuid_t *uuid,
                             int32_t             sessionId,
@@ -1913,13 +1888,13 @@ int PreProcessingLib_GetDescriptor(const effect_uuid_t *uuid,
     return 0;
 }
 
+// This is the only symbol that needs to be exported
+__attribute__ ((visibility ("default")))
 audio_effect_library_t AUDIO_EFFECT_LIBRARY_INFO_SYM = {
     tag : AUDIO_EFFECT_LIBRARY_TAG,
     version : EFFECT_LIBRARY_API_VERSION,
     name : "Audio Preprocessing Library",
     implementor : "The Android Open Source Project",
-    query_num_effects : PreProcessingLib_QueryNumberEffects,
-    query_effect : PreProcessingLib_QueryEffect,
     create_effect : PreProcessingLib_Create,
     release_effect : PreProcessingLib_Release,
     get_descriptor : PreProcessingLib_GetDescriptor
