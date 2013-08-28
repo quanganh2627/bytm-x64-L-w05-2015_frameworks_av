@@ -137,7 +137,11 @@ void NuPlayer::RTSPSource::pause() {
 }
 
 void NuPlayer::RTSPSource::resume() {
-    mHandler->resume();
+    if (mState == DISCONNECTED) {
+        return;
+    } else if (mHandler !=  NULL) {
+        mHandler->resume();
+    }
 }
 
 status_t NuPlayer::RTSPSource::feedMoreTSData() {
