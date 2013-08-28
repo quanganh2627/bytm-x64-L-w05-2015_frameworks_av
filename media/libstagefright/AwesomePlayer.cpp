@@ -2345,6 +2345,7 @@ void AwesomePlayer::onVideoEvent() {
             mVideoBuffer->release();
             mVideoBuffer = NULL;
         }
+        mVPPProcessor->seek();
 
         if (mSeeking == SEEK && isStreamingHTTP() && mAudioSource != NULL
                 && !(mFlags & SEEK_PREVIEW)) {
@@ -2379,7 +2380,6 @@ void AwesomePlayer::onVideoEvent() {
                     mSeeking == SEEK_VIDEO_ONLY
                         ? MediaSource::ReadOptions::SEEK_NEXT_SYNC
                         : MediaSource::ReadOptions::SEEK_CLOSEST_SYNC);
-            mVPPProcessor->seek();
         }
         for (;;) {
             status_t err = mVideoSource->read(&mVideoBuffer, &options);
