@@ -629,6 +629,7 @@ bool AudioTrackOffload::processAudioBuffer(const sp<AudioTrackThread>& thread)
         }
 
         audioBuffer.size = writtenSize;
+        audioBuffer.frameCount = writtenSize;
 
         frames -= audioBuffer.frameCount;
 
