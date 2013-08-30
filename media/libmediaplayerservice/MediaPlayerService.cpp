@@ -328,10 +328,11 @@ sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
         ALOGE("dlopen(libwidiservice.so) succeeded in opening from MediaPlayerService.cpp");
         dlerror(); // Clear existing errors
         typedef sp<IRemoteDisplay> (*getRemoteDisplayFunc_t)(const String8&, const sp<IRemoteDisplayClient>& );
-        getRemoteDisplayFunc_t getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(hlibintelwidi, "getRemoteDisplay");
+        getRemoteDisplayFunc_t getRemoteDisplay = NULL;
+        getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(hlibintelwidi, "getRemoteDisplay");
         sp<IRemoteDisplay> rd;
         const char* error = dlerror();
-        if(error == NULL) {
+        if((error == NULL) && (getRemoteDisplay != NULL)) {
             rd = (*getRemoteDisplay)(iface, client);
         }
         else {
