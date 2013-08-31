@@ -609,21 +609,24 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
             }
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        sp<ThreadBase> thread = mThread.promote();
-        if (thread == 0) {
-            return NO_ERROR;
-        }
+        if (enabled) {
+            sp<ThreadBase> thread = mThread.promote();
+            if (thread == 0) {
+                return NO_ERROR;
+            }
 
-        if ((thread->type() == ThreadBase::DIRECT) && (enabled)) {
-            PlaybackThread *p = (PlaybackThread *)thread.get();
-            if (enabled) {
-            if (p-> isOffloadTrack()) {
-                ALOGV("setEnabled: Offload, invalidate tracks");
-                DirectOutputThread *srcThread = (DirectOutputThread *)p;
-                srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+            sp<AudioFlinger> flinger = thread->mAudioFlinger;
+            for (size_t i = 0; i < flinger->mPlaybackThreads.size(); i++) {
+                sp<PlaybackThread> t = flinger->mPlaybackThreads.valueAt(i);
+                if ((t->isOffloadTrack()) &&
+                    ((mSessionId == AUDIO_SESSION_OUTPUT_MIX) ||
+                     (thread.get() == t.get()))) {
+                    ALOGV("setEnabled: Offload, invalidate tracks");
+                    DirectOutputThread *srcThread = (DirectOutputThread *)t.get();
+                    srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+                }
             }
         }
-      }
 #endif
     }
     return NO_ERROR;
