@@ -175,6 +175,10 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
         mFirstBufferResult = OK;
         mIsFirstBuffer = false;
     } else {
+        if(mFirstBufferResult == UNKNOWN_ERROR) {
+               ALOGE("Source read error, UNKNOWN_ERROR");
+               return mFirstBufferResult;
+        }
         mIsFirstBuffer = true;
     }
 
@@ -605,7 +609,6 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
     if (mNumFramesPlayed == 0) {
         ALOGV("AudioCallback");
     }
-
     if (mReachedEOS) {
         return 0;
     }
@@ -652,7 +655,6 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
                 mInputBuffer = mFirstBuffer;
                 mFirstBuffer = NULL;
                 err = mFirstBufferResult;
-
                 mIsFirstBuffer = false;
             } else {
                 err = mSource->read(&mInputBuffer, &options);
@@ -676,7 +678,6 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
                         }
                     } else {
 #endif
-
                         // We don't want to post EOS right away but only
                         // after all frames have actually been played out.
                         // These are the number of frames submitted to the
@@ -713,7 +714,6 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
                    }
 #endif
               }
-
                 mReachedEOS = true;
                 mFinalStatus = err;
                 break;

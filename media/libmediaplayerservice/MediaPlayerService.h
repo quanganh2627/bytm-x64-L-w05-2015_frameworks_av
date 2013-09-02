@@ -128,6 +128,12 @@ class MediaPlayerService : public BnMediaPlayerService
         virtual String8         getParameters(const String8& keys);
         virtual status_t        setOffloadEOSReached(bool value);
 
+        void deleteRecycledTrack();
+        status_t        local_open(
+                uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
+                audio_format_t format, int bufferCount,
+                AudioCallback cb, void *cookie,
+                audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE);
     private:
         static void             setMinBufferCount();
         static void             CallbackWrapper(
@@ -154,7 +160,6 @@ class MediaPlayerService : public BnMediaPlayerService
         audio_output_flags_t    mFlags;
         int                     mBitRate;
         AudioCallback2          mCallback2;
-
         // CallbackData is what is passed to the AudioTrack as the "user" data.
         // We need to be able to target this to a different Output on the fly,
         // so we can't use the Output itself for this.
