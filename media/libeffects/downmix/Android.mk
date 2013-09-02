@@ -3,6 +3,10 @@ LOCAL_PATH:= $(call my-dir)
 # Multichannel downmix effect library
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(USE_INTEL_LVSE)),true)
+LOCAL_CFLAGS += -DLVSE
+endif
+
 LOCAL_SRC_FILES:= \
 	EffectDownmix.c
 
