@@ -2412,6 +2412,9 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
                 != xVSS_context->pSettings->xVSS.outputAudioFormat
                 || (fileProperties.AudioStreamType == M4VIDEOEDITING_kAAC
                 && (fileProperties.uiSamplingFrequency != samplingFreq
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+                || fileProperties.uiExtendedSamplingFrequency > 0
+#endif
                 || bAudioMono
                 != xVSS_context->pSettings->xVSS.bAudioMono)) )
             {

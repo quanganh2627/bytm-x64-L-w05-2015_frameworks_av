@@ -9793,14 +9793,19 @@ static M4OSA_ERR M4MCS_intGetInputClipProperties( M4MCS_InternalContext *pC )
             pC->InputFileProperties.uiSamplingFrequency =
                 pC->AacProperties.aSampFreq;
 
-            if( pC->AacProperties.aSBRPresent )
+            if( pC->AacProperties.aSBRPresent == 1)
             {
                 pC->InputFileProperties.AudioStreamType =
                     M4VIDEOEDITING_kAACplus;
                 pC->InputFileProperties.uiExtendedSamplingFrequency =
                     pC->AacProperties.aExtensionSampFreq;
             }
-
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            if (pC->AacProperties.aSBRPresent == -1){
+                pC->InputFileProperties.uiExtendedSamplingFrequency =
+                   pC->AacProperties.aSampFreq;
+            }
+#endif
             if( pC->AacProperties.aPSPresent )
             {
                 pC->InputFileProperties.AudioStreamType =
@@ -10667,7 +10672,10 @@ M4OSA_ERR M4MCS_intCheckAndGetCodecProperties(
                 pC->pReaderAudioStream->m_nbChannels;
             pC->AacProperties.aSampFreq =
                 pC->pReaderAudioStream->m_samplingFrequency;
-
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
+            if (pC->AacProperties.aSBRPresent == 0)
+                pC->AacProperties.aSBRPresent = -1;
+#endif
         }
 
     } else if( err != M4NO_ERROR) {
