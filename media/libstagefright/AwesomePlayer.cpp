@@ -510,24 +510,43 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 void AwesomePlayer::setMDSVideoState_l(int state) {
+    ALOGV("MultiDisplay setMDSVideoState: %d", state);
     if (state == MDS_VIDEO_UNPREPARED && mVideoSessionId == -1) {
         return;
     }
     if (mMDClient == NULL) {
+#ifdef USE_MDS_LEGACY
         mMDClient = new MultiDisplayClient();
+#else
+        sp<IServiceManager> sm = defaultServiceManager();
+        if (sm == NULL) {
+            LOGE("%s: Fail to get service manager", __func__);
+            return;
+        }
+        sp<IMDService> mds = interface_cast<IMDService>(
+                sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
+        if (mds == NULL) {
+            LOGE("%s: Failed to get MDS service", __func__);
+            return;
+        }
+        mMDClient = mds->getVideoControl();
+#endif
     }
     if (mVideoSessionId < 0) {
         mVideoSessionId = mMDClient->allocateVideoSessionId();
     }
-    mMDClient->setVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
+    mMDClient->updateVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
     if (state == MDS_VIDEO_UNPREPARED) {
         mVideoSessionId = -1;
+#ifdef USE_MDS_LEGACY
         delete mMDClient;
+#endif
         mMDClient = NULL;
     }
 }
 
 void AwesomePlayer::setMDSVideoInfo_l() {
+    ALOGV("MultiDisplay setMDSVideoInfo");
     MDSVideoSourceInfo info;
     int wcom = 0;
     if (mNativeWindow != NULL) {
@@ -544,8 +563,10 @@ void AwesomePlayer::setMDSVideoInfo_l() {
             mMDClient == NULL || mVideoSessionId < 0)
         return;
     memset(&info, 0, sizeof(MDSVideoSourceInfo));
-    info.isplaying = true;
-    info.isprotected = (mDecryptHandle != NULL);
+#ifdef USE_MDS_LEGACY
+    info.isPlaying = true;
+#endif
+    info.isProtected = (mDecryptHandle != NULL);
     {
         Mutex::Autolock autoLock(mStatsLock);
         info.frameRate = mStats.mFrameRate;
@@ -558,7 +579,7 @@ void AwesomePlayer::setMDSVideoInfo_l() {
         }
 #endif
     }
-    mMDClient->setVideoSourceInfo(mVideoSessionId, &info);
+    mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
     setMDSVideoState_l(MDS_VIDEO_PREPARED);
 }
 #endif
