@@ -480,10 +480,6 @@ sp<MediaSource> OMXCodec::Create(
                     codec->mFlags |= kOnlySubmitOneInputBufferAtOneTime;
                 }
 
-                if (!strncmp("OMX.Intel.VideoEncoder", componentName, 22)) {
-                    codec->mFlags &= ~kOnlySubmitOneInputBufferAtOneTime;
-                }
-
                 return codec;
             }
 
@@ -765,6 +761,28 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
     }
 
     initOutputFormat(meta);
+
+    if ((mFlags & kOnlySubmitOneInputBufferAtOneTime)
+            && !strncmp(mComponentName, "OMX.Intel.VideoEncoder", 22)) {
+
+        OMX_INDEXTYPE index;
+
+        status_t err = mOMX->getExtensionIndex(mNode,
+                               "OMX.Intel.index.enableSyncEncoding", &index);
+
+        if (err != OK) {
+            return err;
+        }
+
+        OMX_BOOL enable = OMX_TRUE;
+        err = mOMX->setParameter(mNode, index, (void*)&enable, sizeof(enable));
+
+        if (err != OK) {
+            CODEC_LOGE("SetParameter OMX.Intel.index.enableSyncEncoding"
+                       "returned error 0x%08x", err);
+            return err;
+        }
+    }
 
     if ((mFlags & kClientNeedsFramebuffer)
             && !strncmp(mComponentName, "OMX.SEC.", 8)) {

@@ -109,7 +109,7 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
        int framerate = 0;
        int64_t duration = source->getBufferedDurationUs(&err,&sampleCount);
        if (!(format != NULL && format->findInt32(kKeyFrameRate, &framerate) && framerate != 0)) {
-           if (err == OK && duration >= kMinDurationUs) {
+           if (format != NULL && err == OK && duration >= kMinDurationUs) {
                framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
                format->setInt32(kKeyFrameRate, framerate);
            } else {
@@ -130,7 +130,7 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
     }
 
 #ifdef TARGET_HAS_VPP
-    if (otherType == ATSParser::VIDEO) {
+    if (otherType == ATSParser::VIDEO && anotherSource != NULL) {
        static const int64_t kMinDurationUs = 1000000ll;
        sp<MetaData> format = anotherSource->getFormat();
        size_t sampleCount = 0;
@@ -138,7 +138,7 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
        int framerate = 0;
        int64_t duration = anotherSource->getBufferedDurationUs(&err,&sampleCount);
        if (!(format != NULL && format->findInt32(kKeyFrameRate, &framerate) && framerate != 0)) {
-           if (err == OK && duration >= kMinDurationUs) {
+           if (format != NULL && err == OK && duration >= kMinDurationUs) {
                framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
                format->setInt32(kKeyFrameRate, framerate);
            } else {

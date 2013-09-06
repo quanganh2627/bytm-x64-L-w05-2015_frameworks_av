@@ -80,8 +80,8 @@ AudioFlinger::ThreadBase::TrackBase::TrackBase(
         mThread(thread),
         mClient(client),
         mCblk(NULL),
-        // mBuffer
-        // mBufferEnd
+        mBuffer(NULL),
+        mBufferEnd(NULL),
         mStepCount(0),
         mState(IDLE),
         mSampleRate(sampleRate),
