@@ -3,10 +3,6 @@ LOCAL_PATH:= $(call my-dir)
 # audio preprocessing wrapper
 include $(CLEAR_VARS)
 
-ifeq ($(strip $(USE_INTEL_LVSE)),true)
-LOCAL_CFLAGS += -DLVSE
-endif
-
 LOCAL_MODULE:= libaudiopreprocessing
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/soundfx
