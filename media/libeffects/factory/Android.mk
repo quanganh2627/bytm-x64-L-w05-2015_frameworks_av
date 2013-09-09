@@ -1,11 +1,6 @@
 LOCAL_PATH:= $(call my-dir)
 
 # Effect factory library
-
-ifeq ($(strip $(USE_INTEL_LVSE)),true)
-LOCAL_CFLAGS += -DLVSE
-endif
-
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
