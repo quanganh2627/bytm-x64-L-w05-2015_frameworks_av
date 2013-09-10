@@ -61,6 +61,10 @@ enum {
     ERROR_DRM_VENDOR_MAX                    = DRM_ERROR_BASE - 500,
     ERROR_DRM_VENDOR_MIN                    = DRM_ERROR_BASE - 999,
 
+    // Deprecated
+    ERROR_DRM_WV_VENDOR_MAX                 = ERROR_DRM_VENDOR_MAX,
+    ERROR_DRM_WV_VENDOR_MIN                 = ERROR_DRM_VENDOR_MIN,
+
     // Heartbeat Error Codes
     HEARTBEAT_ERROR_BASE = -3000,
     ERROR_HEARTBEAT_TERMINATE_REQUESTED                     = HEARTBEAT_ERROR_BASE,
