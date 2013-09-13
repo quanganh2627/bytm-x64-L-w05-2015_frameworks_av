@@ -54,6 +54,10 @@ static const struct {
     { "OMX.google.vpx.encoder", "vpxenc", "video_encoder.vpx" },
     { "OMX.Intel.alac.decoder", "alacdec", "audio_decoder.alac" },
     { "OMX.google.raw.decoder", "rawdec", "audio_decoder.raw" },
+#ifdef USE_INTEL_MDP
+    { "OMX.Intel.mp3.decoder", "mp3dec_mdp", "audio_decoder.mp3" },
+    { "OMX.Intel.aac.decoder", "aacdec_mdp", "audio_decoder.aac" },
+#endif
     { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" },
     { "OMX.google.gsm.decoder", "gsmdec", "audio_decoder.gsm" },
 };

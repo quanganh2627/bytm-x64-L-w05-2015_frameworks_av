@@ -326,6 +326,17 @@ status_t AudioFlinger::EffectModule::configure()
     }
 
     // TODO: handle configuration of effects replacing track process
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // Since the channel mask is read from the current active PB thread, it used to be
+    // > 2 for multichannel offload. Due to this, effect was not created and
+    // offload tear down was not working.
+    // Setting the channel mask as stereo to fix tear down from multi channel offload
+    // TODO: This change is to be removed if the effect library supports MULTICHANNEL
+    if (((PlaybackThread*)thread.get())->isOffloadTrack() &&
+        thread->channelMask() > AUDIO_CHANNEL_OUT_STEREO) {
+        channelMask = AUDIO_CHANNEL_OUT_STEREO;
+    } else
+#endif
     channelMask = thread->channelMask();
 
     if ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_AUXILIARY) {
@@ -609,21 +620,24 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
             }
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        sp<ThreadBase> thread = mThread.promote();
-        if (thread == 0) {
-            return NO_ERROR;
-        }
+        if (enabled) {
+            sp<ThreadBase> thread = mThread.promote();
+            if (thread == 0) {
+                return NO_ERROR;
+            }
 
-        if ((thread->type() == ThreadBase::DIRECT) && (enabled)) {
-            PlaybackThread *p = (PlaybackThread *)thread.get();
-            if (enabled) {
-            if (p-> isOffloadTrack()) {
-                ALOGV("setEnabled: Offload, invalidate tracks");
-                DirectOutputThread *srcThread = (DirectOutputThread *)p;
-                srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+            sp<AudioFlinger> flinger = thread->mAudioFlinger;
+            for (size_t i = 0; i < flinger->mPlaybackThreads.size(); i++) {
+                sp<PlaybackThread> t = flinger->mPlaybackThreads.valueAt(i);
+                if ((t->isOffloadTrack()) &&
+                    ((mSessionId == AUDIO_SESSION_OUTPUT_MIX) ||
+                     (thread.get() == t.get()))) {
+                    ALOGV("setEnabled: Offload, invalidate tracks");
+                    DirectOutputThread *srcThread = (DirectOutputThread *)t.get();
+                    srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+                }
             }
         }
-      }
 #endif
     }
     return NO_ERROR;
