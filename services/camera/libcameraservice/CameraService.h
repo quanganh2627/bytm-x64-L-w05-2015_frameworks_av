@@ -121,6 +121,8 @@ public:
             return mRemoteBinder;
         }
 
+        void serviceDisconnect();
+
     protected:
         BasicClient(const sp<CameraService>& cameraService,
                 const sp<IBinder>& remoteCallback,
@@ -223,6 +225,9 @@ public:
             return mRemoteCallback;
         }
 
+        bool                 isLowPriorityClient() { return mLowPriorityClient; }
+        void                 setLowPriority() { mLowPriorityClient = true; }
+
     protected:
         static Mutex*        getClientLockFromCookie(void* user);
         // convert client from cookie. Client lock should be acquired before getting Client.
@@ -234,6 +239,11 @@ public:
 
         // - The app-side Binder interface to receive callbacks from us
         sp<ICameraClient>               mRemoteCallback;
+
+        // When true, the client is running as a background activity and can be
+        // closed by the ServiceLayer when normal priority camera requests are
+        // started by the applications
+        bool                            mLowPriorityClient;
 
     }; // class Client
 
@@ -308,6 +318,8 @@ private:
     wp<Client>          mClient[MAX_CAMERAS];  // protected by mServiceLock
     Mutex               mClientLock[MAX_CAMERAS]; // prevent Client destruction inside callbacks
     int                 mNumberOfCameras;
+
+    int                 mFrontCameraId;
 
     typedef wp<ProClient> weak_pro_client_ptr;
     Vector<weak_pro_client_ptr> mProClientList[MAX_CAMERAS];

@@ -87,7 +87,8 @@ static void camera_device_status_change(
 static CameraService *gCameraService;
 
 CameraService::CameraService()
-    :mSoundRef(0), mAudioTrackBurst(NULL), mBufferBurst(NULL), mBufferBurstSize(0), mModule(0)
+    :mNumberOfCameras(0), mFrontCameraId(-1), mSoundRef(0),
+     mAudioTrackBurst(NULL), mBufferBurst(NULL), mBufferBurstSize(0), mModule(0)
 {
     ALOGI("CameraService started (pid=%d)", getpid());
     gCameraService = this;
@@ -120,6 +121,17 @@ void CameraService::onFirstRef()
         }
         for (int i = 0; i < mNumberOfCameras; i++) {
             setCameraFree(i);
+        }
+
+        struct camera_info info;
+        for (int i = 0; i < mNumberOfCameras; i++) {
+            status_t rc = mModule->get_camera_info(i, &info);
+            if (rc == OK && info.facing == CAMERA_FACING_FRONT) {
+                mFrontCameraId = i;
+                LOG1("%s: Found front camera, ID = %d",
+                        __FUNCTION__, mFrontCameraId);
+                break;
+            }
         }
 
         if (mModule->common.module_api_version >=
@@ -376,6 +388,36 @@ sp<ICamera> CameraService::connect(
     LOG1("CameraService::connect E (pid %d \"%s\", id %d)", callingPid,
             clientName8.string(), cameraId);
 
+    int cameraIdRequested = cameraId;
+    if (cameraId == mNumberOfCameras) {
+        // Applications indicate the request for a low priority camera by
+        // setting the cameraId one higher than the supported IDs reported
+        // by the camera sub-system
+        // Low priority always use the front camera
+        // All further accesses from the application to the camera after the
+        // connect (opening of the camera) must use the actual front camera ID
+        LOG1("%s: A low priority camera instance is being requested, ID = %d",
+                __FUNCTION__, cameraId);
+        for (int i = 0; i < mNumberOfCameras; i++) {
+            if (mStatusList[i] != ICameraServiceListener::STATUS_PRESENT) {
+                LOG1("%s: Camera already open. Rejecting low priority request",
+                        __FUNCTION__);
+                return NULL;
+            }
+        }
+        cameraId = mFrontCameraId; // Low priority always use the front camera
+    } else {
+        LOG1("%s: Normal user started request, checking for a running low "
+                "priority instance",__FUNCTION__);
+        for (int i = 0; i < mNumberOfCameras; i++){
+            sp<Client> client = mClient[i].promote();
+            if (client != NULL && client.get()->isLowPriorityClient()) {
+                LOG1("%s: Killing low priority camera instance", __FUNCTION__);
+                client.get()->serviceDisconnect();
+            }
+        }
+    }
+
     if (!validateConnect(cameraId, /*inout*/clientUid)) {
         return NULL;
     }
@@ -431,6 +473,11 @@ sp<ICamera> CameraService::connect(
             updateStatus(ICameraServiceListener::STATUS_PRESENT, cameraId);
 
             return NULL;
+        }
+
+        if (client != NULL && cameraIdRequested == mNumberOfCameras) {
+            LOG1("%s: Created a low priority client instance", __FUNCTION__);
+            client.get()->setLowPriority();
         }
 
         mClient[cameraId] = client;
@@ -897,7 +944,8 @@ CameraService::Client::Client(const sp<CameraService>& cameraService,
                 clientPackageName,
                 cameraId, cameraFacing,
                 clientPid, clientUid,
-                servicePid)
+                servicePid),
+        mLowPriorityClient(false)
 {
     int callingPid = getCallingPid();
     LOG1("Client::Client E (pid %d, id %d)", callingPid, cameraId);
@@ -1014,6 +1062,15 @@ void CameraService::BasicClient::opChanged(int32_t op, const String16& packageNa
         notifyError();
         disconnect();
     }
+}
+
+void CameraService::BasicClient::serviceDisconnect() {
+    // Reset the client PID to allow a server-initiated disconnect,
+    // and to prevent further calls by the client.
+    LOG1("%s: Forcing a server initiated disconnect", __FUNCTION__);
+    mClientPid = getCallingPid();
+    notifyError();
+    disconnect();
 }
 
 // ----------------------------------------------------------------------------
