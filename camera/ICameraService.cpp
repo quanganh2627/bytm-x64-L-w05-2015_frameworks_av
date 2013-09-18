@@ -143,6 +143,16 @@ public:
         return result;
     }
 
+    virtual status_t setPriority(int cameraId, bool lowPriority)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(ICameraService::getInterfaceDescriptor());
+        data.writeInt32(cameraId);
+        data.writeInt32(lowPriority);
+        remote()->transact(BnCameraService::SET_PRIORITY, data, &reply);
+        return reply.readInt32();
+    }
+
     // connect to camera service (android.hardware.Camera)
     virtual status_t connect(const sp<ICameraClient>& cameraClient, int cameraId,
                              const String16 &clientPackageName, int clientUid,
@@ -273,6 +283,13 @@ status_t BnCameraService::onTransact(
             // out-variables are after exception and return value
             reply->writeInt32(1); // means the parcelable is included
             info.writeToParcel(reply);
+            return NO_ERROR;
+        } break;
+        case SET_PRIORITY: {
+            CHECK_INTERFACE(ICameraService, data, reply);
+            int32_t cameraId = data.readInt32();
+            bool lowPriority = data.readInt32();
+            reply->writeInt32(setPriority(cameraId, lowPriority));
             return NO_ERROR;
         } break;
         case CONNECT: {
