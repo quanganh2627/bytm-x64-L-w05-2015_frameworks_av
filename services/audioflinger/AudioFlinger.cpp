@@ -3726,12 +3726,7 @@ bool AudioFlinger::MixerThread::checkForNewParameters_l()
         AudioParameter param = AudioParameter(keyValuePair);
         int value;
 
-        if (param.getInt(String8(AudioParameter::keyStreamFlags), value) == NO_ERROR) {
-            if ((audio_output_flags_t)value == AUDIO_OUTPUT_FLAG_DEEP_BUFFER) {
-                ALOGD("reconfig due to deep buffer");
-                reconfig = true;
-            }
-        }
+        ALOGD("reconfig due to o/p flag ?");
 
         if (param.getInt(String8(AudioParameter::keySamplingRate), value) == NO_ERROR) {
             reconfig = true;
