@@ -41,6 +41,7 @@ public:
     enum {
         GET_NUMBER_OF_CAMERAS = IBinder::FIRST_CALL_TRANSACTION,
         GET_CAMERA_INFO,
+        SET_PRIORITY, // Intel
         CONNECT,
         CONNECT_PRO,
         CONNECT_DEVICE,
@@ -71,6 +72,9 @@ public:
     // - Errors: BAD_VALUE if specified listener was not in the listener list
     virtual status_t removeListener(const sp<ICameraServiceListener>& listener)
                                                                             = 0;
+
+    virtual status_t setPriority(int cameraId, bool lowPriority) = 0;
+
     /**
      * clientPackageName and clientUid are used for permissions checking.  if
      * clientUid == USE_CALLING_UID, then the calling UID is used instead. Only
