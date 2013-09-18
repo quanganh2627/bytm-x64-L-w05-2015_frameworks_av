@@ -91,6 +91,18 @@ const sp<ICameraService>& CameraBase<TCam, TCamTraits>::getCameraService()
 }
 
 template <typename TCam, typename TCamTraits>
+status_t CameraBase<TCam, TCamTraits>::setPriority(int cameraId, bool lowPriority)
+{
+   ALOGV("%s: setPriority", __FUNCTION__);
+   const sp<ICameraService>& cs = getCameraService();
+   if (cs != 0) {
+       return cs->setPriority(cameraId, lowPriority);
+   } else {
+       return UNKNOWN_ERROR;
+   }
+}
+
+template <typename TCam, typename TCamTraits>
 sp<TCam> CameraBase<TCam, TCamTraits>::connect(int cameraId,
                                                const String16& clientPackageName,
                                                int clientUid)
