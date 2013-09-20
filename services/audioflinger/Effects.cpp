@@ -108,6 +108,33 @@ AudioFlinger::EffectModule::EffectModule(ThreadBase *thread,
     if (mStatus != NO_ERROR) {
         return;
     }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    PlaybackThread *pbt = thread->mAudioFlinger->checkPlaybackThread_l(thread->mId);
+    // check if the effect can be offloaded with the desc flag
+    if (pbt != NULL && ((desc->flags & EFFECT_FLAG_OFFLOAD_MASK)
+                         == EFFECT_FLAG_OFFLOAD_SUPPORTED)) {
+        bool isOffload = pbt->isOffloadTrack();
+        audio_io_handle_t pbtOutput = pbt->id();
+        effect_offload_param_t offload_param;
+        offload_param.isOffload = isOffload;
+        offload_param.ioHandle = pbtOutput;
+        status_t cmdStatus, status;
+        uint32_t size = sizeof(status_t);
+        status = (*mEffectInterface)->command(mEffectInterface,
+                                 EFFECT_CMD_OFFLOAD,
+                                 sizeof(offload_param),
+                                 &offload_param,
+                                 &size,
+                                 &cmdStatus);
+        if (status == NO_ERROR) {
+            status = cmdStatus;
+        }
+        if (status != NO_ERROR) {
+            mStatus = status;
+            goto Error;
+        }
+    }
+#endif
     lStatus = init();
     if (lStatus < 0) {
         mStatus = lStatus;
@@ -659,22 +686,20 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
             }
         }
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (enabled) {
-            sp<ThreadBase> thread = mThread.promote();
-            if (thread == 0) {
-                return NO_ERROR;
-            }
-
-            sp<AudioFlinger> flinger = thread->mAudioFlinger;
-            for (size_t i = 0; i < flinger->mPlaybackThreads.size(); i++) {
-                sp<PlaybackThread> t = flinger->mPlaybackThreads.valueAt(i);
-                if ((t->isOffloadTrack()) &&
-                    ((mSessionId == AUDIO_SESSION_OUTPUT_MIX) ||
-                     (thread.get() == t.get()))) {
-                    ALOGV("setEnabled: Offload, invalidate tracks");
-                    DirectOutputThread *srcThread = (DirectOutputThread *)t.get();
-                    srcThread->invalidateTracks(AUDIO_STREAM_MUSIC);
-                }
+        sp<ThreadBase> thread = mThread.promote();
+        if (thread == 0) {
+            return NO_ERROR;
+        }
+        if (thread->type() == ThreadBase::DIRECT) {
+            PlaybackThread *effectThread = (PlaybackThread *)thread.get();
+            if ((effectThread->isOffloadTrack()) && (enabled) &&
+               ((sessionId() == AUDIO_SESSION_OUTPUT_MIX) ||
+               ((desc().flags & EFFECT_FLAG_OFFLOAD_MASK)
+                                 != EFFECT_FLAG_OFFLOAD_SUPPORTED))) {
+                // Global effects. Hence tear down offload
+                PlaybackThread *p = (PlaybackThread *)thread.get();
+                ALOGV("setEnabled: Offload, invalidate tracks");
+                p->invalidateTracks(AUDIO_STREAM_MUSIC);
             }
         }
 #endif
@@ -1341,6 +1366,29 @@ sp<AudioFlinger::EffectModule> AudioFlinger::EffectChain::getEffectFromType_l(
     return 0;
 }
 
+bool AudioFlinger::EffectChain::isEnabledEffectEligibleForOffload() const
+{
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    size_t size = mEffects.size();
+    for (size_t i = 0; i < size; i++) {
+        if (mEffects[i]->isEnabled()) {
+            // If an effect is enabled, check if the effect can be offloaded.
+            // If the OFFLOAD flag does not exist, SW effects will be applied
+            // and hence offload playback cannot be supported.
+            // So this function returns false
+            effect_descriptor_t desc = mEffects[i]->desc();
+            if ((desc.flags & EFFECT_FLAG_OFFLOAD_MASK)
+                                 != EFFECT_FLAG_OFFLOAD_SUPPORTED) {
+                return false;
+            }
+        }
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
 void AudioFlinger::EffectChain::clearInputBuffer()
 {
     Mutex::Autolock _l(mLock);
@@ -1350,21 +1398,6 @@ void AudioFlinger::EffectChain::clearInputBuffer()
         return;
     }
     clearInputBuffer_l(thread);
-}
-
-bool AudioFlinger::EffectChain::isAudioEffectEnabled() const
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    size_t size = mEffects.size();
-
-    for (size_t i = 0; i < size; i++) {
-        if (mEffects[i]->isEnabled()) {
-            return true;
-        }
-    }
-    return false;
-#endif
-    return false;
 }
 
 // Must be called with EffectChain::mLock locked

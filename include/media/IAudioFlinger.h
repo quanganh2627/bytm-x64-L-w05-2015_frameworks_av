@@ -197,7 +197,7 @@ public:
     // get audio mode
     virtual audio_mode_t   getMode() const  = 0;
 
-    virtual bool isAudioEffectEnabled(int sessionId) const = 0;
+    virtual bool isEnabledEffectEligibleForOffload(int sessionId) const = 0;
 
     virtual size_t getOffloadBufferSize(
             uint32_t bitRate,

@@ -249,7 +249,6 @@ public:
             uint32_t channel,
             int output);
 
-    virtual bool isAudioEffectEnabled(int sessionId) const;
     virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
@@ -482,7 +481,9 @@ private:
               audio_devices_t primaryOutputDevice_l() const;
 
               sp<PlaybackThread> getEffectThread_l(int sessionId, int EffectId);
-
+              // Check if all effects that are enabled in this session have DSP implementation.
+              // Use to check if an audio playback can be offloaded
+              bool isEnabledEffectEligibleForOffload(int sessionId) const;
 
                 void        removeClient_l(pid_t pid);
                 void        removeNotificationClient(pid_t pid);

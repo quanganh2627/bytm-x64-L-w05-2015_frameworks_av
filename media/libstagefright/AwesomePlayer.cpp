@@ -1138,7 +1138,7 @@ status_t AwesomePlayer::play() {
 
     //  Before play, we should query audio flinger to see if any effect is enabled.
     //  if (effect is enabled) we should do another prepare w/ IA SW decoding
-    if (mOffload && ( isInCall() || isAudioEffectEnabled() ||
+    if (mOffload && ( isInCall() || !isEnabledEffectEligibleForOffload() ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
@@ -2009,7 +2009,7 @@ status_t AwesomePlayer::initAudioDecoder() {
     if ((!mOffloadSinkCreationError) && canOffloadStream( meta,
                 (mVideoTrack != NULL && mVideoSource != NULL),
                 isStreamingHTTP(), mAudioSink->getSessionId())
-                && !(isAudioEffectEnabled()))
+                && (isEnabledEffectEligibleForOffload()))
     {
         ALOGI("initAudioDecoder: Offload supported");
         mOffload = true;
@@ -3786,7 +3786,7 @@ status_t AwesomePlayer::offloadResume() {
     seekTo_l(stats.mPositionUs);
     mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
 
-    if (mOffloadTearDownForPause && (isAudioEffectEnabled() ||
+    if (mOffloadTearDownForPause && (!isEnabledEffectEligibleForOffload() ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_BLUETOOTH_A2DP, "")
@@ -3994,24 +3994,23 @@ status_t AwesomePlayer::tearDownToNonDeepBufferAudio() {
     return err;
 }
 
-bool AwesomePlayer::isAudioEffectEnabled() {
+bool AwesomePlayer::isEnabledEffectEligibleForOffload() {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    ALOGV("isAudioEffectEnabled");
+    ALOGV("isEnabledEffectEligibleForOffload");
     const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
 
     if (audioFlinger != 0) {
-        if (audioFlinger->isAudioEffectEnabled(0)) {
+        int sessionId = mAudioSink->getSessionId();
+        if (!(audioFlinger->isEnabledEffectEligibleForOffload(sessionId))) {
+            ALOGV("isEnabledEffectEligibleForOffload,"
+                  "effects enabled, but not offloadable");
+            return false;
+        }
+        if (audioFlinger->isEnabledEffectEligibleForOffload(0)) {
             ALOGV("Effects enabled");
             return true;
         }
-        int sessionId = mAudioSink->getSessionId();
-        if (audioFlinger->isAudioEffectEnabled(sessionId)) {
-            ALOGV("S:Effects enabled");
-            return true;
-        }
      }
-    ALOGV("Effects not enabled");
-    return false;
 #endif
     return false;
 }

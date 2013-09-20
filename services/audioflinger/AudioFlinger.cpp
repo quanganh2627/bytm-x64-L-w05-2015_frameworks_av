@@ -567,12 +567,19 @@ sp<IAudioTrack> AudioFlinger::createTrack(
         // move effect chain to this output thread if an effect on same session was waiting
         // for a track to be created
         if (lStatus == NO_ERROR && effectThread != NULL) {
+            // No risk of deadlock due to these 2 threads being locked in a different order,
+            // because the AudioFlinger lock is already held
             if (!((thread->outDevice() == AUDIO_DEVICE_OUT_AUX_DIGITAL) &&
                 ((thread->type() == ThreadBase::DIRECT)||
                  (thread->channelCount() > 2)))) {
                 Mutex::Autolock _dl(thread->mLock);
                 Mutex::Autolock _sl(effectThread->mLock);
-                moveEffectChain_l(lSessionId, effectThread, thread, true);
+                lStatus = moveEffectChain_l(lSessionId, effectThread,
+                                                           thread, true);
+                if (lStatus != NO_ERROR) {
+                    ALOGW("createTrack() moveEffectChain unsuccessful:%d",
+                                                                   lStatus);
+                }
             }
         }
 
@@ -2347,6 +2354,23 @@ sp<IEffect> AudioFlinger::createEffect(
         // create effect on selected output thread
         handle = thread->createEffect_l(client, effectClient, priority, sessionId,
                 &desc, enabled, &lStatus);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        // If the handle returned is NULL and the thread is offload,
+        // invalidate the offload track and create the effect on default IO.
+        PlaybackThread *effectThread = (PlaybackThread*) thread;
+        if (handle == NULL && effectThread->isOffloadTrack()) {
+            ALOGV("createEffect() effect not found in DSP."
+                   "Create effect on the PCM o/p invalidate offload stream");
+            effectThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+            if (mPlaybackThreads.size()) {
+                // Default IO - first output
+                audio_io_handle_t defaultIo = mPlaybackThreads.keyAt(0);
+                thread = checkPlaybackThread_l(defaultIo);
+            }
+            handle = thread->createEffect_l(client, effectClient, priority,
+                                            sessionId, &desc, enabled, &lStatus);
+        }
+#endif
         if (handle != 0 && id != NULL) {
             *id = handle->id();
         }
@@ -2386,26 +2410,39 @@ status_t AudioFlinger::moveEffects(int sessionId, audio_io_handle_t srcOutput,
 
     return NO_ERROR;
 }
-bool AudioFlinger::isAudioEffectEnabled(int sessionId) const
+
+bool AudioFlinger::isEnabledEffectEligibleForOffload(int sessionId) const
 {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     Mutex::Autolock _l(mLock);
-    sp<EffectChain> chain = NULL;
-    ALOGV("isAudioEffectEnabled(sessionId=%d)", sessionId);
+    sp<EffectChain> chain;
+    ALOGV("isEnabledEffectEligibleForOffload(sessionId=%d)", sessionId);
     size_t size = mPlaybackThreads.size();
     for (size_t i = 0; i < size; i++) {
         chain = mPlaybackThreads.valueAt(i)->getEffectChain_l(sessionId);
         if (chain != 0) {
+            if (sessionId == AUDIO_SESSION_OUTPUT_MIX) {
+                ALOGV("isEnabledEffectEligibleForOffload, global effect chain,"
+                      "return false");
+                return false;
+            }
             break;
         }
     }
-    if (chain != 0 && chain->isAudioEffectEnabled()) {
+    if (chain != 0) {
+        return chain->isEnabledEffectEligibleForOffload();
+    } else {
+        // if there is no effect chain in the system, return true to
+        // support offload. Later, while creating effect, if the effect
+        // has no DSP implementation, the offload stream will tear down to IA
+        ALOGV("isEnabledEffectEligibleForOffload return true");
         return true;
     }
+#else
     return false;
 #endif
-    return false;
 }
+
 // moveEffectChain_l must be called with both srcThread and dstThread mLocks held
 status_t AudioFlinger::moveEffectChain_l(int sessionId,
                                    AudioFlinger::PlaybackThread *srcThread,
@@ -2421,7 +2458,45 @@ status_t AudioFlinger::moveEffectChain_l(int sessionId,
                 sessionId, srcThread);
         return INVALID_OPERATION;
     }
-
+    audio_io_handle_t dstOutput = dstThread->id();
+    int effectId = 0;
+    sp<EffectModule> effect = chain->getEffectFromId_l(effectId);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // If the dstOutput is offload, check if the effects are available in DSP.
+    // If not, return FAILED_TRANSACTION. Do not move the effect chain.
+    bool isOffload = (PlaybackThread*)dstThread->isOffloadTrack();
+    // Form the effect_offload_param_t structure
+    effect_offload_param_t offload_param;
+    offload_param.isOffload = isOffload;
+    offload_param.ioHandle = dstOutput;
+    status_t cmdStatus, status;
+    uint32_t size = sizeof(cmdStatus);
+    effect_descriptor_t desc;
+    int index = 0;
+    int chainSize = chain->mEffects.size();
+    for(index = 0; index < chainSize; index++) {
+        // Send the effect_offload_param_t structure while moving the effects
+        // with isOffload value and destination threadId
+        desc = effect->desc();
+        if ((desc.flags & EFFECT_FLAG_OFFLOAD_MASK)
+                         != EFFECT_FLAG_OFFLOAD_SUPPORTED) {
+            effect = chain->mEffects[index];
+            continue;
+        }
+        status = (*(effect->mEffectInterface))->command(effect->mEffectInterface,
+                             EFFECT_CMD_OFFLOAD,
+                             sizeof(offload_param),
+                             &offload_param,
+                             &size,
+                             &cmdStatus);
+        // If there is an error in sending the command, return error
+        if (status) {
+            ALOGV("moveEffectChain_l CMD_OFFLOAD returns status : %d", status);
+            return status;
+        }
+        effect = chain->mEffects[index];
+    }
+#endif
     // remove chain first. This is useful only if reconfiguring effect chain on same output thread,
     // so that a new chain is created with correct parameters when first effect is added. This is
     // otherwise unnecessary as removeEffect_l() will remove the chain when last effect is
@@ -2430,10 +2505,9 @@ status_t AudioFlinger::moveEffectChain_l(int sessionId,
 
     // transfer all effects one by one so that new effect chain is created on new thread with
     // correct buffer sizes and audio parameters and effect engines reconfigured accordingly
-    audio_io_handle_t dstOutput = dstThread->id();
     sp<EffectChain> dstChain;
     uint32_t strategy = 0; // prevent compiler warning
-    sp<EffectModule> effect = chain->getEffectFromId_l(0);
+    effect = chain->getEffectFromId_l(0);
     while (effect != 0) {
         srcThread->removeEffect_l(effect);
         dstThread->addEffect_l(effect);
