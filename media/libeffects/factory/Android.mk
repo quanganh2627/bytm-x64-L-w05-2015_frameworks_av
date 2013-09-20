@@ -3,6 +3,10 @@ LOCAL_PATH:= $(call my-dir)
 # Effect factory library
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
+  LOCAL_CFLAGS += -DINTEL_MUSIC_OFFLOAD_FEATURE
+endif
+
 LOCAL_SRC_FILES:= \
 	EffectsFactory.c
 
