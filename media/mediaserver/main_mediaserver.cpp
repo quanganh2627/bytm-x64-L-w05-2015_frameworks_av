@@ -40,6 +40,10 @@
 #include "MediaPlayerService.h"
 #include "AudioPolicyService.h"
 
+#ifdef INTEL_VIDEO_XPROC_SHARING
+#include "IntelMetadataBuffer.h"
+#endif
+
 using namespace android;
 
 int main(int argc, char** argv)
@@ -155,6 +159,10 @@ int main(int argc, char** argv)
         else {
             ALOGE("dlopen(libwidiservice) failed! Intel widi will not be used.");
         }
+#endif
+
+#ifdef INTEL_VIDEO_XPROC_SHARING
+        IntelBufferSharingService::instantiate();
 #endif
 
         registerExtensions();
