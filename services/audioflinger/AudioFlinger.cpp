@@ -1,5 +1,6 @@
 /*
 **
+** Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
 ** Copyright 2007, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -180,6 +181,9 @@ AudioFlinger::AudioFlinger()
       mIsDeviceTypeKnown(false),
       mGlobalEffectEnableTime(0),
       mPrimaryOutputSampleRate(0)
+      // PEKALL FMR begin:
+      ,mFmOn(false)
+      // PEKALL FMR end
 {
     getpid_cached = getpid();
     char value[PROPERTY_VALUE_MAX];
@@ -236,6 +240,7 @@ void AudioFlinger::onFirstRef()
 
 AudioFlinger::~AudioFlinger()
 {
+    ALOGV("~AudioFlinger()");
     while (!mRecordThreads.isEmpty()) {
         // closeInput_nonvirtual() will remove specified entry from mRecordThreads
         closeInput_nonvirtual(mRecordThreads.keyAt(0));
@@ -987,6 +992,23 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
         return PERMISSION_DENIED;
     }
 
+    // PEKALL FMR begin:
+    int fmDevice;
+    AudioParameter param = AudioParameter(keyValuePairs);
+
+    String8 fmOnKey = String8(AudioParameter::keyFmOn);
+    String8 fmOffKey = String8(AudioParameter::keyFmOff);
+    if (param.getInt(fmOnKey, fmDevice) == NO_ERROR) {
+        ALOGV("AudioFlinger::setParameters open fm radio");
+        mFmOn = true;
+        return NO_ERROR;
+    } else if (param.getInt(fmOffKey, fmDevice) == NO_ERROR) {
+        ALOGV("AudioFlinger::setParameters close fm radio");
+        mFmOn = false;
+        return NO_ERROR;
+    }
+    // PEKALL FMR end
+
     // AUDIO_IO_HANDLE_NONE means the parameters are global to the audio hardware interface
     if (ioHandle == AUDIO_IO_HANDLE_NONE) {
         Mutex::Autolock _l(mLock);
@@ -1044,20 +1066,24 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
         Mutex::Autolock _l(mLock);
         thread = checkPlaybackThread_l(ioHandle);
         if (thread == 0) {
+            ALOGV("AudioFlinger::setParameters. playback thread null");
             thread = checkRecordThread_l(ioHandle);
         } else if (thread == primaryPlaybackThread_l()) {
+            ALOGV("AudioFlinger::setParameters. playback thread is primary");
             // indicate output device change to all input threads for pre processing
             AudioParameter param = AudioParameter(keyValuePairs);
             int value;
             if ((param.getInt(String8(AudioParameter::keyRouting), value) == NO_ERROR) &&
                     (value != 0)) {
                 for (size_t i = 0; i < mRecordThreads.size(); i++) {
+                    ALOGV("AudioFlinger::setParameters. set record thread");
                     mRecordThreads.valueAt(i)->setParameters(keyValuePairs);
                 }
             }
         }
     }
     if (thread != 0) {
+        ALOGV("AudioFlinger::setParameters. thread setParameters");
         return thread->setParameters(keyValuePairs);
     }
     return BAD_VALUE;
@@ -1152,6 +1178,38 @@ status_t AudioFlinger::setVoiceVolume(float value)
 
     return ret;
 }
+
+// PEKALL FMR begin:
+status_t AudioFlinger::setFmVolume(float value)
+{
+    status_t ret = initCheck();
+    if (ret != NO_ERROR) {
+        return ret;
+    }
+
+    // check calling permissions
+    if (!settingsAllowed()) {
+        return PERMISSION_DENIED;
+    }
+    if (!mFmOn) {
+        ALOGV("setFmVolume: %f. fm off, skip", value);
+        return NO_INIT;
+    }
+
+    AutoMutex lock(mHardwareLock);
+    mHardwareStatus = AUDIO_HW_SET_FM_VOLUME;
+    ALOGV("setFmVolume: %f", value);
+    const size_t SIZE = 30;
+    char keyval_pair[SIZE];
+
+    snprintf(keyval_pair, SIZE, "%s=%f", AudioParameter::keyFmVolume, value);
+    audio_hw_device_t *dev = mPrimaryHardwareDev->hwDevice();
+    ret = dev->set_parameters(dev, (const char *)&keyval_pair);
+    ALOGV("setFmVolume done");
+    mHardwareStatus = AUDIO_HW_IDLE;
+    return ret;
+}
+// PEKALL FMR end
 
 status_t AudioFlinger::getRenderPosition(uint32_t *halFrames, uint32_t *dspFrames,
         audio_io_handle_t output) const
