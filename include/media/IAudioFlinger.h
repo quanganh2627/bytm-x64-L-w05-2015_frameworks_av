@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -235,8 +236,14 @@ public:
     /* Set audio port configuration */
     virtual status_t setAudioPortConfig(const struct audio_port_config *config) = 0;
 
+//<<<<<<< HEAD
     /* Get the HW synchronization source used for an audio session */
     virtual audio_hw_sync_t getAudioHwSyncForSession(audio_session_t sessionId) = 0;
+//=======
+    // PEKALL FMR begin:
+    virtual status_t setFmVolume(float volume) = 0;
+    // PEKALL FMR end
+//>>>>>>> [PATCH] [PATCH 05/11] Audio HAL kitkat bringup
 };
 
 

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2008-2011 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,6 +49,12 @@ public:
     static const char * const keyFrameCount;
     static const char * const keyInputSource;
     static const char * const keyScreenState;
+
+    // PEKALL FMR begin:
+    static const char * const keyFmOn;
+    static const char * const keyFmOff;
+    static const char * const keyFmVolume;
+    // PEKALL FMR end
 
     String8 toString();
 

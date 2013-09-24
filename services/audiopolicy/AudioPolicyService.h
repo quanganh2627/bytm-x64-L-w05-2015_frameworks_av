@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -168,6 +169,9 @@ public:
                                       struct audio_patch *patches,
                                       unsigned int *generation);
     virtual status_t setAudioPortConfig(const struct audio_port_config *config);
+    // PEKALL FMR begin:
+    virtual status_t setFmVolume(float volume, int delayMs = 0);
+    // PEKALL FMR end
 
     virtual void registerClient(const sp<IAudioPolicyServiceClient>& client);
 
@@ -228,6 +232,9 @@ private:
             UPDATE_AUDIOPORT_LIST,
             UPDATE_AUDIOPATCH_LIST,
             SET_AUDIOPORT_CONFIG,
+            // PEKALL FMR begin:
+            SET_FM_VOLUME,
+            // PEKALL FMR end
         };
 
         AudioCommandThread (String8 name, const wp<AudioPolicyService>& service);
@@ -252,6 +259,9 @@ private:
                                                   audio_stream_type_t stream,
                                                   int session);
                     void        releaseOutputCommand(audio_io_handle_t output);
+                    // PEKALL FMR begin:
+                    status_t    fmVolumeCommand(float volume, int delayMs = 0);
+                    // PEKALL FMR end
                     status_t    sendCommand(sp<AudioCommand>& command, int delayMs = 0);
                     void        insertCommand_l(sp<AudioCommand>& command, int delayMs = 0);
                     status_t    createAudioPatchCommand(const struct audio_patch *patch,
@@ -305,6 +315,13 @@ private:
             float mVolume;
             audio_io_handle_t mIO;
         };
+
+	// PEKALL FMR begin:
+        class FmVolumeData : public AudioCommandData {
+        public:
+            float mVolume;
+        };
+        // PEKALL FMR end
 
         class ParametersData : public AudioCommandData {
         public:

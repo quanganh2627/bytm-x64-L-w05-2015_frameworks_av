@@ -507,6 +507,19 @@ bool AudioPolicyService::AudioCommandThread::threadLoop()
                         command->mStatus = af->setAudioPortConfig(&data->mConfig);
                     }
                     } break;
+                // PEKALL FMR begin:
+                case SET_FM_VOLUME: {
+                    FmVolumeData *data = (FmVolumeData *)command->mParam.get();
+                    ALOGV("AudioCommandThread() processing set fm volume volume %f",
+                            data->mVolume);
+                    command->mStatus = AudioSystem::setFmVolume(data->mVolume);
+                    ALOGV("AudioCommandThread() processing set fm volume volume done!");
+                    if (command->mWaitStatus) {
+                        command->mCond.signal();
+                        mWaitWorkCV.wait(mLock);
+                    }
+                }break;
+                // PEKALL FMR end
                 default:
                     ALOGW("AudioCommandThread() unknown command %d", command->mCommand);
                 }
@@ -684,7 +697,7 @@ status_t AudioPolicyService::AudioCommandThread::createAudioPatchCommand(
 
     sp<AudioCommand> command = new AudioCommand();
     command->mCommand = CREATE_AUDIO_PATCH;
-    CreateAudioPatchData *data = new CreateAudioPatchData();
+    sp<CreateAudioPatchData> data = new CreateAudioPatchData();
     data->mPatch = *patch;
     data->mHandle = *handle;
     command->mParam = data;
@@ -702,7 +715,7 @@ status_t AudioPolicyService::AudioCommandThread::releaseAudioPatchCommand(audio_
 {
     sp<AudioCommand> command = new AudioCommand();
     command->mCommand = RELEASE_AUDIO_PATCH;
-    ReleaseAudioPatchData *data = new ReleaseAudioPatchData();
+    sp<ReleaseAudioPatchData> data = new ReleaseAudioPatchData();
     data->mHandle = handle;
     command->mParam = data;
     command->mWaitStatus = true;
@@ -731,13 +744,37 @@ status_t AudioPolicyService::AudioCommandThread::setAudioPortConfigCommand(
 {
     sp<AudioCommand> command = new AudioCommand();
     command->mCommand = SET_AUDIOPORT_CONFIG;
-    SetAudioPortConfigData *data = new SetAudioPortConfigData();
+    sp<SetAudioPortConfigData> data = new SetAudioPortConfigData();
     data->mConfig = *config;
     command->mParam = data;
     command->mWaitStatus = true;
     ALOGV("AudioCommandThread() adding set port config delay %d", delayMs);
     return sendCommand(command, delayMs);
 }
+
+// PEKALL FMR begin:
+status_t AudioPolicyService::AudioCommandThread::fmVolumeCommand(
+        float volume, int delayMs)
+{
+    status_t status = NO_ERROR;
+
+    sp<AudioCommand> command = new AudioCommand();
+    command->mCommand = SET_FM_VOLUME;
+    sp<FmVolumeData> data = new FmVolumeData();
+    data->mVolume = volume;
+    command->mParam = data;
+    Mutex::Autolock _l(mLock);
+    insertCommand_l(command, delayMs);
+    ALOGV("AudioCommandThread() adding set fm volume volume %f", volume);
+    mWaitWorkCV.signal();
+    if (command->mWaitStatus) {
+        command->mCond.wait(mLock);
+        status =  command->mStatus;
+        mWaitWorkCV.signal();
+    }
+    return status;
+}
+// PEKALL FMR end
 
 status_t AudioPolicyService::AudioCommandThread::sendCommand(sp<AudioCommand>& command, int delayMs)
 {
@@ -879,7 +916,11 @@ void AudioPolicyService::AudioCommandThread::insertCommand_l(sp<AudioCommand>& c
             // command status as the command is now delayed
             delayMs = 1;
         } break;
-
+        // PEKALL FMR begin:
+        case SET_FM_VOLUME: {
+            removedCommands.add(command2);
+        } break;
+        // PEKALL FMR end
         case START_TONE:
         case STOP_TONE:
         default:
@@ -976,6 +1017,13 @@ int AudioPolicyService::setVoiceVolume(float volume, int delayMs)
     return (int)mAudioCommandThread->voiceVolumeCommand(volume, delayMs);
 }
 
+// PEKALL FMR begin:
+status_t AudioPolicyService::setFmVolume(float volume, int delayMs)
+{
+    return mAudioCommandThread->fmVolumeCommand(volume, delayMs);
+}
+// PEKALL FMR end
+
 extern "C" {
 audio_module_handle_t aps_load_hw_module(void *service __unused,
                                              const char *name);
@@ -1030,6 +1078,7 @@ int aps_start_tone(void *service, audio_policy_tone_t tone,
                               audio_stream_type_t stream);
 int aps_stop_tone(void *service);
 int aps_set_voice_volume(void *service, float volume, int delay_ms);
+int aps_set_fm_volume(void *service, float volume, int delay_ms);
 };
 
 namespace {
@@ -1048,6 +1097,10 @@ namespace {
         .start_tone            = aps_start_tone,
         .stop_tone             = aps_stop_tone,
         .set_voice_volume      = aps_set_voice_volume,
+        // PEKALL FMR begin: TODO, enable after IMC change
+        .set_fm_volume         = aps_set_fm_volume,
+        // PEKALL FMR end
+
         .move_effects          = aps_move_effects,
         .load_hw_module        = aps_load_hw_module,
         .open_output_on_module = aps_open_output_on_module,

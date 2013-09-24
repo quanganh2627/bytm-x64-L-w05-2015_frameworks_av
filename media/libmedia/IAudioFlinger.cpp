@@ -1,5 +1,6 @@
 /*
 **
+** Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
 ** Copyright 2007, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -80,7 +81,13 @@ enum {
     RELEASE_AUDIO_PATCH,
     LIST_AUDIO_PATCHES,
     SET_AUDIO_PORT_CONFIG,
+//<<<<<<< HEAD
     GET_AUDIO_HW_SYNC
+//=======
+    // PEKALL FMR begin:
+    SET_FM_VOLUME,
+    // PEKALL FMR end
+//>>>>>>> [PATCH] [PATCH 05/11] Audio HAL kitkat bringup
 };
 
 class BpAudioFlinger : public BpInterface<IAudioFlinger>
@@ -789,6 +796,7 @@ public:
         remote()->transact(SET_LOW_RAM_DEVICE, data, &reply);
         return reply.readInt32();
     }
+
     virtual status_t listAudioPorts(unsigned int *num_ports,
                                     struct audio_port *ports)
     {
@@ -884,6 +892,7 @@ public:
         }
         return status;
     }
+//<<<<<<< HEAD
     virtual audio_hw_sync_t getAudioHwSyncForSession(audio_session_t sessionId)
     {
         Parcel data, reply;
@@ -895,6 +904,19 @@ public:
         }
         return (audio_hw_sync_t)reply.readInt32();
     }
+//=======
+
+    // PEKALL FMR begin:
+    virtual status_t setFmVolume(float volume)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
+        data.writeFloat(volume);
+        remote()->transact(SET_FM_VOLUME, data, &reply);
+        return reply.readInt32();
+    }
+    // PEKALL FMR end
+//>>>>>>> [PATCH] [PATCH 05/11] Audio HAL kitkat bringup
 };
 
 IMPLEMENT_META_INTERFACE(AudioFlinger, "android.media.IAudioFlinger");
@@ -1357,11 +1379,22 @@ status_t BnAudioFlinger::onTransact(
             reply->writeInt32(status);
             return NO_ERROR;
         } break;
+//<<<<<<< HEAD
         case GET_AUDIO_HW_SYNC: {
             CHECK_INTERFACE(IAudioFlinger, data, reply);
             reply->writeInt32(getAudioHwSyncForSession((audio_session_t)data.readInt32()));
             return NO_ERROR;
         } break;
+//=======
+        // PEKALL FMR begin:
+        case SET_FM_VOLUME: {
+            CHECK_INTERFACE(IAudioFlinger, data, reply);
+            float volume = data.readFloat();
+            reply->writeInt32(setFmVolume(volume));
+            return NO_ERROR;
+        } break;
+        // PEKALL FMR end
+//>>>>>>> [PATCH] [PATCH 05/11] Audio HAL kitkat bringup
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

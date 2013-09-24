@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2006-2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -426,6 +427,17 @@ uint32_t AudioSystem::getInputFramesLost(audio_io_handle_t ioHandle)
     result = af->getInputFramesLost(ioHandle);
     return result;
 }
+
+// PEKALL FMR begin:
+status_t AudioSystem::setFmVolume(float value)
+{
+    ALOGV("setFmVolume: %f", value);
+
+    const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
+    if (af == 0) return PERMISSION_DENIED;
+    return af->setFmVolume(value);
+}
+// PEKALL FMR end
 
 audio_unique_id_t AudioSystem::newAudioUniqueId()
 {

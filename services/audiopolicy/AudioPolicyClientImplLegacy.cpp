@@ -69,7 +69,7 @@ static audio_io_handle_t open_output(audio_module_handle_t module,
                                     audio_channel_mask_t *pChannelMask,
                                     uint32_t *pLatencyMs,
                                     audio_output_flags_t flags,
-                                    const audio_offload_info_t *offloadInfo)
+                                    audio_offload_info_t *offloadInfo)
 {
     sp<IAudioFlinger> af = AudioSystem::get_audio_flinger();
     if (af == 0) {
@@ -123,7 +123,7 @@ audio_io_handle_t aps_open_output_on_module(void *service __unused,
                                                    audio_channel_mask_t *pChannelMask,
                                                    uint32_t *pLatencyMs,
                                                    audio_output_flags_t flags,
-                                                   const audio_offload_info_t *offloadInfo)
+                                                   audio_offload_info_t *offloadInfo)
 {
     return open_output(module, pDevices, pSamplingRate, pFormat, pChannelMask,
                           pLatencyMs, flags, offloadInfo);
@@ -303,6 +303,15 @@ int aps_set_voice_volume(void *service, float volume, int delay_ms)
 
     return audioPolicyService->setVoiceVolume(volume, delay_ms);
 }
+
+// PEKALL FMR begin:
+int aps_set_fm_volume(void *service, float volume, int delay_ms)
+{
+    AudioPolicyService *audioPolicyService = (AudioPolicyService *)service;
+
+    return audioPolicyService->setFmVolume(volume, delay_ms);
+}
+// PEKALL FMR end
 
 }; // extern "C"
 
