@@ -1,5 +1,6 @@
 /*
 **
+** Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
 ** Copyright 2007, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,6 +75,9 @@ enum {
     GET_PRIMARY_OUTPUT_SAMPLING_RATE,
     GET_PRIMARY_OUTPUT_FRAME_COUNT,
     SET_LOW_RAM_DEVICE,
+    // PEKALL FMR begin:
+    SET_FM_VOLUME,
+    // PEKALL FMR end
 };
 
 class BpAudioFlinger : public BpInterface<IAudioFlinger>
@@ -738,6 +742,16 @@ public:
         return reply.readInt32();
     }
 
+    // PEKALL FMR begin:
+    virtual status_t setFmVolume(float volume)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
+        data.writeFloat(volume);
+        remote()->transact(SET_FM_VOLUME, data, &reply);
+        return reply.readInt32();
+    }
+    // PEKALL FMR end
 };
 
 IMPLEMENT_META_INTERFACE(AudioFlinger, "android.media.IAudioFlinger");
@@ -1128,6 +1142,14 @@ status_t BnAudioFlinger::onTransact(
             reply->writeInt32(setLowRamDevice(isLowRamDevice));
             return NO_ERROR;
         } break;
+        // PEKALL FMR begin:
+        case SET_FM_VOLUME: {
+            CHECK_INTERFACE(IAudioFlinger, data, reply);
+            float volume = data.readFloat();
+            reply->writeInt32(setFmVolume(volume));
+            return NO_ERROR;
+        } break;
+        // PEKALL FMR end
         default:
             return BBinder::onTransact(code, data, reply, flags);
     }

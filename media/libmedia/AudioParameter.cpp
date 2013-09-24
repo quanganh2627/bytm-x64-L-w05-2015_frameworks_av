@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2006-2011 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +33,15 @@ const char * const AudioParameter::keyChannels = AUDIO_PARAMETER_STREAM_CHANNELS
 const char * const AudioParameter::keyFrameCount = AUDIO_PARAMETER_STREAM_FRAME_COUNT;
 const char * const AudioParameter::keyInputSource = AUDIO_PARAMETER_STREAM_INPUT_SOURCE;
 const char * const AudioParameter::keyScreenState = AUDIO_PARAMETER_KEY_SCREEN_STATE;
+
+// PEKALL FMR begin:
+#define AUDIO_PARAMETER_FM_ON "fm_on"
+#define AUDIO_PARAMETER_FM_OFF "fm_off"
+
+const char * const AudioParameter::keyFmOn = AUDIO_PARAMETER_FM_ON;
+const char * const AudioParameter::keyFmOff = AUDIO_PARAMETER_FM_OFF;
+const char * const AudioParameter::keyFmVolume = "fmr_rx_volume";
+// PEKALL FMR end
 
 AudioParameter::AudioParameter(const String8& keyValuePairs)
 {

@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2007 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -209,6 +210,10 @@ public:
     // and should be called at most once.  For a definition of what "low RAM" means, see
     // android.app.ActivityManager.isLowRamDevice().
     virtual status_t setLowRamDevice(bool isLowRamDevice) = 0;
+
+    // PEKALL FMR begin:
+    virtual status_t setFmVolume(float volume) = 0;
+    // PEKALL FMR end
 };
 
 

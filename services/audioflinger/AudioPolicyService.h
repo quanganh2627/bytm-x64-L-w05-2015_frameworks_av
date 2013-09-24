@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,6 +144,9 @@ public:
                                   audio_stream_type_t stream,
                                   int session = 0);
             void doReleaseOutput(audio_io_handle_t output);
+    // PEKALL FMR begin:
+    virtual status_t setFmVolume(float volume, int delayMs = 0);
+    // PEKALL FMR end
 
 private:
                         AudioPolicyService() ANDROID_API;
@@ -168,7 +172,10 @@ private:
             SET_PARAMETERS,
             SET_VOICE_VOLUME,
             STOP_OUTPUT,
-            RELEASE_OUTPUT
+            RELEASE_OUTPUT,
+            // PEKALL FMR begin:
+            SET_FM_VOLUME
+            // PEKALL FMR end
         };
 
         AudioCommandThread (String8 name, const wp<AudioPolicyService>& service);
@@ -194,6 +201,9 @@ private:
                                                   int session);
                     void        releaseOutputCommand(audio_io_handle_t output);
 
+                    // PEKALL FMR begin:
+                    status_t    fmVolumeCommand(float volume, int delayMs = 0);
+                    // PEKALL FMR end
                     void        insertCommand_l(AudioCommand *command, int delayMs = 0);
 
     private:
@@ -249,6 +259,12 @@ private:
         public:
             audio_io_handle_t mIO;
         };
+        // PEKALL FMR begin:
+        class FmVolumeData {
+        public:
+            float mVolume;
+        };
+        // PEKALL FMR end
 
         Mutex   mLock;
         Condition mWaitWorkCV;

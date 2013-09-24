@@ -1,5 +1,6 @@
 /*
 **
+** Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
 ** Copyright 2007, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
@@ -185,6 +186,10 @@ public:
     virtual status_t setStreamOutput(audio_stream_type_t stream, audio_io_handle_t output);
 
     virtual status_t setVoiceVolume(float volume);
+
+    // PEKALL FMR begin:
+    virtual status_t setFmVolume(float volume);
+    // PEKALL FMR end
 
     virtual status_t getRenderPosition(size_t *halFrames, size_t *dspFrames,
                                        audio_io_handle_t output) const;
@@ -571,6 +576,9 @@ private:
         AUDIO_HW_GET_PARAMETER,         // get_parameters
         AUDIO_HW_SET_MASTER_MUTE,       // set_master_mute
         AUDIO_HW_GET_MASTER_MUTE,       // get_master_mute
+        // PEKALL FMR begin:
+        AUDIO_HW_SET_FM_VOLUME
+        // PEKALL FMR end
     };
 
     mutable     hardware_call_state                 mHardwareStatus;    // for dump only
@@ -647,6 +655,9 @@ private:
     bool    mIsLowRamDevice;
     bool    mIsDeviceTypeKnown;
     nsecs_t mGlobalEffectEnableTime;  // when a global effect was last enabled
+    // PEKALL FMR begin:
+    bool mFmOn;
+    // PEKALL FMR end
 };
 
 #undef INCLUDING_FROM_AUDIOFLINGER_H

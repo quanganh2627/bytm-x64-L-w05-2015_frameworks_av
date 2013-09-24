@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
  * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -785,6 +786,20 @@ bool AudioPolicyService::AudioCommandThread::threadLoop()
                     mLock.lock();
                     delete data;
                     }break;
+                // PEKALL FMR begin:
+                case SET_FM_VOLUME: {
+                    FmVolumeData *data = (FmVolumeData *)command->mParam;
+                    ALOGV("AudioCommandThread() processing set fm volume volume %f",
+                            data->mVolume);
+                    command->mStatus = AudioSystem::setFmVolume(data->mVolume);
+                    ALOGV("AudioCommandThread() processing set fm volume volume done!");
+                    if (command->mWaitStatus) {
+                        command->mCond.signal();
+                        mWaitWorkCV.wait(mLock);
+                    }
+                    delete data;
+                }break;
+                // PEKALL FMR end
                 default:
                     ALOGW("AudioCommandThread() unknown command %d", command->mCommand);
                 }
@@ -970,6 +985,30 @@ void AudioPolicyService::AudioCommandThread::releaseOutputCommand(audio_io_handl
     mWaitWorkCV.signal();
 }
 
+// PEKALL FMR begin:
+status_t AudioPolicyService::AudioCommandThread::fmVolumeCommand(
+        float volume, int delayMs)
+{
+    status_t status = NO_ERROR;
+
+    AudioCommand *command = new AudioCommand();
+    command->mCommand = SET_FM_VOLUME;
+    FmVolumeData *data = new FmVolumeData();
+    data->mVolume = volume;
+    command->mParam = data;
+    Mutex::Autolock _l(mLock);
+    insertCommand_l(command, delayMs);
+    ALOGV("AudioCommandThread() adding set fm volume volume %f", volume);
+    mWaitWorkCV.signal();
+    if (command->mWaitStatus) {
+        command->mCond.wait(mLock);
+        status =  command->mStatus;
+        mWaitWorkCV.signal();
+    }
+    return status;
+}
+// PEKALL FMR end
+
 // insertCommand_l() must be called with mLock held
 void AudioPolicyService::AudioCommandThread::insertCommand_l(AudioCommand *command, int delayMs)
 {
@@ -1039,6 +1078,11 @@ void AudioPolicyService::AudioCommandThread::insertCommand_l(AudioCommand *comma
             // command status as the command is now delayed
             delayMs = 1;
         } break;
+        // PEKALL FMR begin:
+        case SET_FM_VOLUME: {
+            removedCommands.add(command2);
+        } break;
+        // PEKALL FMR end
         case START_TONE:
         case STOP_TONE:
         default:
@@ -1149,6 +1193,14 @@ bool AudioPolicyService::isOffloadSupported(const audio_offload_info_t& info)
 
     return mpAudioPolicy->is_offload_supported(mpAudioPolicy, &info);
 }
+
+// PEKALL FMR begin:
+status_t AudioPolicyService::setFmVolume(float volume, int delayMs)
+{
+    return mAudioCommandThread->fmVolumeCommand(volume, delayMs);
+}
+// PEKALL FMR end
+
 
 // ----------------------------------------------------------------------------
 // Audio pre-processing configuration
@@ -1647,6 +1699,15 @@ static int aps_set_voice_volume(void *service, float volume, int delay_ms)
     return audioPolicyService->setVoiceVolume(volume, delay_ms);
 }
 
+// PEKALL FMR begin:
+static int aps_set_fm_volume(void *service, float volume, int delay_ms)
+{
+    AudioPolicyService *audioPolicyService = (AudioPolicyService *)service;
+
+    return audioPolicyService->setFmVolume(volume, delay_ms);
+}
+// PEKALL FMR end
+
 }; // extern "C"
 
 namespace {
@@ -1665,6 +1726,9 @@ namespace {
         start_tone            : aps_start_tone,
         stop_tone             : aps_stop_tone,
         set_voice_volume      : aps_set_voice_volume,
+        // PEKALL FMR begin: TODO, enable after IMC change
+        set_fm_volume         : aps_set_fm_volume,
+        // PEKALL FMR end
         move_effects          : aps_move_effects,
         load_hw_module        : aps_load_hw_module,
         open_output_on_module : aps_open_output_on_module,
