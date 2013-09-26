@@ -23,6 +23,7 @@
 #include <media/stagefright/foundation/ABuffer.h>
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/foundation/AMessage.h>
+#include <media/stagefright/MetaData.h>
 
 namespace android {
 
@@ -59,7 +60,8 @@ NuPlayer::Renderer::Renderer(
       mVPPRenderCount(0),
       mVPPProcessor(NULL),
 #endif
-      mVideoLateByUs(0ll) {
+      mVideoLateByUs(0ll),
+      mpSoftRender(NULL) {
 }
 
 NuPlayer::Renderer::~Renderer() {
@@ -67,6 +69,9 @@ NuPlayer::Renderer::~Renderer() {
     LOGI("===== mVPPProcCount = %d, mVPPRenderCount = %d =====", mVPPProcCount, mVPPRenderCount);
     LOGI("===== decode %d frames totally =====", mDecodeCount);
 #endif
+    if(mpSoftRender)
+        delete mpSoftRender;
+    mpSoftRender = NULL;
 }
 
 void NuPlayer::Renderer::queueBuffer(
@@ -478,6 +483,14 @@ void NuPlayer::Renderer::onDrainVideoQueue() {
              mVideoLateByUs, mVideoLateByUs / 1E6);
     } else {
         ALOGV("rendering video at media time %.2f secs", mediaTimeUs / 1E6);
+    }
+
+    void* pNativeWindow;
+    if(entry->mNotifyConsumed->findPointer("native-window", &pNativeWindow) && pNativeWindow == NULL) {
+        if(mpSoftRender == NULL && mNativeWindow.get() && mMetaData.get())
+            mpSoftRender = new SoftwareRenderer(mNativeWindow, mMetaData);
+        if(mpSoftRender)
+            entry->mNotifyConsumed->setPointer("soft-render", mpSoftRender);
     }
 
     entry->mNotifyConsumed->setInt32("render", !tooLate);
@@ -933,6 +946,25 @@ void NuPlayer::Renderer::onResume() {
     if (!mVideoQueue.empty()) {
         postDrainVideoQueue();
     }
+}
+
+void NuPlayer::Renderer::setNativeWindow(sp < ANativeWindow > nativeWindow)
+{
+    if(nativeWindow.get())
+        mNativeWindow = nativeWindow;
+
+    if(mpSoftRender)
+        delete mpSoftRender;
+    mpSoftRender = NULL;
+}
+void NuPlayer::Renderer::setVideoSinkParam(sp<MetaData> meta)
+{
+    if(meta.get())
+        mMetaData = meta;
+
+    if(mpSoftRender)
+        delete mpSoftRender;
+    mpSoftRender = NULL;
 }
 
 }  // namespace android

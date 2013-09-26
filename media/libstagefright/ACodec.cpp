@@ -38,6 +38,7 @@
 #include <OMX_Component.h>
 
 #include "include/avc_utils.h"
+#include "include/SoftwareRenderer.h"
 
 #ifdef TARGET_HAS_VPP
 #include <NuPlayerVPPProcessor.h>
@@ -3548,6 +3549,7 @@ bool ACodec::BaseState::onOMXFillBufferDone(
             notify->setInt32("flags", flags);
 
             reply->setPointer("buffer-id", info->mBufferID);
+            reply->setPointer("native-window", mCodec->mNativeWindow.get());
 
             notify->setMessage("reply", reply);
 
@@ -3844,18 +3846,27 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
     }
 
     int32_t render;
-    if (mCodec->mNativeWindow != NULL
-            && msg->findInt32("render", &render) && render != 0
+
+    if (msg->findInt32("render", &render) && render != 0
             && (info->mData == NULL || info->mData->size() != 0)) {
         // The client wants this buffer to be rendered.
-
-        status_t err;
-        if ((err = mCodec->mNativeWindow->queueBuffer(
-                    mCodec->mNativeWindow.get(),
-                    info->mGraphicBuffer.get(), -1)) == OK) {
-            info->mStatus = BufferInfo::OWNED_BY_NATIVE_WINDOW;
-        } else {
-            mCodec->signalError(OMX_ErrorUndefined, err);
+        if(mCodec->mNativeWindow != NULL) {
+            status_t err;
+            if ((err = mCodec->mNativeWindow->queueBuffer(
+                        mCodec->mNativeWindow.get(),
+                        info->mGraphicBuffer.get(), -1)) == OK) {
+                info->mStatus = BufferInfo::OWNED_BY_NATIVE_WINDOW;
+            } else {
+                mCodec->signalError(OMX_ErrorUndefined, err);
+                info->mStatus = BufferInfo::OWNED_BY_US;
+            }
+        }else {
+                void* pRender;
+            if(msg->findPointer("soft-render", &pRender) && pRender != NULL) {
+                SoftwareRenderer* pSoftRender = (SoftwareRenderer*)pRender;
+                OMX_BUFFERHEADERTYPE *pBuffer = (OMX_BUFFERHEADERTYPE *)bufferID;
+                pSoftRender->render(pBuffer->pBuffer, pBuffer->nFilledLen, NULL);
+            }
             info->mStatus = BufferInfo::OWNED_BY_US;
         }
     } else {

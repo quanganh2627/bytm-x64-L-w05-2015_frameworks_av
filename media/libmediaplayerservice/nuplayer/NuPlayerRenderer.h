@@ -24,6 +24,8 @@
 #include <VPPBuffer.h>
 #endif
 
+#include "../../libstagefright/include/SoftwareRenderer.h"
+
 namespace android {
 
 struct ABuffer;
@@ -56,6 +58,9 @@ struct NuPlayer::Renderer : public AHandler {
     sp<NuPlayerVPPProcessor> createVppProcessor(VPPVideoInfo *info, const sp<NativeWindowWrapper> &nativeWindow);
     void releaseVppProcessor();
 #endif
+
+    void setNativeWindow(sp<ANativeWindow> nativeWindow);
+    void setVideoSinkParam(sp<MetaData> meta);
 
     enum {
         kWhatEOS                 = 'eos ',
@@ -133,6 +138,11 @@ private:
     void onUpdateVideoQueue(const sp<AMessage> &msg);
     void onUpdateVPPInput(const sp<AMessage> &msg);
 #endif
+
+    SoftwareRenderer *mpSoftRender;
+    sp<ANativeWindow> mNativeWindow;
+    sp<MetaData> mMetaData;
+
     bool onDrainAudioQueue();
     void postDrainAudioQueue(int64_t delayUs = 0);
 

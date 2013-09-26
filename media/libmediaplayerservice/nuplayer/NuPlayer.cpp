@@ -543,6 +543,10 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
             }
 
             processDeferredActions();
+
+            if(mRenderer.get())
+                mRenderer->setNativeWindow(mNativeWindow->getNativeWindow());
+
             break;
         }
 
@@ -769,8 +773,19 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     // video
 
                     int32_t width, height;
+                    int32_t colorformat;
                     CHECK(codecRequest->findInt32("width", &width));
                     CHECK(codecRequest->findInt32("height", &height));
+                    CHECK(codecRequest->findInt32("color-format", &colorformat));
+
+                    if(mRenderer.get()) {
+                        sp<MetaData> meta = new MetaData;
+                        meta->setInt32(kKeyColorFormat, colorformat);
+                        meta->setInt32(kKeyWidth, width);
+                        meta->setInt32(kKeyHeight, height);
+                        mRenderer->setNativeWindow(mNativeWindow->getNativeWindow());
+                        mRenderer->setVideoSinkParam(meta);
+                    }
 
                     int32_t cropLeft, cropTop, cropRight, cropBottom;
                     CHECK(codecRequest->findRect(
