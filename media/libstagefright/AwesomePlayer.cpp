@@ -2585,7 +2585,13 @@ void AwesomePlayer::onVideoEvent() {
         int64_t latenessUs = nowUs - timeUs;
         ATRACE_INT("Video Lateness (ms)", latenessUs / 1E3);
 
+        sp<MetaData> meta = mExtractor->getMetaData();
+        const char *mime;
+        CHECK(meta->findCString(kKeyMIMEType, &mime));
         if (latenessUs > 500000ll
+#ifdef USE_INTEL_ASF_EXTRACTOR
+                && strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)
+#endif
                 && mAudioPlayer != NULL
                 && mAudioPlayer->getMediaTimeMapping(
                     &realTimeUs, &mediaTimeUs)) {
