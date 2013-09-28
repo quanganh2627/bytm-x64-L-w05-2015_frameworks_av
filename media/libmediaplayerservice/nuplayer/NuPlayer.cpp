@@ -195,16 +195,18 @@ void NuPlayer::setMDSVideoState_l(int state) {
 void NuPlayer::setMDSVideoInfo_l() {
     MDSVideoSourceInfo info;
     int wcom = 0;
-    if (mANativeWindow != NULL) {
-        /*
-         * 0 means the buffers do not go directly to the window compositor;
-         * 1 means the ANativeWindow DOES send queued buffers
-         * directly to the window compositor;
-         * For more info, refer system/core/include/system/window.h
-         */
-        mANativeWindow->query(mANativeWindow.get(),
-                NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-    }
+    if (mNativeWindow == NULL)
+        return;
+    sp<ANativeWindow> win = mNativeWindow->getNativeWindow().get();
+    if (win == NULL)
+        return;
+    /*
+     * 0 means the buffers do not go directly to the window compositor;
+     * 1 means the ANativeWindow DOES send queued buffers
+     * directly to the window compositor;
+     * For more info, refer system/core/include/system/window.h
+     */
+    win->query(win.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
     if (wcom == 0 || mVideoDecoder == NULL ||
             mMDClient == NULL || mVideoSessionId < 0)
         return;
@@ -318,9 +320,6 @@ void NuPlayer::setVideoSurfaceTextureAsync(
                 return;
             }
         }
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-        mANativeWindow = surface;
-#endif
         msg->setObject(
                 "native-window",
                 new NativeWindowWrapper(surface));
@@ -485,9 +484,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
             mNumFramesDropped = 0;
             mStarted = true;
 
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-            setMDSVideoState_l(MDS_VIDEO_PREPARING);
-#endif
             mSource->start();
 
             uint32_t flags = 0;
@@ -540,7 +536,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     schedulePollDuration();
                 }
             }
-
             status_t err;
             if ((err = mSource->feedMoreTSData()) != OK) {
                 if (mAudioDecoder == NULL && mVideoDecoder == NULL) {
@@ -1002,11 +997,6 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
 
     (*decoder)->configure(format);
 
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    if (!audio)
-        setMDSVideoInfo_l();
-#endif
-
 #ifdef TARGET_HAS_VPP
     if (!audio) {
         if(mVPPProcessor == NULL) {
@@ -1019,6 +1009,13 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
                 codec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
             }
         }
+    }
+#endif
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (!audio) {
+        setMDSVideoState_l((int)MDS_VIDEO_PREPARING);
+        setMDSVideoInfo_l();
     }
 #endif
 

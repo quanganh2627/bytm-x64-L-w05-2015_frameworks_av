@@ -163,7 +163,6 @@ private:
     int64_t mNumFramesTotal, mNumFramesDropped;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     MultiDisplayClient* mMDClient;
-    sp<ANativeWindow> mANativeWindow;
     int mVideoSessionId;
     void setMDSVideoInfo_l();
     void setMDSVideoState_l(int state);
