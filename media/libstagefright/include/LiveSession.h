@@ -116,6 +116,8 @@ private:
     bool mDurationFixed;  // Duration has been determined once and for all.
     bool mSeekDone;
     bool mDisconnectPending;
+    bool mFetchPending;
+    bool mDisconnectInSeek;
 
     int32_t mMonitorQueueGeneration;
 
