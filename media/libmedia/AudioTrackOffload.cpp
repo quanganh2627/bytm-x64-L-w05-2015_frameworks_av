@@ -2,6 +2,8 @@
 //#define LOG_NDEBUG 0
 #define LOG_TAG "AudioTrackOffload"
 
+#define MUSIC_OFFLOAD_WAIT 4
+
 #include <stdint.h>
 #include <sys/types.h>
 #include <limits.h>
@@ -392,7 +394,11 @@ status_t AudioTrackOffload::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
                 // this condition is in shared memory, so if IAudioTrack and control block
                 // are replaced due to mediaserver death or IAudioTrack invalidation then
                 // cv won't be signalled, but fortunately the timeout will limit the wait
-                result = cblk->cv.waitRelative(cblk->lock, milliseconds(waitTimeMs));
+
+                // increasing the wait time in the case of Offload playback to align with
+                // buffer period size of 4 seconds
+                result = cblk->cv.waitRelative(cblk->lock,
+                               milliseconds(waitTimeMs * MUSIC_OFFLOAD_WAIT));
                 cblk->lock.unlock();
                 mLock.lock();
                 if (!mActive) {
