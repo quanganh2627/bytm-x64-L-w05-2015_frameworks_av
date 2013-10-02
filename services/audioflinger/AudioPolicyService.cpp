@@ -96,13 +96,33 @@ AudioPolicyService::AudioPolicyService()
     mpAudioPolicy->set_can_mute_enforced_audible(mpAudioPolicy, !forced_val);
 
     ALOGI("Loaded audio policy from %s (%s)", module->name, module->id);
-
-    // load audio pre processing modules
-    if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
-        loadPreProcessorConfig(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
-    } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
-        loadPreProcessorConfig(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // This part of code is to enable the testing of offload effects.
+    // Not needed when full offloaded effects are implimented.
+    // Loading different audio_offload_conf files to suit the
+    // requirement. TBD - Need to be cleaned when full effect
+    // offload is supported.
+    //
+    char propValue[PROPERTY_VALUE_MAX];
+    uint32_t LPAformat = 0;
+    if (property_get("lpa.tunnelling.enable", propValue, "0")) {
+        LPAformat = strtoul(propValue, NULL, 16);
+        ALOGV("init: LPAformat = %x", LPAformat);
     }
+    if ((LPAformat & EFFECTS_OFFLOAD)){
+        ALOGV("effect offload is enabled in prop");
+        loadPreProcessorConfig(AUDIO_EFFECT_OFFLOAD_CONFIG_FILE);
+    } else {
+#endif
+        // load audio pre processing modules
+        if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
+            loadPreProcessorConfig(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
+        } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
+            loadPreProcessorConfig(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
+        }
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    }
+#endif
 }
 
 AudioPolicyService::~AudioPolicyService()
