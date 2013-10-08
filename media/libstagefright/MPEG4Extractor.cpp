@@ -1527,6 +1527,22 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
             }
 
             *offset += chunk_size;
+
+            // Calculate average frame rate.
+            const char *mime;
+            CHECK(mLastTrack->meta->findCString(kKeyMIMEType, &mime));
+            if (!strncasecmp("video/", mime, 6)) {
+                size_t nSamples = mLastTrack->sampleTable->countSamples();
+                int64_t durationUs;
+                if (mLastTrack->meta->findInt64(kKeyDuration, &durationUs)) {
+                    if (durationUs > 0) {
+                        int32_t frameRate = (nSamples * 1000000LL +
+                                    (durationUs >> 1)) / durationUs;
+                        mLastTrack->meta->setInt32(kKeyFrameRate, frameRate);
+                    }
+                }
+            }
+
             break;
         }
 
@@ -1592,23 +1608,6 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
                 mLastTrack->meta->setInt32(kKeyMaxInputSize, max_size);
             }
             *offset += chunk_size;
-
-            // NOTE: setting another piece of metadata invalidates any pointers (such as the
-            // mimetype) previously obtained, so don't cache them.
-            const char *mime;
-            CHECK(mLastTrack->meta->findCString(kKeyMIMEType, &mime));
-            // Calculate average frame rate.
-            if (!strncasecmp("video/", mime, 6)) {
-                size_t nSamples = mLastTrack->sampleTable->countSamples();
-                int64_t durationUs;
-                if (mLastTrack->meta->findInt64(kKeyDuration, &durationUs)) {
-                    if (durationUs > 0) {
-                        int32_t frameRate = (nSamples * 1000000LL +
-                                    (durationUs >> 1)) / durationUs;
-                        mLastTrack->meta->setInt32(kKeyFrameRate, frameRate);
-                    }
-                }
-            }
 
             break;
         }
