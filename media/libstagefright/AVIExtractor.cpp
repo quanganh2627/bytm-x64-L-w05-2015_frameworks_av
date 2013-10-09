@@ -917,6 +917,9 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
 
     for (size_t i = 0; i < mTracks.size(); ++i) {
         Track *track = &mTracks.editItemAt(i);
+        if (track->mKind == Track::OTHER) {
+            continue;
+        }
 
         if (track->mBytesPerSample > 0) {
             // Assume all chunks are roughly the same size for now.
