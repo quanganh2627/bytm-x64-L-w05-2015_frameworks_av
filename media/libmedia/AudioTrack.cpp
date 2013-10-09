@@ -514,7 +514,7 @@ void AudioTrack::flush_l()
     mMarkerReached = false;
     mUpdatePeriod = 0;
 
-    if (!mActive || (mFlags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER)) {
+    if (!mActive) {
         mFlushed = true;
         mAudioTrack->flush();
         // Release AudioTrack callback thread in case it was waiting for new buffers
