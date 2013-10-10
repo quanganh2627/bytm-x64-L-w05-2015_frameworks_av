@@ -938,6 +938,12 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
 
         case kWhatSeek:
         {
+            if (mAudioDecoder == NULL && mVideoDecoder == NULL) {
+                ALOGV("postpone seek since decoders are not established");
+                msg->post(100000ll);
+                break;
+            }
+
             int64_t seekTimeUs;
             CHECK(msg->findInt64("seekTimeUs", &seekTimeUs));
 
