@@ -427,7 +427,7 @@ static const preproc_ops_t sAgcOps = {
 //------------------------------------------------------------------------------
 
 static const webrtc::EchoControlMobile::RoutingMode kAecDefaultMode =
-        webrtc::EchoControlMobile::kLoudSpeakerphone;
+        webrtc::EchoControlMobile::kEarpiece;
 static const bool kAecDefaultComfortNoise = true;
 
 int  AecInit (preproc_effect_t *effect)
@@ -526,7 +526,7 @@ int AecSetDevice(preproc_effect_t *effect, uint32_t device)
         mode = webrtc::EchoControlMobile::kEarpiece;
         break;
     case AUDIO_DEVICE_OUT_SPEAKER:
-        mode = webrtc::EchoControlMobile::kLoudSpeakerphone;
+        mode = webrtc::EchoControlMobile::kSpeakerphone;
         break;
     case AUDIO_DEVICE_OUT_WIRED_HEADSET:
     case AUDIO_DEVICE_OUT_WIRED_HEADPHONE:
