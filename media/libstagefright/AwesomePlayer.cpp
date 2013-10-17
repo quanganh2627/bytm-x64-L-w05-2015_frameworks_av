@@ -1658,18 +1658,17 @@ status_t AwesomePlayer::setSurfaceTexture(const sp<ISurfaceTexture> &surfaceText
 }
 
 void AwesomePlayer::shutdownVideoDecoder_l() {
+    if (mVideoBuffer) {
+        mVideoBuffer->release();
+        mVideoBuffer = NULL;
+    }
+
 #ifdef TARGET_HAS_VPP
     if (mVPPProcessor != NULL) {
         delete mVPPProcessor;
         mVPPProcessor = NULL;
     }
-    if (mVideoBuffer && mVideoBuffer->refcount() > 0) {
-#else
-    if (mVideoBuffer) {
 #endif
-        mVideoBuffer->release();
-        mVideoBuffer = NULL;
-    }
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
@@ -2398,6 +2397,7 @@ void AwesomePlayer::onVideoEvent() {
             mVideoBuffer->release();
             mVideoBuffer = NULL;
         }
+        mVPPProcessor->seek();
 
         if (mSeeking == SEEK && isStreamingHTTP() && mAudioSource != NULL
                 && !(mFlags & SEEK_PREVIEW)) {
@@ -2432,7 +2432,6 @@ void AwesomePlayer::onVideoEvent() {
                     mSeeking == SEEK_VIDEO_ONLY
                         ? MediaSource::ReadOptions::SEEK_NEXT_SYNC
                         : MediaSource::ReadOptions::SEEK_CLOSEST_SYNC);
-            mVPPProcessor->seek();
         }
         for (;;) {
             status_t err = mVideoSource->read(&mVideoBuffer, &options);
