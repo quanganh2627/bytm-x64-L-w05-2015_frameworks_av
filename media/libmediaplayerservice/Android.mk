@@ -44,6 +44,14 @@ LOCAL_STATIC_LIBRARIES :=       \
     libstagefright_nuplayer     \
     libstagefright_rtsp         \
 
+ifeq ($(TARGET_HAS_VPP),true)
+LOCAL_SHARED_LIBRARIES += libva \
+                          libva-android \
+                          libva-tpi \
+                          libui
+LOCAL_STATIC_LIBRARIES += libvpp
+endif
+
 LOCAL_C_INCLUDES :=                                                 \
     $(call include-path-for, graphics corecg)                       \
     $(TOP)/frameworks/av/media/libstagefright/include               \
