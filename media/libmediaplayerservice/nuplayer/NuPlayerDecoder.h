@@ -44,6 +44,9 @@ protected:
     virtual void onMessageReceived(const sp<AMessage> &msg);
 
 private:
+#ifdef TARGET_HAS_VPP
+    friend class NuPlayer;
+#endif
     enum {
         kWhatCodecNotify        = 'cdcN',
     };
