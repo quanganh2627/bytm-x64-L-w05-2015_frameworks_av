@@ -2369,6 +2369,8 @@ void AwesomePlayer::onVideoEvent() {
     MediaBuffer *tmpVideoBuffer = mVideoBuffer;
     mVideoBuffer = NULL;
 
+    SeekType seekTmpWithVpp = mSeeking;
+
     if(mVPPProcessor->canSetDecoderBufferToVPP()) {
     if (!mVideoBuffer) {
         MediaSource::ReadOptions options;
@@ -2417,10 +2419,10 @@ void AwesomePlayer::onVideoEvent() {
                     startAudioPlayer_l();
                 }
 
-                if (seekTemp != NO_SEEK) {
-                    modifyFlags(AUDIO_AT_EOS, SET); // video is eos, end the audio?
-                    mVideoTimeUs = mSeekTimeUs;
-                }
+                //if (seekTemp != NO_SEEK) {
+                //    modifyFlags(AUDIO_AT_EOS, SET); // video is eos, end the audio?
+                //    mVideoTimeUs = mSeekTimeUs;
+                //}
                 mVPPProcessor->setEOS();
 
                 //modifyFlags(VIDEO_AT_EOS, SET);
@@ -2469,6 +2471,12 @@ void AwesomePlayer::onVideoEvent() {
         if (err == ERROR_END_OF_STREAM) {
             ALOGV("VPP finished");
             CHECK(mVideoBuffer == NULL);
+
+            if (seekTmpWithVpp != NO_SEEK) {
+                modifyFlags(AUDIO_AT_EOS, SET); // video is eos, end the audio?
+                mVideoTimeUs = mSeekTimeUs;
+            }
+
             modifyFlags(VIDEO_AT_EOS, SET);
             postStreamDoneEvent_l(err);
             return;
