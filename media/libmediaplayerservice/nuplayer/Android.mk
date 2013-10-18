@@ -20,6 +20,16 @@ LOCAL_C_INCLUDES := \
 	$(TOP)/frameworks/av/media/libstagefright/rtsp                \
 	$(TOP)/frameworks/native/include/media/openmax
 
+ifeq ($(TARGET_HAS_VPP),true)
+LOCAL_CFLAGS += -DTARGET_HAS_VPP -DGFX_BUF_EXT
+LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libmedia_utils_vpp \
+        $(TARGET_OUT_HEADERS)/libva	\
+LOCAL_SHARED_LIBRARIES += libva \
+                          libva-android \
+                          libva-tpi
+endif
+
 LOCAL_MODULE:= libstagefright_nuplayer
 
 LOCAL_MODULE_TAGS := eng

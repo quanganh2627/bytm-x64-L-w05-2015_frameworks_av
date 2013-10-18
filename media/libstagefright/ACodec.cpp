@@ -39,6 +39,10 @@
 
 #include "include/avc_utils.h"
 
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#endif
+
 namespace android {
 
 template<class T>
@@ -366,6 +370,10 @@ ACodec::ACodec()
       mIsConfiguredForAdaptivePlayback(false),
       mEncoderDelay(0),
       mEncoderPadding(0),
+#ifdef TARGET_HAS_VPP
+      mVppInBufNum(0),
+      mVppOutBufNum(0),
+#endif
       mChannelMaskPresent(false),
       mChannelMask(0),
       mDequeueCounter(0),
@@ -560,6 +568,18 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
     return OK;
 }
 
+
+#ifdef TARGET_HAS_VPP
+void ACodec::setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum) {
+    mVppInBufNum = inBufNum;
+    mVppOutBufNum = outBufNum;
+}
+
+bool ACodec::isVppBufferAvail() {
+    return (mVppInBufNum != 0);
+}
+#endif
+
 status_t ACodec::configureOutputBuffersFromNativeWindow(
         OMX_U32 *bufferCount, OMX_U32 *bufferSize,
         OMX_U32 *minUndequeuedBuffers) {
@@ -654,6 +674,46 @@ status_t ACodec::configureOutputBuffersFromNativeWindow(
         }
     }
 
+#ifdef TARGET_HAS_VPP
+    //add more buffers
+    bool isVppOn = NuPlayerVPPProcessor::isVppOn();
+    if (isVppOn) {
+        ALOGE("def.nBufferCountActual = %d",def.nBufferCountActual);
+        int totalBufferCount = def.nBufferCountActual + mVppInBufNum + mVppOutBufNum;
+
+        err = native_window_set_buffer_count(
+                mNativeWindow.get(), totalBufferCount);
+        if (err == 0) {
+            def.nBufferCountActual = totalBufferCount;
+            err = mOMX->setParameter(
+                    mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
+            if (err != OK) {
+                ALOGE("setting nBufferCountActual to %lu failed: %d",
+                    def.nBufferCountActual, err);
+                return err;
+            }
+        } else {
+            err = native_window_set_buffer_count(
+                mNativeWindow.get(), def.nBufferCountActual);
+            if (err == 0) {
+                mVppInBufNum = 0;
+                mVppOutBufNum = 0;
+            } else {
+                ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err),
+                        -err);
+                return err;
+            }
+        }
+    } else {
+        err = native_window_set_buffer_count(
+                mNativeWindow.get(), def.nBufferCountActual);
+        if (err != 0) {
+            ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err),
+                    -err);
+            return err;
+        }
+    }
+#else
     err = native_window_set_buffer_count(
             mNativeWindow.get(), def.nBufferCountActual);
 
@@ -662,11 +722,13 @@ status_t ACodec::configureOutputBuffersFromNativeWindow(
                 -err);
         return err;
     }
+#endif
 
     *bufferCount = def.nBufferCountActual;
     *bufferSize =  def.nBufferSize;
     return err;
 }
+
 
 status_t ACodec::allocateOutputBuffersFromNativeWindow() {
     OMX_U32 bufferCount, bufferSize, minUndequeuedBuffers;
@@ -694,6 +756,7 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         info.mData = new ABuffer(NULL /* data */, bufferSize /* capacity */);
         info.mGraphicBuffer = graphicBuffer;
         mBuffers[kPortIndexOutput].push(info);
+        LOGV("index = %d, graphicBuffer = %p", i, graphicBuffer.get());
 
         IOMX::buffer_id bufferId;
         err = mOMX->useGraphicBuffer(mNode, kPortIndexOutput, graphicBuffer,
@@ -721,7 +784,16 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         cancelEnd = mBuffers[kPortIndexOutput].size();
     } else {
         // Return the required minimum undequeued buffers to the native window.
+#ifdef TARGET_HAS_VPP
+        bool isVppOn = NuPlayerVPPProcessor::isVppOn();
+        if (isVppOn) {
+            cancelStart = bufferCount - minUndequeuedBuffers- mVppOutBufNum;
+        } else {
+            cancelStart = bufferCount - minUndequeuedBuffers;
+        }
+#else
         cancelStart = bufferCount - minUndequeuedBuffers;
+#endif
         cancelEnd = bufferCount;
     }
 
@@ -798,13 +870,13 @@ status_t ACodec::cancelBufferToNativeWindow(BufferInfo *info) {
     ALOGV("[%s] Calling cancelBuffer on buffer %p",
          mComponentName.c_str(), info->mBufferID);
 
+
     int err = mNativeWindow->cancelBuffer(
         mNativeWindow.get(), info->mGraphicBuffer.get(), -1);
 
     CHECK_EQ(err, 0);
 
     info->mStatus = BufferInfo::OWNED_BY_NATIVE_WINDOW;
-
     return OK;
 }
 
@@ -812,6 +884,40 @@ ACodec::BufferInfo *ACodec::dequeueBufferFromNativeWindow() {
     ANativeWindowBuffer *buf;
     int fenceFd = -1;
     CHECK(mNativeWindow.get() != NULL);
+
+#if TARGET_HAS_VPP
+    int num = mVppInBufNum + 1;
+    while(num--) {
+        if (native_window_dequeue_buffer_and_wait(mNativeWindow.get(), &buf) != 0) {
+            ALOGE("dequeueBuffer failed.");
+            return NULL;
+        }
+
+        size_t i;
+        BufferInfo *info;
+        for (i = mBuffers[kPortIndexOutput].size(); i-- > 0;) {
+            info = &mBuffers[kPortIndexOutput].editItemAt(i);
+
+            if (info->mGraphicBuffer->handle == buf->handle) {
+                break;
+            }
+        }
+        if (i < 0) return NULL;
+        /*
+         * The buffer is still used as reference by VPP,
+         * go on dequeue next buffer, until we get a free one.
+         */
+        if (info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM) {
+            info->mData->meta()->setInt32("in_ref", 1);
+            continue;
+        }
+        CHECK_EQ((int)info->mStatus,
+                (int)BufferInfo::OWNED_BY_NATIVE_WINDOW);
+
+        info->mStatus = BufferInfo::OWNED_BY_US;
+        return info;
+    }
+#else
     if (native_window_dequeue_buffer_and_wait(mNativeWindow.get(), &buf) != 0) {
         ALOGE("dequeueBuffer failed.");
         return NULL;
@@ -865,7 +971,7 @@ ACodec::BufferInfo *ACodec::dequeueBufferFromNativeWindow() {
 
         return oldest;
     }
-
+#endif
     TRESPASS();
 
     return NULL;
@@ -2470,12 +2576,28 @@ bool ACodec::allYourBuffersAreBelongToUs(
         OMX_U32 portIndex) {
     for (size_t i = 0; i < mBuffers[portIndex].size(); ++i) {
         BufferInfo *info = &mBuffers[portIndex].editItemAt(i);
-
+#ifdef TARGET_HAS_VPP
+        if (info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM) {
+            LOGE("downstream buffer = %p", info->mGraphicBuffer.get());
+            int32_t processing;
+            if (info->mData->meta()->findInt32("processing", &processing) && (processing == 1)) {
+                continue;
+            }
+        }
+#endif
         if (info->mStatus != BufferInfo::OWNED_BY_US
+#ifdef TARGET_HAS_VPP
+                && info->mStatus != BufferInfo::OWNED_BY_VPP
+#endif
                 && info->mStatus != BufferInfo::OWNED_BY_NATIVE_WINDOW) {
             ALOGV("[%s] Buffer %p on port %ld still has status %d",
                     mComponentName.c_str(),
                     info->mBufferID, portIndex, info->mStatus);
+            int64_t time;
+            info->mData->meta()->findInt64("timeUs", &time);
+            LOGV("[%s] Buffer %p on port %ld still has status %d, graphicBuffer = %p, timeUs = %lld",
+                    mComponentName.c_str(),
+                    info->mBufferID, portIndex, info->mStatus, info->mGraphicBuffer.get(), time);
             return false;
         }
     }
@@ -3432,6 +3554,265 @@ bool ACodec::BaseState::onOMXFillBufferDone(
 }
 
 void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
+#ifdef TARGET_HAS_VPP
+
+
+
+    IOMX::buffer_id bufferID;
+    CHECK(msg->findPointer("buffer-id", &bufferID));
+
+    ssize_t index;
+    BufferInfo *info =
+        mCodec->findBufferByID(kPortIndexOutput, bufferID, &index);
+
+    
+
+    /*TODO: debug info , to be deleted*/
+    int64_t time = -1;
+    info->mData->meta()->findInt64("timeUs", &time);
+    if (info->mGraphicBuffer.get() != NULL)
+        LOGV("info = %p, status = %d, time = %lld, graphicBuffer = %p", info, info->mStatus, time, info->mGraphicBuffer.get());
+    int output, input, r, once;
+    if (msg->findInt32("vppOutput", &output))
+        LOGV("is vpp output = %d\n", output);
+    if (msg->findInt32("vppInput", &input))
+        LOGV("is vpp input = %d\n", input);
+    if (msg->findInt32("render", &r))
+        LOGV("is render = %d\n", r);
+    if (msg->findInt32("processOnce", &once))
+        LOGV("is processOnce = %d\n", once);
+    /* debug info */
+
+    CHECK((info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM)
+            ||(info->mStatus == BufferInfo::OWNED_BY_VPP));
+
+
+    android_native_rect_t crop;
+    if (msg->findRect("crop",
+            &crop.left, &crop.top, &crop.right, &crop.bottom)) {
+        CHECK_EQ(0, native_window_set_crop(
+                mCodec->mNativeWindow.get(), &crop));
+    }
+
+    int32_t render;
+    // The client may choose not to render a buffer but we will
+    // need to apply the format change regardless as we would get
+    // only one format change call, associated with a buffer.
+    int32_t sentformat;
+    int32_t hide;
+    sp<AMessage> reply =
+        new AMessage(kWhatOutputBufferDrained, mCodec->id());
+
+    if (msg->findInt32("sent-format", &sentformat)) {
+        if (!sentformat) {
+            mCodec->sendFormatChange(reply);
+        }
+    }
+
+    int32_t vppOutput = 0;
+    // process vpp output
+    if (msg->findInt32("vppOutput", &vppOutput) && vppOutput == 1) {
+        sp<AMessage> vppNotifyConsumed;
+        CHECK(msg->findMessage("vppNotifyConsumed", &vppNotifyConsumed));
+
+        if (mCodec->mNativeWindow != NULL
+                && msg->findInt32("render", &render) && render != 0
+                && !msg->findInt32("hide", &hide)) {
+            // The client wants this buffer to be rendered.
+            status_t err;
+            if ((err = mCodec->mNativeWindow->queueBuffer(
+                            mCodec->mNativeWindow.get(),
+                            info->mGraphicBuffer.get(), -1)) == OK) {
+                info->mStatus = BufferInfo::OWNED_BY_NATIVE_WINDOW;
+
+                vppNotifyConsumed->setInt32("reuse", false);
+                vppNotifyConsumed->post();
+            } else {
+                mCodec->signalError(OMX_ErrorUndefined, err);
+                info->mStatus = BufferInfo::OWNED_BY_VPP;
+
+                vppNotifyConsumed->setInt32("reuse", true);
+                vppNotifyConsumed->post();
+            }
+        } else {
+            info->mStatus = BufferInfo::OWNED_BY_VPP;
+            vppNotifyConsumed->setInt32("reuse", true);
+            vppNotifyConsumed->post();
+        }
+    } else {
+        // process 1) vpp input; 2) buffers not send to vpp buffers.
+        int32_t vppInput = 0;
+        // The buffer which is not sent to VPP, only process once.
+        if(!msg->findInt32("vppInput", &vppInput)) {
+            if (mCodec->mNativeWindow != NULL
+                    && msg->findInt32("render", &render) && render != 0
+                    && !msg->findInt32("hide", &hide)) {
+                // The client wants this buffer to be rendered.
+
+                status_t err;
+                if ((err = mCodec->mNativeWindow->queueBuffer(
+                                mCodec->mNativeWindow.get(),
+                                info->mGraphicBuffer.get(), -1)) == OK) {
+                    info->mStatus = BufferInfo::OWNED_BY_NATIVE_WINDOW;
+                } else {
+                    mCodec->signalError(OMX_ErrorUndefined, err);
+                    info->mStatus = BufferInfo::OWNED_BY_US;
+                }
+            } else {
+                info->mStatus = BufferInfo::OWNED_BY_US;
+            }
+
+
+            PortMode mode = getPortMode(kPortIndexOutput);
+
+            switch (mode) {
+                case KEEP_BUFFERS:
+                    {
+                        // XXX fishy, revisit!!! What about the FREE_BUFFERS case below?
+
+                        if (info->mStatus == BufferInfo::OWNED_BY_NATIVE_WINDOW) {
+                            // We cannot resubmit the buffer we just rendered, dequeue
+                            // the spare instead.
+
+                            info = mCodec->dequeueBufferFromNativeWindow();
+                        }
+                        break;
+                    }
+
+                case RESUBMIT_BUFFERS:
+                    {
+                        if (!mCodec->mPortEOS[kPortIndexOutput]) {
+                            if (info->mStatus == BufferInfo::OWNED_BY_NATIVE_WINDOW) {
+                                // We cannot resubmit the buffer we just rendered, dequeue
+                                // the spare instead.
+
+                                info = mCodec->dequeueBufferFromNativeWindow();
+                            }
+
+                            if (info != NULL) {
+                                ALOGV("[%s] calling fillBuffer %p",
+                                        mCodec->mComponentName.c_str(), info->mBufferID);
+
+                                CHECK_EQ(mCodec->mOMX->fillBuffer(mCodec->mNode, info->mBufferID),
+                                        (status_t)OK);
+
+                                info->mStatus = BufferInfo::OWNED_BY_COMPONENT;
+                            }
+                        }
+                        break;
+                    }
+
+                default:
+                    {
+                        CHECK_EQ((int)mode, (int)FREE_BUFFERS);
+
+                        CHECK_EQ((status_t)OK,
+                                mCodec->freeBuffer(kPortIndexOutput, index));
+                        break;
+                    }
+            }
+        } else {
+            int32_t processOnce;
+            // The buffer which replace by VPP output, only process once.
+            if (mCodec->mNativeWindow == NULL
+                    || !msg->findInt32("render", &render)
+                    || msg->findInt32("hide", &hide)) {
+                //LOGE("The buffer which replace by VPP output, only process once");
+                processOnce = 1;
+                msg->setInt32("processOnce", processOnce);
+                info->mStatus = BufferInfo::OWNED_BY_VPP;
+            }
+            // The buffer which send to VPP and also rendered (when VPP speed does not catch up with decode speed)
+            if (!msg->findInt32("processOnce", &processOnce)) {
+                //LOGE("The buffer which send to VPP and also rendered (when VPP speed does not catch up with decode speed)");
+                processOnce = 1;
+                msg->setInt32("processOnce", processOnce);
+                if (mCodec->mNativeWindow != NULL
+                        && msg->findInt32("render", &render) && render != 0
+                        && !msg->findInt32("hide", &hide)) {
+                    // The client wants this buffer to be rendered.
+
+                    status_t err;
+                    if ((err = mCodec->mNativeWindow->queueBuffer(
+                                    mCodec->mNativeWindow.get(),
+                                    info->mGraphicBuffer.get(), -1)) == OK) {
+                        //                   info->mStatus = BufferInfo::OWNED_BY_NATIVE_WINDOW;
+                    } else {
+                        mCodec->signalError(OMX_ErrorUndefined, err);
+                        //                   info->mStatus = BufferInfo::OWNED_BY_US;
+                        info->mStatus = BufferInfo::OWNED_BY_VPP;
+                    }
+                } else {
+                    //               info->mStatus = BufferInfo::OWNED_BY_US;
+                    info->mStatus = BufferInfo::OWNED_BY_VPP;
+                }
+            } else if (processOnce == 1){
+                //LOGE("release second time %lld, status = %d", time, info->mStatus);
+                if (info->mStatus == BufferInfo::OWNED_BY_VPP) {
+                    info->mStatus =  BufferInfo::OWNED_BY_US;
+                } else if (info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM) {
+                    int32_t in_ref;
+                    if ((!(info->mData->meta()->findInt32("in_ref", &in_ref)))
+                            || (in_ref == 0)) {
+                        info->mStatus =  BufferInfo::OWNED_BY_NATIVE_WINDOW;
+                    } else if (in_ref == 1) {
+                        info->mStatus =  BufferInfo::OWNED_BY_US;
+                        info->mData->meta()->setInt32("in_ref", 0);
+                    }
+                }
+
+                PortMode mode = getPortMode(kPortIndexOutput);
+
+                switch (mode) {
+                    case KEEP_BUFFERS:
+                        {
+                            // XXX fishy, revisit!!! What about the FREE_BUFFERS case below?
+
+                            if (info->mStatus == BufferInfo::OWNED_BY_NATIVE_WINDOW) {
+                                // We cannot resubmit the buffer we just rendered, dequeue
+                                // the spare instead.
+
+                                info = mCodec->dequeueBufferFromNativeWindow();
+                            }
+                            break;
+                        }
+
+                    case RESUBMIT_BUFFERS:
+                        {
+                            if (!mCodec->mPortEOS[kPortIndexOutput]) {
+                                if (info->mStatus == BufferInfo::OWNED_BY_NATIVE_WINDOW) {
+                                    // We cannot resubmit the buffer we just rendered, dequeue
+                                    // the spare instead.
+
+                                    info = mCodec->dequeueBufferFromNativeWindow();
+                                }
+                                if (info != NULL) {
+                                    ALOGV("[%s] calling fillBuffer %p",
+                                            mCodec->mComponentName.c_str(), info->mBufferID);
+
+                                    CHECK_EQ(mCodec->mOMX->fillBuffer(mCodec->mNode, info->mBufferID),
+                                            (status_t)OK);
+
+                                    info->mStatus = BufferInfo::OWNED_BY_COMPONENT;
+                                }
+                            }
+                            break;
+                        }
+
+                    default:
+                        {
+                            CHECK_EQ((int)mode, (int)FREE_BUFFERS);
+
+                            CHECK_EQ((status_t)OK,
+                                    mCodec->freeBuffer(kPortIndexOutput, index));
+                            break;
+                        }
+                }
+            }
+
+        }
+    }
+#else
     IOMX::buffer_id bufferID;
     CHECK(msg->findPointer("buffer-id", &bufferID));
 
@@ -3514,6 +3895,7 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
             break;
         }
     }
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4099,10 +4481,25 @@ void ACodec::ExecutingState::submitRegularOutputBuffers() {
         BufferInfo *info = &mCodec->mBuffers[kPortIndexOutput].editItemAt(i);
 
         if (mCodec->mNativeWindow != NULL) {
+#ifdef TARGET_HAS_VPP
+            if (info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM) {
+                int32_t processing;
+                if (info->mData->meta()->findInt32("processing", &processing) && (processing == 1)) {
+                    continue;
+                }
+            }
+#endif
             CHECK(info->mStatus == BufferInfo::OWNED_BY_US
+#ifdef TARGET_HAS_VPP
+                    || info->mStatus == BufferInfo::OWNED_BY_VPP
+#endif
                     || info->mStatus == BufferInfo::OWNED_BY_NATIVE_WINDOW);
 
-            if (info->mStatus == BufferInfo::OWNED_BY_NATIVE_WINDOW) {
+            if (info->mStatus == BufferInfo::OWNED_BY_NATIVE_WINDOW
+#ifdef TARGET_HAS_VPP
+                    || info->mStatus == BufferInfo::OWNED_BY_VPP
+#endif
+            ) {
                 continue;
             }
         } else {

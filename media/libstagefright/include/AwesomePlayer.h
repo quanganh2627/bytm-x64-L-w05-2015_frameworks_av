@@ -276,7 +276,7 @@ private:
 
     void setVideoSource(sp<MediaSource> source);
 #ifdef TARGET_HAS_VPP
-    VPPProcessor* createVppProcessor_l();
+    VPPProcessor* createVppProcessor_l(OMXCodec *omxCodec);
 #endif
     status_t initVideoDecoder(uint32_t flags = 0);
 

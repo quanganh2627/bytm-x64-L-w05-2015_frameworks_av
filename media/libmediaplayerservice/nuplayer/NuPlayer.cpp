@@ -29,7 +29,9 @@
 #include "StreamingSource.h"
 #include "GenericSource.h"
 #include "mp4/MP4Source.h"
-
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#endif
 #include "ATSParser.h"
 
 #include <cutils/properties.h> // for property_get
@@ -161,6 +163,9 @@ NuPlayer::NuPlayer()
       mVideoLateByUs(0ll),
       mNumFramesTotal(0ll),
       mNumFramesDropped(0ll),
+#ifdef TARGET_HAS_VPP
+      mIsVppInit(false),
+#endif
       mVideoScalingMode(NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW),
       mStarted(false) {
 }
@@ -611,6 +616,14 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     ALOGV("initiating %s decoder shutdown",
                          audio ? "audio" : "video");
 
+/*#ifdef TARGET_HAS_VPP
+                    if (mVideoEOS) {
+                        mRenderer->releaseVppProcessor();
+                        mVPPProcessor.clear();
+                        mIsVppInit = false;
+                    }
+#endif*/
+
                     (audio ? mAudioDecoder : mVideoDecoder)->initiateShutdown();
 
                     if (audio) {
@@ -741,6 +754,25 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     mVideoEosErr = UNKNOWN_ERROR;
                 }
             } else if (what == ACodec::kWhatDrainThisBuffer) {
+#ifdef TARGET_HAS_VPP
+                // init VPP
+                if (!audio) {
+                    if (!mIsVppInit && mVideoDecoder != NULL && mVPPProcessor != NULL) {
+                        mIsVppInit = true;
+                        sp<ACodec> codec = mVideoDecoder->mCodec;
+                        bool success = codec->isVppBufferAvail();
+                        if (success) {
+                            if(mVPPProcessor->init(codec) != VPP_OK){
+                                mRenderer->releaseVppProcessor();
+                                mVPPProcessor.clear();
+                            }
+                        } else {
+                            mRenderer->releaseVppProcessor();
+                            mVPPProcessor.clear();
+                        }
+                    }
+                }
+#endif
                 renderBuffer(audio, codecRequest);
             } else if (what != ACodec::kWhatComponentAllocated
                     && what != ACodec::kWhatComponentConfigured
@@ -794,6 +826,7 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                         && (mVideoEOS || mVideoDecoder == NULL)) {
                     notifyListener(MEDIA_PLAYBACK_COMPLETE, 0, 0);
                 }
+
             } else if (what == Renderer::kWhatPosition) {
                 int64_t positionUs;
                 CHECK(msg->findInt64("positionUs", &positionUs));
@@ -832,6 +865,11 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
         {
             ALOGV("kWhatReset");
 
+#ifdef TARGET_HAS_VPP
+            if (mVPPProcessor != NULL) {
+                mVPPProcessor->flushShutdown();
+            }
+#endif
             mDeferredActions.push_back(
                     new ShutdownDecoderAction(
                         true /* audio */, true /* video */));
@@ -967,8 +1005,48 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
 
     (*decoder)->configure(format);
 
+#ifdef TARGET_HAS_VPP
+    if (!audio) {
+        if(mVPPProcessor == NULL) {
+            mVPPProcessor = createVppProcessor();
+            if(mVPPProcessor != NULL) {
+                sp<ACodec> codec = (*decoder)->mCodec;
+                looper()->registerHandler(mVPPProcessor);
+                LOGE("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
+                        mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+                codec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+            }
+        }
+    }
+#endif
+
     return OK;
 }
+
+#ifdef TARGET_HAS_VPP
+sp<NuPlayerVPPProcessor> NuPlayer::createVppProcessor() {
+    sp<NuPlayerVPPProcessor> processor = NULL;
+    if (NuPlayerVPPProcessor::isVppOn()) {
+        int32_t width = 0, height = 0, fps = 0;
+        VPPVideoInfo info;
+        memset(&info, 0, sizeof(VPPVideoInfo));
+
+        sp<AMessage> format = mSource->getFormat(false);
+        sp<MetaData> meta = new MetaData();
+        convertMessageToMetaData(format, meta);
+        CHECK(meta->findInt32(kKeyWidth, &width));
+        CHECK(meta->findInt32(kKeyHeight, &height));
+        if (!meta->findInt32(kKeyFrameRate, &fps))
+            fps = 0;
+        info.fps = fps;
+        info.width = width;
+        info.height = height;
+
+        processor = mRenderer->createVppProcessor(&info, mNativeWindow);
+    }
+    return processor;
+}
+#endif
 
 status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
     sp<AMessage> reply;
@@ -1368,6 +1446,13 @@ void NuPlayer::performReset() {
 
     CHECK(mAudioDecoder == NULL);
     CHECK(mVideoDecoder == NULL);
+
+#ifdef TARGET_HAS_VPP
+    if (mVPPProcessor != NULL && mRenderer != NULL) {
+        mRenderer->releaseVppProcessor();
+        mVPPProcessor.clear();
+    }
+#endif
 
     cancelPollDuration();
 

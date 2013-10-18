@@ -22,6 +22,10 @@
 #include <media/stagefright/foundation/AHandler.h>
 #include <media/stagefright/NativeWindowWrapper.h>
 
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#endif
+
 namespace android {
 
 struct ACodec;
@@ -121,6 +125,11 @@ private:
 
     List<sp<Action> > mDeferredActions;
 
+#ifdef TARGET_HAS_VPP
+    sp<NuPlayerVPPProcessor> mVPPProcessor;
+    bool mIsVppInit;
+    sp<NuPlayerVPPProcessor> createVppProcessor();
+#endif
     bool mAudioEOS;
     bool mVideoEOS;
 
