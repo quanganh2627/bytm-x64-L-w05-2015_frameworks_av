@@ -114,6 +114,13 @@ void SoftVideoDecoderOMXComponent::initPorts(
 
     addPort(def);
 
+    if (!strcasecmp("video/3gpp", const_cast<char *>(mimeType))) {
+        // H.263 requires the max size supported by the decoder
+        // which is 16CIF (1408x1152)
+        mWidth=1408;
+        mHeight=1152;
+    }
+
     updatePortDefinitions();
 }
 
