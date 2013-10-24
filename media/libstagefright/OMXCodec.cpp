@@ -2029,6 +2029,22 @@ status_t OMXCodec::applyRotation() {
 void OMXCodec::setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum) {
     mVppInBufNum = inBufNum;
     mVppOutBufNum = outBufNum;
+    if (!strncmp(mComponentName, "OMX.Intel.VideoDecoder", 22)) {
+        int32_t number = mVppInBufNum + mVppOutBufNum;
+        // set vpp buffer number to decoder
+        OMX_INDEXTYPE index;
+        status_t error =
+            mOMX->getExtensionIndex(
+                    mNode,
+                    "OMX.Intel.index.vppBufferNum",
+                    &index);
+        if (error == OK) {
+            error = mOMX->setParameter(mNode, index, (void*)&number, sizeof(int32_t));
+        } else {
+            // ingore this error
+            ALOGW("Get vpp number index failed");
+        }
+    }
 }
 
 bool OMXCodec::isVppBufferAvail() {
