@@ -1621,8 +1621,7 @@ OMXCodec::OMXCodec(
       mParserAudioDump(NULL),
 #endif
       mNativeWindow(
-              (!strncmp(componentName, "OMX.google.", 11)
-              || !strncmp(componentName, "OMX.Intel.sw_vd", 15))
+              (!strncmp(componentName, "OMX.google.", 11))
                         ? NULL : nativeWindow) {
     mPortStatus[kPortIndexInput] = ENABLED;
     mPortStatus[kPortIndexOutput] = ENABLED;
