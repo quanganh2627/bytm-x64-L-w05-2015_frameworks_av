@@ -353,10 +353,11 @@ void NuPlayer::Renderer::postDrainVideoQueue() {
         for(it = mVideoQueue.begin(); it != mVideoQueue.end(); it++) {
             if ((*it).mBuffer == NULL || (*it).mNotifyConsumed == NULL) break;
             sp<AMessage> notifyConsumed = (*it).mNotifyConsumed;
-            int32_t input, output, notInput;
+            int32_t input, output, notInput, hide;
             if (notifyConsumed->findInt32("vppInput", &input)
                     || notifyConsumed->findInt32("vppOutput", &output)
-                    || notifyConsumed->findInt32("notVppInput", &notInput)) {
+                    || notifyConsumed->findInt32("notVppInput", &notInput)
+                    || notifyConsumed->findInt32("hide", &hide)) {
                 continue;
             }
             if (mVPPProcessor->canSetBufferToVPP() == VPP_OK) {
