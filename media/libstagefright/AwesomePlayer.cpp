@@ -2579,7 +2579,7 @@ void AwesomePlayer::onVideoEvent() {
             return;
         } else if (latenessUs < -10000) {
             // We're more than 10ms early.
-            postVideoEvent_l(-latenessUs);
+            postVideoEvent_l(8000);
             return;
         }
     }
@@ -2689,7 +2689,7 @@ void AwesomePlayer::postVideoEvent_l(int64_t delayUs) {
     }
 
     mVideoEventPending = true;
-    mQueue.postEventWithDelay(mVideoEvent, delayUs < 0 ? 10000 : delayUs);
+    mQueue.postEventWithDelay(mVideoEvent, delayUs < 0 ? 8000 : delayUs);
 }
 
 void AwesomePlayer::postStreamDoneEvent_l(status_t status) {
