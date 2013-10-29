@@ -147,16 +147,6 @@ LOCAL_SRC_FILES += \
         chromium_http_stub.cpp
 LOCAL_CPPFLAGS += -DCHROMIUM_AVAILABLE=1
 
-ifeq ($(USE_INTEL_ASF_EXTRACTOR),true)
-
-LOCAL_C_INCLUDES += \
-        $(TARGET_OUT_HEADERS)/libmix_asf_extractor
-
-LOCAL_STATIC_LIBRARIES += libasfextractor
-LOCAL_SHARED_LIBRARIES += libasfparser
-LOCAL_CPPFLAGS += -DUSE_INTEL_ASF_EXTRACTOR
-endif
-
 ifeq ($(USE_INTEL_MDP),true)
 LOCAL_C_INCLUDES += \
           $(TARGET_OUT_HEADERS)/media_codecs
@@ -178,9 +168,7 @@ LOCAL_STATIC_LIBRARIES += \
           lib_stagefright_mdp_vorbisdec \
           libmc_vorbis_dec \
           libmc_codec_common \
-          libmc_core \
-          lib_stagefright_mdp_wmadec \
-          libmc_wma_dec
+          libmc_core
 
 
 LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
