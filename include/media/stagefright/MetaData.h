@@ -165,11 +165,6 @@ enum {
     kKeyCryptoDefaultIVSize = 'cryS',  // int32_t
 
     kKeyPssh              = 'pssh',  // raw data
-#ifdef USE_INTEL_ASF_EXTRACTOR
-    kKeyWmaBlockAlign     = 'blka',
-    kKeyWmaFormatTag      = 'frmt',
-    kKeyBitPerSample      = 'btps',
-#endif //ifdef USE_INTEL_ASF_EXTRACTOR
 
 };
 

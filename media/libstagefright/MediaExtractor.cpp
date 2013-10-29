@@ -31,10 +31,6 @@
 #include "include/FLACExtractor.h"
 #include "include/AACExtractor.h"
 
-#ifdef USE_INTEL_ASF_EXTRACTOR
-#include "AsfExtractor.h"
-#include "MetaDataExt.h"
-#endif
 #include "matroska/MatroskaExtractor.h"
 
 #include <media/stagefright/foundation/AMessage.h>
@@ -114,10 +110,6 @@ sp<MediaExtractor> MediaExtractor::Create(
         ret = new MatroskaExtractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG2TS)) {
         ret = new MPEG2TSExtractor(source);
-#ifdef USE_INTEL_ASF_EXTRACTOR
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)) {
-        return new AsfExtractor(source);
-#endif
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_AVI)) {
         ret = new AVIExtractor(source);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_WVM)) {
