@@ -71,6 +71,8 @@ public:
     virtual status_t    getCameraInfo(int cameraId,
                                       struct CameraInfo* cameraInfo);
 
+    virtual status_t    setPriority(int cameraId, bool priority);
+
     virtual sp<ICamera> connect(const sp<ICameraClient>& cameraClient, int cameraId,
             const String16& clientPackageName, int clientUid);
     virtual sp<IProCameraUser> connect(const sp<IProCameraCallbacks>& cameraCb,
@@ -120,6 +122,8 @@ public:
         wp<IBinder>     getRemote() {
             return mRemoteBinder;
         }
+
+        void serviceDisconnect();
 
     protected:
         BasicClient(const sp<CameraService>& cameraService,
@@ -223,6 +227,9 @@ public:
             return mRemoteCallback;
         }
 
+        bool                 isLowPriorityClient() { return mLowPriorityClient; }
+        void                 setLowPriority() { mLowPriorityClient = true; }
+
     protected:
         static Mutex*        getClientLockFromCookie(void* user);
         // convert client from cookie. Client lock should be acquired before getting Client.
@@ -234,6 +241,11 @@ public:
 
         // - The app-side Binder interface to receive callbacks from us
         sp<ICameraClient>               mRemoteCallback;
+
+        // When true, the client is running as a background activity and can be
+        // closed by the ServiceLayer when normal priority camera requests are
+        // started by the applications
+        bool                            mLowPriorityClient;
 
     }; // class Client
 
@@ -308,6 +320,9 @@ private:
     wp<Client>          mClient[MAX_CAMERAS];  // protected by mServiceLock
     Mutex               mClientLock[MAX_CAMERAS]; // prevent Client destruction inside callbacks
     int                 mNumberOfCameras;
+
+    // A process can request a future camera instance to be low priority
+    int                 mLowPriorityPid[MAX_CAMERAS];
 
     typedef wp<ProClient> weak_pro_client_ptr;
     Vector<weak_pro_client_ptr> mProClientList[MAX_CAMERAS];

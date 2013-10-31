@@ -663,10 +663,6 @@ MediaBuffer *FLACParser::readBuffer(bool doSeek, FLAC__uint64 sample)
         return NULL;
     }
 
-    if (doSeek) {
-        blocksize = 0;
-    }
-
     size_t bufferSize = blocksize * getChannels() * sizeof(short);
     CHECK(bufferSize <= mMaxBufferSize);
     short *data = (short *) buffer->data();
