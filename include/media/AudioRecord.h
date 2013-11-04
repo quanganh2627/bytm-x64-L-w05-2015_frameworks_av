@@ -271,6 +271,12 @@ public:
             status_t    setPositionUpdatePeriod(uint32_t updatePeriod);
             status_t    getPositionUpdatePeriod(uint32_t *updatePeriod) const;
 
+#if PLATFORM_ASF_VERSION >= 2
+    /* Function notifyMicrophoneAccess : This function acts a hook point,
+     * that sends notification to ASF client by binding to native service security device
+     */
+            bool  notifyMicrophoneAccess();
+#endif
     /* Return the total number of frames recorded since recording started.
      * The counter will wrap (overflow) periodically, e.g. every ~27 hours at 44.1 kHz.
      * It is reset to zero by stop().
