@@ -330,6 +330,15 @@ private:
     // Delay-load the Camera HAL module
     virtual void onFirstRef();
 
+#if PLATFORM_ASF_VERSION >= 2
+    /**
+     * Function notifyCameraAccess : This function acts a hook point,
+     * that sends notification to ASF client by binding to native service security device.
+     */
+    bool notifyCameraAccess();
+#endif
+
+
     // Step 1. Check if we can connect, before we acquire the service lock.
     status_t            validateConnect(int cameraId,
                                         /*inout*/
