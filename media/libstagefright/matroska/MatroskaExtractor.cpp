@@ -974,10 +974,13 @@ int MatroskaExtractor::addTracks() {
 
                 if (!strcmp("A_AAC", codecID)) {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AAC);
-                    if (codecPrivateSize < 2) {
-                        return -1;
-                    }
 
+                    // Matroska spec does not expect any codec private data
+                    //however files containing codec private data will be supported
+                    if(codecPrivateSize <2) {
+                        ALOGW(" codecPrivate size < 2  ");
+                        codecPrivateSize =0;
+                    }
                     addESDSFromCodecPrivate(
                             meta, true, codecPrivate, codecPrivateSize);
                 } else if (!strcmp("A_VORBIS", codecID)) {
