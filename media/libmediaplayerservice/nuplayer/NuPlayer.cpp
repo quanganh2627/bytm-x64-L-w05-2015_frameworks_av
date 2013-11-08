@@ -187,6 +187,7 @@ NuPlayer::NuPlayer()
       mIsVppInit(false),
 #endif
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mVideoSessionId(-1),
       mMDClient(NULL),
 #endif
       mVideoScalingMode(NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW),
@@ -229,19 +230,39 @@ void NuPlayer::setMDSVideoState_l(int state) {
     if (state == MDS_VIDEO_UNPREPARED && mVideoSessionId == -1) {
         return;
     }
+    ALOGV("update MDS Video State: %d", state);
+    if (state == MDS_VIDEO_PREPARED) {
+        int wcom = 0;
+        if (mNativeWindow == NULL)
+            return;
+        sp<ANativeWindow> win = mNativeWindow->getNativeWindow().get();
+        if (win == NULL)
+            return;
+        /*
+         * 0 means the buffers do not go directly to the window compositor;
+         * 1 means the ANativeWindow DOES send queued buffers
+         * directly to the window compositor;
+         * For more info, refer system/core/include/system/window.h
+         */
+        win->query(win.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+        if (wcom == 0 || mVideoDecoder == NULL) {
+            ALOGI("MDS's wcom flag is 0 or video source is null");
+            return;
+        }
+    }
     if (mMDClient == NULL) {
 #ifdef USE_MDS_LEGACY
         mMDClient = new MultiDisplayClient();
 #else
         sp<IServiceManager> sm = defaultServiceManager();
         if (sm == NULL) {
-            LOGE("%s: Fail to get service manager", __func__);
+            ALOGW("%s: Failed to get service manager", __func__);
             return;
         }
         sp<IMDService> mds = interface_cast<IMDService>(
                 sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
         if (mds == NULL) {
-            LOGE("%s: Failed to get MDS service", __func__);
+            ALOGW("%s: Failed to get MDS service", __func__);
             return;
         }
         mMDClient = mds->getVideoControl();
@@ -249,6 +270,34 @@ void NuPlayer::setMDSVideoState_l(int state) {
     }
     if (mVideoSessionId < 0) {
         mVideoSessionId = mMDClient->allocateVideoSessionId();
+    }
+    if (state == MDS_VIDEO_PREPARED) {
+        MDSVideoSourceInfo info;
+        memset(&info, 0 ,sizeof(&info));
+        sp<AMessage> msg = NULL;
+        int32_t displayW, displayH, frameRate;
+        bool success = false;
+        displayW = displayH = frameRate = 0;
+#ifdef USE_MDS_LEGACY
+        info.isPlaying = true;
+#endif
+        info.isProtected = false;
+        msg = mSource->getFormat(false);
+        if (msg != NULL) {
+            success = msg->findInt32("frame-rate", &frameRate);
+            if (!success)
+                frameRate = 0;
+            success = msg->findInt32("width", &displayW);
+            if (!success)
+                displayW = 0;
+            success = msg->findInt32("height", &displayH);
+            if (!success)
+                displayH = 0;
+        }
+        info.frameRate = frameRate;
+        info.displayW  = displayW;
+        info.displayH  = displayH;
+        mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
     }
     mMDClient->updateVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
     if (state == MDS_VIDEO_UNPREPARED) {
@@ -258,52 +307,6 @@ void NuPlayer::setMDSVideoState_l(int state) {
 #endif
         mMDClient = NULL;
     }
-}
-
-void NuPlayer::setMDSVideoInfo_l() {
-    MDSVideoSourceInfo info;
-    int wcom = 0;
-    if (mNativeWindow == NULL)
-        return;
-    sp<ANativeWindow> win = mNativeWindow->getNativeWindow().get();
-    if (win == NULL)
-        return;
-    /*
-     * 0 means the buffers do not go directly to the window compositor;
-     * 1 means the ANativeWindow DOES send queued buffers
-     * directly to the window compositor;
-     * For more info, refer system/core/include/system/window.h
-     */
-    win->query(win.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-    if (wcom == 0 || mVideoDecoder == NULL ||
-            mMDClient == NULL || mVideoSessionId < 0)
-        return;
-    memset(&info, 0 ,sizeof(&info));
-    sp<AMessage> msg = NULL;
-    int32_t displayW, displayH, frameRate;
-    bool success = false;
-    displayW = displayH = frameRate = 0;
-#ifdef USE_MDS_LEGACY
-    info.isPlaying = true;
-#endif
-    info.isProtected = false;
-    msg = mSource->getFormat(false);
-    if (msg != NULL) {
-        success = msg->findInt32("frame-rate", &frameRate);
-        if (!success)
-            frameRate = 0;
-        success = msg->findInt32("width", &displayW);
-        if (!success)
-            displayW = 0;
-        success = msg->findInt32("height", &displayH);
-        if (!success)
-            displayH = 0;
-    }
-    info.frameRate = frameRate;
-    info.displayW  = displayW;
-    info.displayH  = displayH;
-    mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
-    setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
 }
 #endif
 
@@ -1139,8 +1142,7 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     if (!audio) {
-        setMDSVideoState_l((int)MDS_VIDEO_PREPARING);
-        setMDSVideoInfo_l();
+        setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
     }
 #endif
 
