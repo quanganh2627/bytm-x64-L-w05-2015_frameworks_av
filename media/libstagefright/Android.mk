@@ -118,6 +118,9 @@ LOCAL_SHARED_LIBRARIES += libva \
                           libva-tpi
 endif
 
+ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
+  LOCAL_CFLAGS += -DBGM_ENABLED
+endif
 ifeq ($(USE_INTEL_MDP),true)
 LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/media_codecs
 

@@ -111,7 +111,11 @@ struct AwesomePlayer {
     void postAudioSeekComplete();
     void postAudioTearDown();
     status_t dump(int fd, const Vector<String16> &args) const;
-
+#ifdef BGM_ENABLED
+    status_t remoteBGMSuspend();
+    status_t remoteBGMResume();
+    bool mAudioPlayerPaused;
+#endif
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -346,7 +350,12 @@ private:
         int mFd;
         String8 mURI;
         int64_t mBitrate;
-
+#ifdef BGM_ENABLED
+        KeyedVector<String8, String8> mUriHeaders;
+        sp<DataSource> mFileSource;
+        int64_t mPositionUs;
+        int64_t mDurationUs; /* store the file duration */
+#endif //BGM_ENABLED
         // FIXME:
         // These two indices are just 0 or 1 for now
         // They are not representing the actual track
