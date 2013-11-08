@@ -726,7 +726,7 @@ public:
 #endif
     }
 
-    virtual bool isAudioEffectEnabled(int sessionId) const
+    virtual bool isEnabledEffectEligibleForOffload(int sessionId) const
     {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
         Parcel data, reply;
@@ -1120,7 +1120,7 @@ status_t BnAudioFlinger::onTransact(
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
             CHECK_INTERFACE(IAudioFlinger, data, reply);
             int sessionId = data.readInt32();
-            reply->writeInt32(isAudioEffectEnabled(sessionId));
+            reply->writeInt32(isEnabledEffectEligibleForOffload(sessionId));
 #endif
             return NO_ERROR;
         } break;

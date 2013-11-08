@@ -12,6 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * This file was modified by Dolby Laboratories, Inc. The portions of the
+ * code that are surrounded by "DOLBY..." are copyrighted and
+ * licensed separately, as follows:
+ *
+ *  (C) 2011-2013 Dolby Laboratories, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 #undef DEBUG_HDCP
@@ -1119,7 +1138,7 @@ status_t AwesomePlayer::play() {
 
     //  Before play, we should query audio flinger to see if any effect is enabled.
     //  if (effect is enabled) we should do another prepare w/ IA SW decoding
-    if (mOffload && ( isInCall() || isAudioEffectEnabled() ||
+    if (mOffload && ( isInCall() || !isEnabledEffectEligibleForOffload() ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
@@ -1265,6 +1284,12 @@ status_t AwesomePlayer::play_l() {
                 bool allowDeepBuffering = false;
                 int64_t cachedDurationUs;
                 bool eos;
+#ifdef DOLBY_DAP_OPENSLES
+                // DS Effect is attached only to the Non-Deep Buffered Output
+                // And we want all audio to flow through DS Effect.
+                // As such, we force both Music and Movie Playbacks to take the Non-Deep Buffered Output
+                allowDeepBuffering = false;
+#else   // DOLBY_DAP_OPENSLES
                 char value[PROPERTY_VALUE_MAX];
                 if (property_get("lpa.deepbuffer.enable", value, "0")
                      && ((bool)atoi(value))) {
@@ -1276,6 +1301,7 @@ status_t AwesomePlayer::play_l() {
                         allowDeepBuffering = true;
                     }
                 }
+#endif  // LINE_ADDED_BY_DOLBY
                 mDeepBufferAudio = allowDeepBuffering;
 
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
@@ -1983,7 +2009,7 @@ status_t AwesomePlayer::initAudioDecoder() {
     if ((!mOffloadSinkCreationError) && canOffloadStream( meta,
                 (mVideoTrack != NULL && mVideoSource != NULL),
                 isStreamingHTTP(), mAudioSink->getSessionId())
-                && !(isAudioEffectEnabled()))
+                && (isEnabledEffectEligibleForOffload()))
     {
         ALOGI("initAudioDecoder: Offload supported");
         mOffload = true;
@@ -2747,7 +2773,7 @@ void AwesomePlayer::onVideoEvent() {
             return;
         } else if (latenessUs < -10000) {
             // We're more than 10ms early.
-            postVideoEvent_l(-latenessUs);
+            postVideoEvent_l(8000);
             return;
         }
     }
@@ -2847,7 +2873,7 @@ void AwesomePlayer::postVideoEvent_l(int64_t delayUs) {
     }
 
     mVideoEventPending = true;
-    mQueue.postEventWithDelay(mVideoEvent, delayUs < 0 ? 10000 : delayUs);
+    mQueue.postEventWithDelay(mVideoEvent, delayUs < 0 ? 8000 : delayUs);
 }
 
 void AwesomePlayer::postStreamDoneEvent_l(status_t status) {
@@ -3760,7 +3786,7 @@ status_t AwesomePlayer::offloadResume() {
     seekTo_l(stats.mPositionUs);
     mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
 
-    if (mOffloadTearDownForPause && (isAudioEffectEnabled() ||
+    if (mOffloadTearDownForPause && (!isEnabledEffectEligibleForOffload() ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_AUX_DIGITAL, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) ||
         (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_BLUETOOTH_A2DP, "")
@@ -3968,24 +3994,23 @@ status_t AwesomePlayer::tearDownToNonDeepBufferAudio() {
     return err;
 }
 
-bool AwesomePlayer::isAudioEffectEnabled() {
+bool AwesomePlayer::isEnabledEffectEligibleForOffload() {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    ALOGV("isAudioEffectEnabled");
+    ALOGV("isEnabledEffectEligibleForOffload");
     const sp<IAudioFlinger>& audioFlinger = AudioSystem::get_audio_flinger();
 
     if (audioFlinger != 0) {
-        if (audioFlinger->isAudioEffectEnabled(0)) {
+        int sessionId = mAudioSink->getSessionId();
+        if (!(audioFlinger->isEnabledEffectEligibleForOffload(sessionId))) {
+            ALOGV("isEnabledEffectEligibleForOffload,"
+                  "effects enabled, but not offloadable");
+            return false;
+        }
+        if (audioFlinger->isEnabledEffectEligibleForOffload(0)) {
             ALOGV("Effects enabled");
             return true;
         }
-        int sessionId = mAudioSink->getSessionId();
-        if (audioFlinger->isAudioEffectEnabled(sessionId)) {
-            ALOGV("S:Effects enabled");
-            return true;
-        }
      }
-    ALOGV("Effects not enabled");
-    return false;
 #endif
     return false;
 }

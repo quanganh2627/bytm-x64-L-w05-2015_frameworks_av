@@ -13,6 +13,25 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 
@@ -69,6 +88,12 @@
 #include <media/nbaio/Pipe.h>
 #include <media/nbaio/PipeReader.h>
 
+#if defined(DOLBY_DAP_OPENSLES)
+#include "effect_ds.h"
+#elif defined(DOLBY_DAP_DSP)
+#include "DsNative.h"
+#endif // DOLBY_END
+
 // ----------------------------------------------------------------------------
 
 // Note: the following macro is used for extremely verbose logging message.  In
@@ -107,6 +132,7 @@ size_t AudioFlinger::mTeeSinkInputFrames = kTeeSinkInputFramesDefault;
 size_t AudioFlinger::mTeeSinkOutputFrames = kTeeSinkOutputFramesDefault;
 size_t AudioFlinger::mTeeSinkTrackFrames = kTeeSinkTrackFramesDefault;
 #endif
+
 
 // ----------------------------------------------------------------------------
 
@@ -489,6 +515,30 @@ sp<IAudioTrack> AudioFlinger::createTrack(
 
         ALOGV("createTrack() sessionId: %d", (sessionId == NULL) ? -2 : *sessionId);
         if (sessionId != NULL && *sessionId != AUDIO_SESSION_OUTPUT_MIX) {
+#ifdef DOLBY_DAP_OPENSLES_LPA_TEST
+            // The code below is for demonstration purpose only.
+            // It signals the DsService to create a DsEffect on the specified session Id, only if
+            // the dolby.ds.lpa.test system property is set to "on" and the streamType is AUDIO_STREAM_MUSIC.
+            // Licensees have to call sendBroadcastMessage() in relevant section to create track based Dolby Effect
+            #define LPA_INVALID_SESSION_ID -2
+            static int lastLpaSessionId = LPA_INVALID_SESSION_ID;
+            char lpaEnabled[10];
+            property_get("dolby.ds.lpa.test", lpaEnabled, "off");
+            ALOGV("System Property, dolby.ds.lpa.test == %s.", lpaEnabled);
+            if ((streamType == AUDIO_STREAM_MUSIC) && (strcmp(lpaEnabled, "on") == 0)) {
+                ALOGV("LPA_SESSION_ID_CHANGED_ACTION Broadcast!! LPA Track Effects in play!");
+                ALOGV("DOLBY_DAP_OPENSLES_LPA: createTrack(), nextSessionId = %d is LPA with sample rate(%d) and channelMask(0x%X)", *sessionId, sampleRate, channelMask);
+                sendBroadcastMessage(String16("LPA_SESSION_ID_CHANGED_ACTION"), *sessionId);
+                lastLpaSessionId = *sessionId;
+            } else {
+                ALOGV("LPA_SESSION_ID_REMOVED_ACTION Broadcast!! Global Effects in play!");
+                // Avoid sending the broadcast if the lastLpaSessionId is LPA_INVALID_SESSION_ID
+                if (lastLpaSessionId != LPA_INVALID_SESSION_ID) {
+                    sendBroadcastMessage(String16("LPA_SESSION_ID_REMOVED_ACTION"), lastLpaSessionId);
+                    lastLpaSessionId = LPA_INVALID_SESSION_ID;
+                }
+            }
+#endif //DOLBY_END
             // check if an effect chain with the same session ID is present on another
             // output thread and move it here.
             for (size_t i = 0; i < mPlaybackThreads.size(); i++) {
@@ -517,12 +567,19 @@ sp<IAudioTrack> AudioFlinger::createTrack(
         // move effect chain to this output thread if an effect on same session was waiting
         // for a track to be created
         if (lStatus == NO_ERROR && effectThread != NULL) {
+            // No risk of deadlock due to these 2 threads being locked in a different order,
+            // because the AudioFlinger lock is already held
             if (!((thread->outDevice() == AUDIO_DEVICE_OUT_AUX_DIGITAL) &&
                 ((thread->type() == ThreadBase::DIRECT)||
                  (thread->channelCount() > 2)))) {
                 Mutex::Autolock _dl(thread->mLock);
                 Mutex::Autolock _sl(effectThread->mLock);
-                moveEffectChain_l(lSessionId, effectThread, thread, true);
+                lStatus = moveEffectChain_l(lSessionId, effectThread,
+                                                           thread, true);
+                if (lStatus != NO_ERROR) {
+                    ALOGW("createTrack() moveEffectChain unsuccessful:%d",
+                                                                   lStatus);
+                }
             }
         }
 
@@ -1147,6 +1204,57 @@ void AudioFlinger::audioConfigChanged_l(int event, audio_io_handle_t ioHandle, c
     }
 }
 
+#ifdef DOLBY_DAP_OPENSLES
+// Send a broadcast event with value set in
+// resultCode field, so that the receiver (DsService) gets this
+// intent, checks the action and reads the resultCode.
+bool AudioFlinger::sendBroadcastMessage(String16 action, int value)
+{
+    ALOGV("sendBroadcastMessage(): Action: %s, Value: %d ", action.string(), value);
+
+    sp<IServiceManager> sm = defaultServiceManager();
+    sp<IBinder> am = sm->getService(String16("activity"));
+    if (am != NULL) {
+        int msg[] = {0, -1, 0, -1, -1, 0, 0, 0, 0, -1, -1 };
+        unsigned int i;
+        Parcel data, reply;
+
+        data.writeInterfaceToken(String16("android.app.IActivityManager"));
+        data.writeStrongBinder(NULL);
+        data.writeString16(action);
+
+        for (i = 0; i < sizeof(msg) / sizeof(msg[0]); i++) {
+            data.writeInt32(msg[i]);
+        }
+
+        data.writeStrongBinder(NULL);
+        data.writeInt32(value);
+        data.writeInt32(-1);
+        data.writeInt32(-1);
+        data.writeInt32(-1);
+        data.writeInt32(0);
+        data.writeInt32(0);
+        data.writeInt32(0);
+
+        status_t ret = am->transact(IBinder::FIRST_CALL_TRANSACTION+13, data, &reply); // BROADCAST_INTENT_TRANSACTION
+
+        if (ret == NO_ERROR) {
+            int exceptionCode = reply.readExceptionCode();
+            if (exceptionCode) {
+                ALOGE("sendBroadcastMessage(%s) caught exception %d\n",
+                        action.string(), exceptionCode);
+                return false;
+            }
+        } else {
+            return false;
+        }
+    } else {
+        ALOGE("getService() couldn't find activity service!\n");
+        return false;
+    }
+    return true;
+}
+#endif //DOLBY_END
 // removeClient_l() must be called with AudioFlinger::mLock held
 void AudioFlinger::removeClient_l(pid_t pid)
 {
@@ -2246,6 +2354,23 @@ sp<IEffect> AudioFlinger::createEffect(
         // create effect on selected output thread
         handle = thread->createEffect_l(client, effectClient, priority, sessionId,
                 &desc, enabled, &lStatus);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+        // If the handle returned is NULL and the thread is offload,
+        // invalidate the offload track and create the effect on default IO.
+        PlaybackThread *effectThread = (PlaybackThread*) thread;
+        if (handle == NULL && effectThread->isOffloadTrack()) {
+            ALOGV("createEffect() effect not found in DSP."
+                   "Create effect on the PCM o/p invalidate offload stream");
+            effectThread->invalidateTracks(AUDIO_STREAM_MUSIC);
+            if (mPlaybackThreads.size()) {
+                // Default IO - first output
+                audio_io_handle_t defaultIo = mPlaybackThreads.keyAt(0);
+                thread = checkPlaybackThread_l(defaultIo);
+            }
+            handle = thread->createEffect_l(client, effectClient, priority,
+                                            sessionId, &desc, enabled, &lStatus);
+        }
+#endif
         if (handle != 0 && id != NULL) {
             *id = handle->id();
         }
@@ -2285,26 +2410,39 @@ status_t AudioFlinger::moveEffects(int sessionId, audio_io_handle_t srcOutput,
 
     return NO_ERROR;
 }
-bool AudioFlinger::isAudioEffectEnabled(int sessionId) const
+
+bool AudioFlinger::isEnabledEffectEligibleForOffload(int sessionId) const
 {
 #ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     Mutex::Autolock _l(mLock);
-    sp<EffectChain> chain = NULL;
-    ALOGV("isAudioEffectEnabled(sessionId=%d)", sessionId);
+    sp<EffectChain> chain;
+    ALOGV("isEnabledEffectEligibleForOffload(sessionId=%d)", sessionId);
     size_t size = mPlaybackThreads.size();
     for (size_t i = 0; i < size; i++) {
         chain = mPlaybackThreads.valueAt(i)->getEffectChain_l(sessionId);
         if (chain != 0) {
+            if (sessionId == AUDIO_SESSION_OUTPUT_MIX) {
+                ALOGV("isEnabledEffectEligibleForOffload, global effect chain,"
+                      "return false");
+                return false;
+            }
             break;
         }
     }
-    if (chain != 0 && chain->isAudioEffectEnabled()) {
+    if (chain != 0) {
+        return chain->isEnabledEffectEligibleForOffload();
+    } else {
+        // if there is no effect chain in the system, return true to
+        // support offload. Later, while creating effect, if the effect
+        // has no DSP implementation, the offload stream will tear down to IA
+        ALOGV("isEnabledEffectEligibleForOffload return true");
         return true;
     }
+#else
     return false;
 #endif
-    return false;
 }
+
 // moveEffectChain_l must be called with both srcThread and dstThread mLocks held
 status_t AudioFlinger::moveEffectChain_l(int sessionId,
                                    AudioFlinger::PlaybackThread *srcThread,
@@ -2320,7 +2458,45 @@ status_t AudioFlinger::moveEffectChain_l(int sessionId,
                 sessionId, srcThread);
         return INVALID_OPERATION;
     }
-
+    audio_io_handle_t dstOutput = dstThread->id();
+    int effectId = 0;
+    sp<EffectModule> effect = chain->getEffectFromId_l(effectId);
+#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
+    // If the dstOutput is offload, check if the effects are available in DSP.
+    // If not, return FAILED_TRANSACTION. Do not move the effect chain.
+    bool isOffload = (PlaybackThread*)dstThread->isOffloadTrack();
+    // Form the effect_offload_param_t structure
+    effect_offload_param_t offload_param;
+    offload_param.isOffload = isOffload;
+    offload_param.ioHandle = dstOutput;
+    status_t cmdStatus, status;
+    uint32_t size = sizeof(cmdStatus);
+    effect_descriptor_t desc;
+    int index = 0;
+    int chainSize = chain->mEffects.size();
+    for(index = 0; index < chainSize; index++) {
+        // Send the effect_offload_param_t structure while moving the effects
+        // with isOffload value and destination threadId
+        desc = effect->desc();
+        if ((desc.flags & EFFECT_FLAG_OFFLOAD_MASK)
+                         != EFFECT_FLAG_OFFLOAD_SUPPORTED) {
+            effect = chain->mEffects[index];
+            continue;
+        }
+        status = (*(effect->mEffectInterface))->command(effect->mEffectInterface,
+                             EFFECT_CMD_OFFLOAD,
+                             sizeof(offload_param),
+                             &offload_param,
+                             &size,
+                             &cmdStatus);
+        // If there is an error in sending the command, return error
+        if (status) {
+            ALOGV("moveEffectChain_l CMD_OFFLOAD returns status : %d", status);
+            return status;
+        }
+        effect = chain->mEffects[index];
+    }
+#endif
     // remove chain first. This is useful only if reconfiguring effect chain on same output thread,
     // so that a new chain is created with correct parameters when first effect is added. This is
     // otherwise unnecessary as removeEffect_l() will remove the chain when last effect is
@@ -2329,10 +2505,9 @@ status_t AudioFlinger::moveEffectChain_l(int sessionId,
 
     // transfer all effects one by one so that new effect chain is created on new thread with
     // correct buffer sizes and audio parameters and effect engines reconfigured accordingly
-    audio_io_handle_t dstOutput = dstThread->id();
     sp<EffectChain> dstChain;
     uint32_t strategy = 0; // prevent compiler warning
-    sp<EffectModule> effect = chain->getEffectFromId_l(0);
+    effect = chain->getEffectFromId_l(0);
     while (effect != 0) {
         srcThread->removeEffect_l(effect);
         dstThread->addEffect_l(effect);

@@ -13,6 +13,25 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 #ifndef ANDROID_AUDIO_FLINGER_H
@@ -230,7 +249,6 @@ public:
             uint32_t channel,
             int output);
 
-    virtual bool isAudioEffectEnabled(int sessionId) const;
     virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
@@ -448,6 +466,9 @@ private:
                                 { return mStreamTypes[stream].volume; }
               void audioConfigChanged_l(int event, audio_io_handle_t ioHandle, const void *param2);
 
+#ifdef DOLBY_DAP_OPENSLES
+              static bool sendBroadcastMessage(String16 action, int value);
+#endif //DOLBY_DAP_OPENSLES
               // allocate an audio_io_handle_t, session ID, or effect ID
               uint32_t nextUniqueId();
 
@@ -460,7 +481,9 @@ private:
               audio_devices_t primaryOutputDevice_l() const;
 
               sp<PlaybackThread> getEffectThread_l(int sessionId, int EffectId);
-
+              // Check if all effects that are enabled in this session have DSP implementation.
+              // Use to check if an audio playback can be offloaded
+              bool isEnabledEffectEligibleForOffload(int sessionId) const;
 
                 void        removeClient_l(pid_t pid);
                 void        removeNotificationClient(pid_t pid);
