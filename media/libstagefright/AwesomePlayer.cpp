@@ -54,6 +54,11 @@
 #include <gui/IGraphicBufferProducer.h>
 #include <gui/Surface.h>
 
+#ifdef BGM_ENABLED
+#include <hardware/audio.h>
+#include <media/AudioParameter.h>
+#endif
+
 #include <media/stagefright/foundation/AMessage.h>
 
 #include <cutils/properties.h>
@@ -67,6 +72,12 @@
 #define FRAME_DROP_FREQ 0
 
 namespace android {
+
+#ifdef BGM_ENABLED
+    static bool mRemoteBGMsuspend = false;
+    static bool mBGMEnabled = false;
+    static bool mBGMAudioAvailable = true;
+#endif
 
 static int64_t kLowWaterMarkUs = 2000000ll;  // 2secs
 static int64_t kHighWaterMarkUs = 5000000ll;  // 5secs
@@ -218,7 +229,12 @@ AwesomePlayer::AwesomePlayer()
       mLastVideoTimeUs(-1),
       mTextDriver(NULL),
       mOffloadAudio(false),
-      mAudioTearDown(false) {
+      mAudioTearDown(false)
+#ifdef BGM_ENABLED
+      ,
+      mAudioPlayerPaused(false)
+#endif
+     {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
     DataSource::RegisterDefaultSniffers();
@@ -240,6 +256,21 @@ AwesomePlayer::AwesomePlayer()
     mAudioTearDownEvent = new AwesomeEvent(this,
                               &AwesomePlayer::onAudioTearDownEvent);
     mAudioTearDownEventPending = false;
+#ifdef BGM_ENABLED
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
+       String8 reply;
+       char* bgmKVpair;
+
+       reply =  AudioSystem::getParameters(0,String8(AudioParameter::keyBGMState));
+       bgmKVpair = strpbrk((char *)reply.string(), "=");
+       ++bgmKVpair;
+       mBGMEnabled = strcmp(bgmKVpair,"true") ? false : true;
+       ALOGV("%s [BGMUSIC] mBGMEnabled = %d",__func__,mBGMEnabled);
+   }
+#endif // BGM_ENABLED
 
     reset();
 }
@@ -965,6 +996,35 @@ void AwesomePlayer::onStreamDone() {
 
 status_t AwesomePlayer::play() {
     ATRACE_CALL();
+#ifdef BGM_ENABLED
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
+       String8 reply;
+       char* bgmKVpair;
+
+       reply =  AudioSystem::getParameters(0,String8(AudioParameter::keyBGMState));
+       bgmKVpair = strpbrk((char *)reply.string(), "=");
+       ++bgmKVpair;
+       mBGMEnabled = strcmp(bgmKVpair,"true") ? false : true;
+       ALOGV("%s [BGMUSIC] mBGMEnabled = %d",__func__,mBGMEnabled);
+
+       if(mBGMEnabled) {
+          status_t err = UNKNOWN_ERROR;
+          // If BGM is enabled, then the output associated with the
+          // active track needs to be de-associated, so that it gets
+          // multitasked to other available audio outputs
+          err = remoteBGMSuspend();
+          if((mRemoteBGMsuspend) && (err == OK)) {
+             err = remoteBGMResume();
+             if(err != OK)
+              ALOGW("[BGMUSIC] .. oops!! behaviour undefined");
+             mRemoteBGMsuspend = false;
+          }
+       } //(mBGMEnabled)
+     }
+#endif //BGM_ENABLED
 
     Mutex::Autolock autoLock(mLock);
 
@@ -1061,6 +1121,29 @@ status_t AwesomePlayer::play_l() {
         }
     }
 
+#ifdef BGM_ENABLED
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
+
+       if(mBGMEnabled) {
+          if ((mAudioSource == NULL) && (mVideoSource != NULL)) {
+               ALOGD("[BGMUSIC] video only clip started in BGM ");
+               AudioParameter param = AudioParameter();
+               status_t status = NO_ERROR;
+               // no audio stream found in this clip, update BGM sink
+               mBGMAudioAvailable = false;
+               param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO),mBGMAudioAvailable);
+               status = AudioSystem::setParameters(0, param.toString());
+               if (status != NO_ERROR) {
+                  // this is not fatal so need not stop the graph
+                  ALOGW("error setting bgm params - mBGMAudioAvailable");
+               }
+          }
+       }
+    }
+#endif //BGM_ENABLED
     if (mTimeSource == NULL && mAudioPlayer == NULL) {
         mTimeSource = &mSystemTimeSource;
     }
@@ -1312,6 +1395,31 @@ status_t AwesomePlayer::pause() {
     Mutex::Autolock autoLock(mLock);
 
     modifyFlags(CACHE_UNDERRUN, CLEAR);
+#ifdef BGM_ENABLED
+    mAudioPlayerPaused = true;
+    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
+       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
+         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
+
+       if(mBGMEnabled) {
+          if ((mAudioSource == NULL) && (mVideoSource != NULL)) {
+              ALOGD("[BGMUSIC] remote player paused/stopped in BGM ");
+              AudioParameter param = AudioParameter();
+              status_t status = NO_ERROR;
+              // video only clip stopped/paused, update BGM sink
+              // set audio availability in BGM to true by default
+              mBGMAudioAvailable = true;
+              param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO), mBGMAudioAvailable);
+              status = AudioSystem::setParameters(0, param.toString());
+              if (status != NO_ERROR) {
+                 // this is not fatal so need not stop the graph
+                 ALOGW("error setting bgm params - mBGMAudioAvailable");
+              }
+          }
+       }
+    }
+#endif //BGM_ENABLED
 
     return pause_l();
 }
@@ -3313,4 +3421,64 @@ void AwesomePlayer::onAudioTearDownEvent() {
     beginPrepareAsync_l();
 }
 
+#ifdef BGM_ENABLED
+status_t AwesomePlayer::remoteBGMSuspend() {
+
+    // If BGM is enabled or enabled previously and exited then the
+    // track/ sink needs to be closed and recreated again so that
+    // music is heard on active output and not on multitasked output
+    if((mFlags & AUDIOPLAYER_STARTED) && (mAudioPlayerPaused)) {
+       ALOGD("[BGMUSIC] %s :: reset the audio player",__func__);
+       // Store the current status and use it while starting for IA decoding
+       // Terminate the active stream by calling reset_l()
+       Stats stats;
+       uint32_t extractorFlags;
+       stats.mURI = mUri;
+       stats.mUriHeaders = mUriHeaders;
+       stats.mFileSource = mFileSource;
+       stats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
+       getPosition(&stats.mPositionUs);
+       extractorFlags = mExtractorFlags;
+       stats.mDurationUs = mDurationUs; /* store the file duration */
+       reset_l();
+       mDurationUs = stats.mDurationUs; /* restore the duration */
+       mExtractorFlags = extractorFlags;
+       mStats = stats;
+       mRemoteBGMsuspend = true;
+       mAudioPlayerPaused =  false;
+    }
+
+    return OK;
+}
+status_t AwesomePlayer::remoteBGMResume() {
+
+    Mutex::Autolock autoLock(mLock);
+
+    Stats stats = mStats;
+
+    status_t err;
+    if (stats.mFileSource != NULL) {
+        err = setDataSource_l(stats.mFileSource);
+
+        if (err == OK) {
+            mFileSource = stats.mFileSource;
+        }
+    } else {
+        err = setDataSource_l(stats.mURI, &stats.mUriHeaders);
+    }
+
+    if (err != OK) {
+        return err;
+    }
+
+    seekTo_l(stats.mPositionUs);
+    mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
+
+    // Update the flag
+    mStats.mFlags = mFlags;
+
+    ALOGD("[BGMUSIC] audio track/sink recreated successfully");
+    return OK;
+}
+#endif //BGM_ENABLED
 }  // namespace android
