@@ -181,7 +181,6 @@ private:
     sp<IMultiDisplayVideoControl> mMDClient;
 #endif
     int mVideoSessionId;
-    void setMDSVideoInfo_l();
     void setMDSVideoState_l(int state);
 #endif
 

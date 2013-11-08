@@ -489,10 +489,33 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
 }
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+
 void AwesomePlayer::setMDSVideoState_l(int state) {
-    ALOGV("MultiDisplay setMDSVideoState: %d", state);
     if (state == MDS_VIDEO_UNPREPARED && mVideoSessionId == -1) {
         return;
+    }
+    if ((state == MDS_VIDEO_PREPARING || state == MDS_VIDEO_UNPREPARING) &&
+         (mDecryptHandle == NULL)) {
+        // ignore preparing and unpreparing state if video is not protected
+        return;
+    }
+    ALOGV("update MDS Video State: %d", state);
+    if (state == MDS_VIDEO_PREPARED) {
+        int wcom = 0;
+        if (mNativeWindow == NULL)
+            return;
+        mNativeWindow->query(mNativeWindow.get(),
+                NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+        /*
+         * 0 means the buffers do not go directly to the window compositor;
+         * 1 means the ANativeWindow DOES send queued buffers
+         * directly to the window compositor;
+         * For more info, refer system/core/include/system/window.h
+         */
+        if (wcom == 0 || mVideoSource == NULL) {
+            ALOGI("MDS's wcom flag is 0 or video source is null");
+            return;
+        }
     }
     if (mMDClient == NULL) {
 #ifdef USE_MDS_LEGACY
@@ -500,13 +523,13 @@ void AwesomePlayer::setMDSVideoState_l(int state) {
 #else
         sp<IServiceManager> sm = defaultServiceManager();
         if (sm == NULL) {
-            LOGE("%s: Fail to get service manager", __func__);
+            ALOGW("%s: Failed to get service manager", __func__);
             return;
         }
         sp<IMDService> mds = interface_cast<IMDService>(
                 sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
         if (mds == NULL) {
-            LOGE("%s: Failed to get MDS service", __func__);
+            ALOGW("%s: Failed to get MDS service", __func__);
             return;
         }
         mMDClient = mds->getVideoControl();
@@ -514,6 +537,27 @@ void AwesomePlayer::setMDSVideoState_l(int state) {
     }
     if (mVideoSessionId < 0) {
         mVideoSessionId = mMDClient->allocateVideoSessionId();
+    }
+    if (state == MDS_VIDEO_PREPARED) {
+        MDSVideoSourceInfo info;
+        memset(&info, 0, sizeof(MDSVideoSourceInfo));
+#ifdef USE_MDS_LEGACY
+        info.isPlaying = true;
+#endif
+        info.isProtected = (mDecryptHandle != NULL);
+        {
+            Mutex::Autolock autoLock(mStatsLock);
+            info.frameRate = mStats.mFrameRate;
+            info.displayW = mStats.mVideoWidth;
+            info.displayH = mStats.mVideoHeight;
+#ifdef TARGET_HAS_VPP
+            // mVPPProcessor is NULL in case of  VPP is off
+            if (mVPPProcessor) {
+                info.frameRate = mVPPProcessor->getVppOutputFps();
+            }
+#endif
+        }
+        mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
     }
     mMDClient->updateVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
     if (state == MDS_VIDEO_UNPREPARED) {
@@ -523,44 +567,6 @@ void AwesomePlayer::setMDSVideoState_l(int state) {
 #endif
         mMDClient = NULL;
     }
-}
-
-void AwesomePlayer::setMDSVideoInfo_l() {
-    ALOGV("MultiDisplay setMDSVideoInfo");
-    MDSVideoSourceInfo info;
-    int wcom = 0;
-    if (mNativeWindow != NULL) {
-        mNativeWindow->query(mNativeWindow.get(),
-                NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-        /*
-         * 0 means the buffers do not go directly to the window compositor;
-         * 1 means the ANativeWindow DOES send queued buffers
-         * directly to the window compositor;
-         * For more info, refer system/core/include/system/window.h
-         */
-    }
-    if (wcom == 0 || mVideoSource == NULL ||
-            mMDClient == NULL || mVideoSessionId < 0)
-        return;
-    memset(&info, 0, sizeof(MDSVideoSourceInfo));
-#ifdef USE_MDS_LEGACY
-    info.isPlaying = true;
-#endif
-    info.isProtected = (mDecryptHandle != NULL);
-    {
-        Mutex::Autolock autoLock(mStatsLock);
-        info.frameRate = mStats.mFrameRate;
-        info.displayW = mStats.mVideoWidth;
-        info.displayH = mStats.mVideoHeight;
-#ifdef TARGET_HAS_VPP
-        // mVPPProcessor is NULL in case of  VPP is off
-        if (mVPPProcessor) {
-            info.frameRate = mVPPProcessor->getVppOutputFps();
-        }
-#endif
-    }
-    mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
-    setMDSVideoState_l(MDS_VIDEO_PREPARED);
 }
 #endif
 
@@ -694,6 +700,11 @@ void AwesomePlayer::reset_l() {
     notifyListener_l(MEDIA_STOPPED);
 
     if (mDecryptHandle != NULL) {
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+            if (mVideoSource != NULL) {
+                setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
+            }
+#endif
             mDrmManagerClient->setPlaybackStatus(mDecryptHandle,
                     Playback::STOP, 0);
             mDecryptHandle = NULL;
@@ -1272,7 +1283,9 @@ status_t AwesomePlayer::play_l() {
     }
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setMDSVideoInfo_l();
+    if (mVideoSource != NULL) {
+        setMDSVideoState_l(MDS_VIDEO_PREPARED);
+    }
 #endif
     return OK;
 }
