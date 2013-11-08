@@ -1068,17 +1068,20 @@ int64_t AudioPlayer::getRealTimeUsLocked() const {
 
 int64_t AudioPlayer::getOutputPlayPositionUs_l() const
 {
+    int64_t  renderedDuration = 0;
     uint32_t playedSamples = 0;
     if (mAudioSink != NULL) {
         mAudioSink->getPosition(&playedSamples);
     } else {
         mAudioTrack->getPosition(&playedSamples);
     }
-
-    const int64_t playedUs = (static_cast<int64_t>(playedSamples) * 1000000 ) / mSampleRate;
+    // Changed rendered Duration as per firmware sync
+    renderedDuration = 1000 * (int64_t) playedSamples;
+    renderedDuration += mStartPosUs;
+    //const int64_t playedUs = (static_cast<int64_t>(playedSamples) * 1000000 ) / mSampleRate;
 
     // HAL position is relative to the first buffer we sent at mStartPosUs
-    const int64_t renderedDuration = mStartPosUs + playedUs;
+    //const int64_t renderedDuration = mStartPosUs + playedUs;
     ALOGV("getOutputPlayPositionUs_l %lld", renderedDuration);
     return renderedDuration;
 }
