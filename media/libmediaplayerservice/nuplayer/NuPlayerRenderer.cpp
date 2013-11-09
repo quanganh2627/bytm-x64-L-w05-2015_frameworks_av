@@ -599,6 +599,7 @@ void NuPlayer::Renderer::onUpdateVPPInput(const sp<AMessage> &msg) {
             if ((*it).mNotifyConsumed == notifyConsumed) {
                 LOGV("erase vpp input in video queue maybe in seeking");
                 mVideoQueue.erase(it);
+                break;
             }
         }
     }
