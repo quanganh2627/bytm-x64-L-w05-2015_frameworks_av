@@ -13,6 +13,25 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 
@@ -28,6 +47,12 @@
 
 #include "AudioFlinger.h"
 #include "ServiceUtilities.h"
+
+#if defined(DOLBY_DAP_OPENSLES)
+#include "effect_ds.h"
+#elif defined(DOLBY_DAP_DSP)
+#include "DsNative.h"
+#endif // DOLBY_END
 
 // ----------------------------------------------------------------------------
 
@@ -67,6 +92,9 @@ AudioFlinger::EffectModule::EffectModule(ThreadBase *thread,
       // mMaxDisableWaitCnt is set by configure() and not used before then
       // mDisableWaitCnt is set by process() and updateState() and not used before then
       mSuspended(false), mStopped(false)
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
+      , mDsLeftVolume(UINT_MAX), mDsRightVolume(UINT_MAX)
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
 {
     ALOGV("Constructor %p", this);
     int lStatus;
@@ -678,6 +706,32 @@ status_t AudioFlinger::EffectModule::setVolume(uint32_t *left, uint32_t *right, 
     return status;
 }
 
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
+status_t AudioFlinger::EffectModule::setDsPregain(uint32_t *left, uint32_t *right)
+{
+    Mutex::Autolock _l(mLock);
+    status_t status = NO_ERROR;
+    uint32_t volume[2];
+    uint32_t size = sizeof(volume);
+    volume[0] = *left;
+    volume[1] = *right;
+
+    if (mDsLeftVolume != volume[0] || mDsRightVolume != volume[1]) {
+        status = (*mEffectInterface)->command(mEffectInterface,
+                                              EFFECT_CMD_DOLBY_SET_PREGAIN,
+                                              size,
+                                              volume,
+                                              &size,
+                                              NULL);
+        if (status == NO_ERROR && size == sizeof(volume)) {
+            mDsLeftVolume  = volume[0];
+            mDsRightVolume = volume[1];
+        }
+    }
+
+    return status;
+}
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
 status_t AudioFlinger::EffectModule::setDevice(audio_devices_t device)
 {
     if (device == AUDIO_DEVICE_NONE) {
@@ -752,6 +806,33 @@ void AudioFlinger::EffectModule::setSuspended(bool suspended)
     mSuspended = suspended;
 }
 
+#ifdef DOLBY_DAP_BYPASS_SOUND_TYPES
+status_t AudioFlinger::EffectModule::setBypass(bool bypass, bool crossFade)
+{
+    Mutex::Autolock _l(mLock);
+    status_t  status = NO_ERROR;
+    uint32_t  size   = sizeof(status_t);
+    uint32_t  bypassParams[2];
+
+    bypassParams[0] = mBypassed = bypass;
+    bypassParams[1] = crossFade;
+
+    status = (*mEffectInterface)->command(mEffectInterface,
+                                          EFFECT_CMD_DOLBY_DAP_SET_BYPASS,
+                                          sizeof(bypassParams),
+                                          bypassParams,
+                                          &size,
+                                          NULL);
+
+    return status;
+}
+
+bool AudioFlinger::EffectModule::bypassed() const
+{
+    Mutex::Autolock _l(mLock);
+    return mBypassed;
+}
+#endif //DOLBY_DAP_BYPASS_SOUND_TYPES
 bool AudioFlinger::EffectModule::suspended() const
 {
     Mutex::Autolock _l(mLock);
@@ -1625,6 +1706,10 @@ void AudioFlinger::EffectChain::setEffectSuspended_l(
             desc->mType = *type;
             mSuspendedEffects.add(type->timeLow, desc);
             ALOGV("setEffectSuspended_l() add entry for %08x", type->timeLow);
+#ifdef DOLBY_DAP_OPENSLES
+            if (memcmp(&desc->mType, EFFECT_SL_IID_DS, sizeof(effect_uuid_t)) == 0)
+                AudioFlinger::sendBroadcastMessage(String16("DS_EFFECT_SUSPEND_ACTION"), 1);
+#endif // DOLBY_END
         }
         if (desc->mRefCount++ == 0) {
             sp<EffectModule> effect = getEffectIfEnabled(type);
@@ -1658,6 +1743,10 @@ void AudioFlinger::EffectChain::setEffectSuspended_l(
                 }
                 desc->mEffect.clear();
             }
+#ifdef DOLBY_DAP_OPENSLES
+            if (memcmp(&desc->mType, EFFECT_SL_IID_DS, sizeof(effect_uuid_t)) == 0)
+                AudioFlinger::sendBroadcastMessage(String16("DS_EFFECT_SUSPEND_ACTION"), 0);
+#endif // DOLBY_END
             mSuspendedEffects.removeItemsAt(index);
         }
     }

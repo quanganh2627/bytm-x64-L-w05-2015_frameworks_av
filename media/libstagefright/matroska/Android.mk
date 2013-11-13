@@ -10,6 +10,12 @@ LOCAL_C_INCLUDES:= \
 
 LOCAL_CFLAGS += -Wno-multichar
 
+ifdef DOLBY_UDC
+  LOCAL_CFLAGS += -DDOLBY_UDC
+  ifdef DOLBY_MKV
+    LOCAL_CFLAGS += -DDOLBY_MKV
+  endif #DOLBY_MKV
+endif #DOLBY_UDC
 LOCAL_MODULE:= libstagefright_matroska
 
 include $(BUILD_STATIC_LIBRARY)

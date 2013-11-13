@@ -13,6 +13,25 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 
@@ -66,6 +85,12 @@
 #include <media/nbaio/PipeReader.h>
 #include <media/AudioParameter.h>
 #include <private/android_filesystem_config.h>
+
+#if defined(DOLBY_DAP_OPENSLES)
+#include "effect_ds.h"
+#elif defined(DOLBY_DAP_DSP)
+#include "DsNative.h"
+#endif // DOLBY_END
 
 // ----------------------------------------------------------------------------
 
@@ -493,6 +518,30 @@ sp<IAudioTrack> AudioFlinger::createTrack(
 
         ALOGV("createTrack() sessionId: %d", (sessionId == NULL) ? -2 : *sessionId);
         if (sessionId != NULL && *sessionId != AUDIO_SESSION_OUTPUT_MIX) {
+#ifdef DOLBY_DAP_OPENSLES_LPA_TEST
+            // The code below is for demonstration purpose only.
+            // It signals the DsService to create a DsEffect on the specified session Id, only if
+            // the dolby.ds.lpa.test system property is set to "on" and the streamType is AUDIO_STREAM_MUSIC.
+            // Licensees have to call sendBroadcastMessage() in relevant section to create track based Dolby Effect
+            #define LPA_INVALID_SESSION_ID -2
+            static int lastLpaSessionId = LPA_INVALID_SESSION_ID;
+            char lpaEnabled[10];
+            property_get("dolby.ds.lpa.test", lpaEnabled, "off");
+            ALOGV("System Property, dolby.ds.lpa.test == %s.", lpaEnabled);
+            if ((streamType == AUDIO_STREAM_MUSIC) && (strcmp(lpaEnabled, "on") == 0)) {
+                ALOGV("LPA_SESSION_ID_CHANGED_ACTION Broadcast!! LPA Track Effects in play!");
+                ALOGV("DOLBY_DAP_OPENSLES_LPA: createTrack(), nextSessionId = %d is LPA with sample rate(%d) and channelMask(0x%X)", *sessionId, sampleRate, channelMask);
+                sendBroadcastMessage(String16("LPA_SESSION_ID_CHANGED_ACTION"), *sessionId);
+                lastLpaSessionId = *sessionId;
+            } else {
+                ALOGV("LPA_SESSION_ID_REMOVED_ACTION Broadcast!! Global Effects in play!");
+                // Avoid sending the broadcast if the lastLpaSessionId is LPA_INVALID_SESSION_ID
+                if (lastLpaSessionId != LPA_INVALID_SESSION_ID) {
+                    sendBroadcastMessage(String16("LPA_SESSION_ID_REMOVED_ACTION"), lastLpaSessionId);
+                    lastLpaSessionId = LPA_INVALID_SESSION_ID;
+                }
+            }
+#endif //DOLBY_END
             // check if an effect chain with the same session ID is present on another
             // output thread and move it here.
             for (size_t i = 0; i < mPlaybackThreads.size(); i++) {
@@ -1133,6 +1182,57 @@ void AudioFlinger::audioConfigChanged_l(int event, audio_io_handle_t ioHandle, c
     }
 }
 
+#ifdef DOLBY_DAP_OPENSLES
+// Send a broadcast event with value set in
+// resultCode field, so that the receiver (DsService) gets this
+// intent, checks the action and reads the resultCode.
+bool AudioFlinger::sendBroadcastMessage(String16 action, int value)
+{
+    ALOGV("sendBroadcastMessage(): Action: %s, Value: %d ", action.string(), value);
+
+    sp<IServiceManager> sm = defaultServiceManager();
+    sp<IBinder> am = sm->getService(String16("activity"));
+    if (am != NULL) {
+        int msg[] = {0, -1, 0, -1, -1, 0, 0, 0, 0, -1, -1 };
+        unsigned int i;
+        Parcel data, reply;
+
+        data.writeInterfaceToken(String16("android.app.IActivityManager"));
+        data.writeStrongBinder(NULL);
+        data.writeString16(action);
+
+        for (i = 0; i < sizeof(msg) / sizeof(msg[0]); i++) {
+            data.writeInt32(msg[i]);
+        }
+
+        data.writeStrongBinder(NULL);
+        data.writeInt32(value);
+        data.writeInt32(-1);
+        data.writeInt32(-1);
+        data.writeInt32(-1);
+        data.writeInt32(0);
+        data.writeInt32(0);
+        data.writeInt32(0);
+
+        status_t ret = am->transact(IBinder::FIRST_CALL_TRANSACTION+13, data, &reply); // BROADCAST_INTENT_TRANSACTION
+
+        if (ret == NO_ERROR) {
+            int exceptionCode = reply.readExceptionCode();
+            if (exceptionCode) {
+                ALOGE("sendBroadcastMessage(%s) caught exception %d\n",
+                        action.string(), exceptionCode);
+                return false;
+            }
+        } else {
+            return false;
+        }
+    } else {
+        ALOGE("getService() couldn't find activity service!\n");
+        return false;
+    }
+    return true;
+}
+#endif //DOLBY_END
 // removeClient_l() must be called with AudioFlinger::mLock held
 void AudioFlinger::removeClient_l(pid_t pid)
 {
