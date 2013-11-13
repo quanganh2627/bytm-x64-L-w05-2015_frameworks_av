@@ -12,6 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * This file was modified by Dolby Laboratories, Inc. The portions of the
+ * code that are surrounded by "DOLBY..." are copyrighted and
+ * licensed separately, as follows:
+ *
+ *  (C) 2011-2013 Dolby Laboratories, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 #undef DEBUG_HDCP
@@ -1250,7 +1269,13 @@ void AwesomePlayer::createAudioPlayer_l()
             && (mDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US ||
             (getCachedDuration_l(&cachedDurationUs, &eos) &&
             cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))) {
+#ifndef DOLBY_DAP_OPENSLES
+        // DS Effect is attached only to the Non-Deep Buffered Output
+        // And we want all audio to flow through DS Effect.
+        // As such, we force both Music and Movie Playbacks to take
+        // the Non-Deep Buffered Output
         flags |= AudioPlayer::ALLOW_DEEP_BUFFERING;
+#endif //LINE ADDED BY DOLBY
     }
     if (isStreamingHTTP()) {
         flags |= AudioPlayer::IS_STREAMING;
