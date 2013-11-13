@@ -277,6 +277,12 @@ status_t NuPlayerDriver::seekTo(int msec) {
 
     int64_t seekTimeUs = msec * 1000ll;
 
+    if (seekTimeUs < 0) {
+        ALOGI("seek time is invalid, return directly");
+        notifyListener(MEDIA_SEEK_COMPLETE);
+        return OK;
+    }
+
     switch (mState) {
         case STATE_PREPARED:
         {
