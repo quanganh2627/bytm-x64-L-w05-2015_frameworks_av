@@ -13,6 +13,25 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 
@@ -67,6 +86,25 @@
 #include <cpustats/CentralTendencyStatistics.h>
 #include <cpustats/ThreadCpuUsage.h>
 #endif
+
+#if defined(DOLBY_DAP_OPENSLES)
+#include "effect_ds.h"
+#elif defined(DOLBY_DAP_DSP)
+#include "DsNative.h"
+#endif // DOLBY_END
+#if defined(DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER)
+#if (DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER >= 2)
+#define DS_LOG2(...) ALOGD(__VA_ARGS__)
+#if (DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER >= 3)
+#define DS_LOG3(...) ALOGD(__VA_ARGS__)
+#else
+#define DS_LOG3(...)
+#endif
+#else
+#define DS_LOG2(...)
+#define DS_LOG3(...)
+#endif
+#endif // DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER_END
 
 // ----------------------------------------------------------------------------
 
@@ -2861,6 +2899,14 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
     float masterVolume = mMasterVolume;
     bool masterMute = mMasterMute;
 
+#if (defined(DOLBY_DAP_OPENSLES_PREGAIN)) || (defined(DOLBY_DAP_DSP_PREGAIN))
+    // The DS pregain for the left channel.
+    uint32_t vl_ds_pregain = 0;
+    // The DS pregain for the right channel.
+    uint32_t vr_ds_pregain = 0;
+    // The number of pausing tracks.
+    size_t   pausingTracks = 0;
+#endif // (DOLBY_DAP_OPENSLES_PREGAIN) || (DOLBY_DAP_DSP_PREGAIN)
     if (masterMute) {
         masterVolume = 0;
     }
@@ -3123,6 +3169,9 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
             if (track->isPausing() || mStreamTypes[track->streamType()].mute) {
                 vl = vr = va = 0;
                 if (track->isPausing()) {
+#if (defined(DOLBY_DAP_OPENSLES_PREGAIN)) || (defined(DOLBY_DAP_DSP))
+                    pausingTracks++;
+#endif // (DOLBY_DAP_OPENSLES_PREGAIN) || (DOLBY_DAP_DSP_PREGAIN)
                     track->setPaused();
                 }
             } else {
@@ -3171,6 +3220,11 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
                 }
                 track->mHasVolumeController = false;
             }
+#if (defined(DOLBY_DAP_OPENSLES_PREGAIN)) || (defined(DOLBY_DAP_DSP_PREGAIN))
+            // Select the maximum volume as the pregain by scanning all the active audio tracks.
+            vl_ds_pregain = (vl_ds_pregain >= vl) ? vl_ds_pregain : vl;
+            vr_ds_pregain = (vr_ds_pregain >= vr) ? vr_ds_pregain : vr;
+#endif // (DOLBY_DAP_OPENSLES_PREGAIN) || (DOLBY_DAP_DSP_PREGAIN)
 
             // Convert volumes from 8.24 to 4.12 format
             // This additional clamping is needed in case chain->setVolume_l() overshot
@@ -3358,6 +3412,65 @@ track_is_ready: ;
     if (fastTracks > 0) {
         mixerStatus = MIXER_TRACKS_READY;
     }
+#if defined(DOLBY_DAP_BYPASS_SOUND_TYPES) || defined (DOLBY_DAP_OPENSLES_PREGAIN)
+    // Update the DS effect module volume with the calculated pregain, which is got by selecting the maximum volume
+    // among all the active tracks.
+    chain.clear();
+    chain = getEffectChain_l(AUDIO_SESSION_OUTPUT_MIX);
+    if (chain != 0) {
+        sp<EffectModule> dsEffect;
+        dsEffect = chain->getEffectFromType_l(EFFECT_SL_IID_DS);
+        if (dsEffect != 0){
+#if defined(DOLBY_DAP_BYPASS_SOUND_TYPES)
+            unsigned int numSystemTracks = 0, numOtherTracks = 0;
+            bool dsEffectBypassed = dsEffect->bypassed();
+            for (unsigned int i=0;i<mActiveTracks.size();i++){
+                sp<Track> t = mActiveTracks[i].promote();
+                if (t == 0) continue;
+
+                // this const just means the local variable doesn't change
+                Track* const track = t.get();
+                if (track->isEffectBypassStreamType()) {
+                    if (!track->isFastTrack()) {
+                    // if a system track is marked as fast, then dont suspend DS, since the fast
+                    // tracks will be mixed in the fast mixer after DS is applied.
+                        numSystemTracks++;
+                    }
+                } else if (mAudioFlinger->streamVolume_l(track->streamType()) != 0.0){
+                    numOtherTracks++;
+                }
+            }
+#if defined(DOLBY_DAP_OPENSLES)
+            if (numSystemTracks > 0  && numOtherTracks == 0 && !dsEffectBypassed && dsEffect->isEnabled()) {
+                ALOGI("Bypass DS effect");
+                // Bypass the effect with cross-fading enabled only if there is a sudden change in buffer.
+                dsEffect->setBypass(true, (sleepTime == 0));
+            } else if (numOtherTracks > 0 && dsEffectBypassed && tracksWithEffect == 0) {
+                ALOGI("Un-Bypass DS effect");
+                // Enable the effect; Crossfade only if there is a sudden change in buffer..
+                dsEffect->setBypass(false, (sleepTime == 0));
+            }
+#endif
+#endif
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
+            // Skip the DS pregain setting if there're no active tracks, or all the active tracks are pausing ones,
+            // so that the last pregain will be adopted and zero volume level will not be sent in the 2 cases above.
+            if (mixedTracks != 0 && mixedTracks != pausingTracks) {
+                    dsEffect->setDsPregain(&vl_ds_pregain, &vr_ds_pregain);
+            }
+#endif
+            chain.clear();
+        }
+    }
+#endif // DOLBY_END
+#if defined(DOLBY_DAP_DSP_PREGAIN)
+    if (mixedTracks != 0 && mixedTracks != pausingTracks) {
+        uint32_t volume[2];
+        volume[0] = vl_ds_pregain;
+        volume[1] = vr_ds_pregain;
+        DsNative::setParameter(DsNative::DS_PARAM_PREGAIN, volume);
+    }
+#endif //DOLBY_DAP_DSP_PREGAIN
     return mixerStatus;
 }
 

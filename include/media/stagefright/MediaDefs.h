@@ -62,6 +62,12 @@ extern const char *MEDIA_MIMETYPE_TEXT_SUBRIP;
 #ifdef USE_INTEL_MDP
 extern const char *MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED;
 #endif
+
+#ifdef DOLBY_UDC
+extern const char *MEDIA_MIMETYPE_AUDIO_AC3;
+extern const char *MEDIA_MIMETYPE_AUDIO_EC3;
+#endif // DOLBY_UDC
+
 }  // namespace android
 
 #endif  // MEDIA_DEFS_H_

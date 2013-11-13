@@ -13,6 +13,25 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 #ifndef INCLUDING_FROM_AUDIOFLINGER_H
@@ -101,6 +120,9 @@ public:
 
     status_t         setDevice(audio_devices_t device);
     status_t         setVolume(uint32_t *left, uint32_t *right, bool controller);
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
+        status_t         setDsPregain(uint32_t *left, uint32_t *right);
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
     status_t         setMode(audio_mode_t mode);
     status_t         setAudioSource(audio_source_t source);
     status_t         start();
@@ -121,6 +143,10 @@ public:
     bool             isOffloaded() const;
 
     void             dump(int fd, const Vector<String16>& args);
+#ifdef DOLBY_DAP_BYPASS_SOUND_TYPES
+        status_t         setBypass(bool bypass, bool crossFade);
+        bool             bypassed() const;
+#endif // DOLBY_DAP_BYPASS_SOUND_TYPES
 
 protected:
     friend class AudioFlinger;      // for mHandles
@@ -155,6 +181,14 @@ mutable Mutex               mLock;      // mutex for process, commands and handl
     bool     mSuspended;            // effect is suspended: temporarily disabled by framework
     bool     mOffloaded;            // effect is currently offloaded to the audio DSP
     bool     mStopped;              // effect has been stopped. permamently disabled by framework
+
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
+        uint32_t mDsLeftVolume;
+        uint32_t mDsRightVolume;
+#endif //DOLBY_DAP_OPENSLES_PREGAIN
+#ifdef DOLBY_DAP_BYPASS_SOUND_TYPES
+        bool mBypassed;                // Indicates a special "bypassed" state for an effect
+#endif // DOLBY_DAP_BYPASS_SOUND_TYPES
 };
 
 // The EffectHandle class implements the IEffect interface. It provides resources
