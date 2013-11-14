@@ -42,10 +42,6 @@
 #include <OMX_Audio.h>
 #include <OMX_Component.h>
 
-#ifdef USE_INTEL_ASF_EXTRACTOR
-#include "MetaDataExt.h"
-#endif
-
 #include "include/avc_utils.h"
 
 namespace android {
@@ -472,12 +468,6 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
 
             addCodecSpecificData(
                     codec_specific_data, codec_specific_data_size);
-#ifdef USE_INTEL_ASF_EXTRACTOR
-        } else if (meta->findData(kKeyConfigData, &type, &data, &size)) {
-
-            CODEC_LOGV("Found config data for WMV, size is %d", size);
-            addCodecSpecificData(data, size);
-#endif
         } else if (meta->findData(kKeyAVCC, &type, &data, &size)) {
             // Parse the AVCDecoderConfigurationRecord
 
@@ -807,10 +797,6 @@ void OMXCodec::setVideoInputFormat(
         compressionFormat = OMX_VIDEO_CodingMPEG4;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_H263, mime)) {
         compressionFormat = OMX_VIDEO_CodingH263;
-#ifdef USE_INTEL_ASF_EXTRACTOR
-    } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_WMV, mime)) {
-        compressionFormat = OMX_VIDEO_CodingWMV;
-#endif
     } else {
         ALOGE("Not a supported video mime type: %s", mime);
         CHECK(!"Should not be here. Not a supported video mime type.");
@@ -1210,10 +1196,6 @@ status_t OMXCodec::setVideoOutputFormat(
         compressionFormat = OMX_VIDEO_CodingVP9;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_MPEG2, mime)) {
         compressionFormat = OMX_VIDEO_CodingMPEG2;
-#ifdef USE_INTEL_ASF_EXTRACTOR
-    } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_WMV, mime)) {
-        compressionFormat = OMX_VIDEO_CodingWMV;
-#endif
     } else {
         ALOGE("Not a supported video mime type: %s", mime);
         CHECK(!"Should not be here. Not a supported video mime type.");
@@ -1406,10 +1388,6 @@ void OMXCodec::setComponentRole(
             "video_decoder.vp8", "video_encoder.vp8" },
         { MEDIA_MIMETYPE_VIDEO_VP9,
             "video_decoder.vp9", "video_encoder.vp9" },
-#ifdef USE_INTEL_ASF_EXTRACTOR
-        { MEDIA_MIMETYPE_VIDEO_WMV,
-            "video_decoder.wmv", NULL },
-#endif
         { MEDIA_MIMETYPE_AUDIO_RAW,
             "audio_decoder.raw", "audio_encoder.raw" },
         { MEDIA_MIMETYPE_AUDIO_FLAC,
