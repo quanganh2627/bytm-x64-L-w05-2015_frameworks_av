@@ -368,27 +368,21 @@ int EffectRelease(effect_handle_t handle)
     }
     if (e1 == NULL) {
         ret = -ENOENT;
-        pthread_mutex_unlock(&gLibLock);
         goto exit;
     }
 
     // release effect in library
     if (fx->lib == NULL) {
         ALOGW("EffectRelease() fx %p library already unloaded", handle);
-        pthread_mutex_unlock(&gLibLock);
     } else {
         pthread_mutex_lock(&fx->lib->lock);
-        // Releasing the gLibLock here as the list access is over as the
-        // effect is removed from the list.
-        // If the gLibLock is not released, we will have a deadlock situation
-        // since we call the sub effect release inside the EffectRelease of Proxy
-        pthread_mutex_unlock(&gLibLock);
         fx->lib->desc->release_effect(fx->subItfe);
         pthread_mutex_unlock(&fx->lib->lock);
     }
     free(fx);
 
 exit:
+    pthread_mutex_unlock(&gLibLock);
     return ret;
 }
 
@@ -405,7 +399,8 @@ int EffectIsNullUuid(const effect_uuid_t *uuid)
 // matching uuid and then copies the corresponding sub effect descriptors
 // to the inout param
 int EffectGetSubEffects(const effect_uuid_t *uuid,
-                        effect_descriptor_t *pDescriptors, size_t size)
+                        effect_descriptor_t *pDescriptors,
+                        audio_effect_library_t** pAeli, size_t size)
 {
    ALOGV("EffectGetSubEffects() UUID: %08X-%04X-%04X-%04X-%02X%02X%02X%02X%02X"
           "%02X\n",uuid->timeLow, uuid->timeMid, uuid->timeHiAndVersion,
@@ -433,7 +428,8 @@ int EffectGetSubEffects(const effect_uuid_t *uuid,
            while (subefx != NULL) {
                subeffect = (sub_effect_entry_t*)subefx->object;
                d = (effect_descriptor_t*)(subeffect->object);
-               pDescriptors[count++] = *d;
+               pDescriptors[count] = *d;
+               pAeli[count++] = subeffect->lib->desc;
                subefx = subefx->next;
            }
            ALOGV("EffectGetSubEffects end - copied the sub effect descriptors");

@@ -63,6 +63,7 @@ const struct effect_interface_s gEffectInterface = {
 struct EffectContext {
   const struct effect_interface_s  *common_itfe; // Holds the itfe of the Proxy
   effect_descriptor_t*  desc;                    // Points to the sub effect descriptors
+  audio_effect_library_t**  aeli;                // Points to the sub effect aeli
   effect_handle_t       eHandle[SUB_FX_COUNT];   // The effect handles of the sub effects
   int                   index;       // The index that is currently active - HOST or OFFLOAD
   int32_t               sessionId;   // The sessiond in which the effect is created.
