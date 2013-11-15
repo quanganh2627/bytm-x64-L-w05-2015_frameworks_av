@@ -101,6 +101,8 @@ namespace android {
     static bool mRemoteBGMsuspend = false;
     static bool mBGMEnabled = false;
     static bool mBGMAudioAvailable = true;
+    KeyedVector<String8, String8> mBGMUriHeaders;
+    sp<DataSource> mBGMFileSource;
 #endif
 
 static int64_t kLowWaterMarkUs = 2000000ll;  // 2secs
@@ -3599,7 +3601,7 @@ void AwesomePlayer::onAudioTearDownEvent() {
 
 #ifdef BGM_ENABLED
 status_t AwesomePlayer::remoteBGMSuspend() {
-
+    int64_t durationUs =0;
     // If BGM is enabled or enabled previously and exited then the
     // track/ sink needs to be closed and recreated again so that
     // music is heard on active output and not on multitasked output
@@ -3610,14 +3612,14 @@ status_t AwesomePlayer::remoteBGMSuspend() {
        Stats stats;
        uint32_t extractorFlags;
        stats.mURI = mUri;
-       stats.mUriHeaders = mUriHeaders;
-       stats.mFileSource = mFileSource;
+       mBGMUriHeaders = mUriHeaders;
+       mBGMFileSource = mFileSource;
        stats.mFlags = mFlags & (PLAYING | AUTO_LOOPING | LOOPING | AT_EOS);
-       getPosition(&stats.mPositionUs);
+       getPosition(&mAudioTearDownPosition);
        extractorFlags = mExtractorFlags;
-       stats.mDurationUs = mDurationUs; /* store the file duration */
+       durationUs = mDurationUs; /* store the file duration */
        reset_l();
-       mDurationUs = stats.mDurationUs; /* restore the duration */
+       mDurationUs = durationUs; /* restore the duration */
        mExtractorFlags = extractorFlags;
        mStats = stats;
        mRemoteBGMsuspend = true;
@@ -3630,24 +3632,26 @@ status_t AwesomePlayer::remoteBGMResume() {
 
     Mutex::Autolock autoLock(mLock);
 
+    sp<DataSource> fileSource(mBGMFileSource);
+
     Stats stats = mStats;
 
     status_t err;
-    if (stats.mFileSource != NULL) {
-        err = setDataSource_l(stats.mFileSource);
+    if (fileSource != NULL) {
+        err = setDataSource_l(fileSource);
 
         if (err == OK) {
-            mFileSource = stats.mFileSource;
+            mFileSource = fileSource;
         }
     } else {
-        err = setDataSource_l(stats.mURI, &stats.mUriHeaders);
+        err = setDataSource_l(stats.mURI, &mBGMUriHeaders);
     }
 
     if (err != OK) {
         return err;
     }
 
-    seekTo_l(stats.mPositionUs);
+    seekTo_l(mAudioTearDownPosition);
     mFlags = stats.mFlags & (AUTO_LOOPING | LOOPING | AT_EOS);
 
     // Update the flag
