@@ -15,12 +15,17 @@
 ** limitations under the License.
 */
 
+/*
+* Portions contributed by: Intel Corporation
+*/
+
 // Proxy for media player implementations
 
 //#define LOG_NDEBUG 0
 #define LOG_TAG "MediaPlayerService"
 #include <utils/Log.h>
 
+#include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -344,7 +349,33 @@ sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
         return NULL;
     }
 
+#ifdef INTEL_WIDI
+    void *hlibintelwidi = dlopen("libwidiservice.so", RTLD_NOW);
+    if (hlibintelwidi) {
+        ALOGE("dlopen(libwidiservice.so) succeeded in opening from MediaPlayerService.cpp");
+        dlerror(); // Clear existing errors
+        typedef sp<IRemoteDisplay> (*getRemoteDisplayFunc_t)(const String8&, const sp<IRemoteDisplayClient>& );
+        getRemoteDisplayFunc_t getRemoteDisplay = NULL;
+        getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(hlibintelwidi, "getRemoteDisplay");
+        sp<IRemoteDisplay> rd;
+        const char* error = dlerror();
+        if((error == NULL) && (getRemoteDisplay != NULL)) {
+            rd = (*getRemoteDisplay)(iface, client);
+        }
+        else {
+            ALOGI("dlsym(getRemoteDisplay) failed with error %s. Falling back to non-Intel version.", error);
+            rd = new RemoteDisplay(client, iface.string());
+        }
+        dlclose(hlibintelwidi);
+        return rd;
+    }
+    else {
+        ALOGE("dlopen(libwidiservice.so) failed. Falling back to non-Intel version.");
+        return new RemoteDisplay(client, iface.string());
+    }
+#else
     return new RemoteDisplay(client, iface.string());
+#endif
 }
 
 status_t MediaPlayerService::updateProxyConfig(
