@@ -581,6 +581,13 @@ status_t PreviewPlayer::play_l() {
                 ALOGV("play_l: Change audio source required");
 
                 if (isAudioPlayerStarted == true) {
+                     /* w/a patch to clear mPositionTimeMediaUs: sometimes it would be updated in
+                      * VideoEditorAudioPlayer::fillBuffer() too late then bring big gap between audio
+                      * and video's time stamp. It's OK for long clip transition because A/V will sync quickly.
+                      * but for short period(~0.5s) transition, all video buffers would be dropped before
+                      * sync is achieved, then transition effect couldn't be observed.
+                      */
+                    mAudioPlayer->seekTo(0LL);
                     mAudioPlayer->pause();
                 }
 
