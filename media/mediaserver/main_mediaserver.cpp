@@ -15,6 +15,10 @@
 ** limitations under the License.
 */
 
+/*
+* Portions contributed by: Intel Corporation
+*/
+
 #define LOG_TAG "mediaserver"
 //#define LOG_NDEBUG 0
 
@@ -27,6 +31,7 @@
 #include <cutils/properties.h>
 #include <utils/Log.h>
 #include "RegisterExtensions.h"
+#include <dlfcn.h>
 
 // from LOCAL_C_INCLUDES
 #include "AudioFlinger.h"
@@ -135,6 +140,29 @@ int main(int argc, char** argv)
 
 #ifdef INTEL_VIDEO_XPROC_SHARING
         IntelBufferSharingService::instantiate();
+#endif
+#ifdef INTEL_WIDI
+        void *hlibintelwidi = dlopen("libwidiservice.so", RTLD_NOW);
+        if (hlibintelwidi) {
+            ALOGE("dlopen(libwidiservice) succeeded in opening from main_mediaserver.cpp.");
+            dlerror(); // Clear existing errors
+            typedef bool (*instantiateFunc_t)();
+            instantiateFunc_t instantiate = NULL;
+            instantiate = (instantiateFunc_t) dlsym(hlibintelwidi, "instantiate");
+            const char* error = dlerror();
+            if((error == NULL) && (instantiate != NULL)) {
+                bool ret = (*instantiate)();
+                if(!ret) {
+                    ALOGI("Could not invoke instantiate() on libwidiservice.so! Intel widi will not be used.");
+                }
+            }
+            else {
+                ALOGI("dlsym(instantiate) failed with error %s! Intel widi will not be used.", error);
+            }
+        }
+        else {
+            ALOGE("dlopen(libwidiservice) failed! Intel widi will not be used.");
+        }
 #endif
 
         registerExtensions();
