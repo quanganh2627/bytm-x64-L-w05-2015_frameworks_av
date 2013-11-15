@@ -75,6 +75,8 @@ struct IntelPlatformPrivate {
 };
 #endif
 
+
+
 struct AwesomePlayer {
     AwesomePlayer();
     ~AwesomePlayer();
@@ -127,7 +129,8 @@ struct AwesomePlayer {
     status_t remoteBGMSuspend();
     status_t remoteBGMResume();
     bool mAudioPlayerPaused;
-#endif
+
+#endif //BGM_ENABLED
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -176,6 +179,8 @@ private:
     wp<MediaPlayerBase> mListener;
     bool mUIDValid;
     uid_t mUID;
+
+
 
     sp<ANativeWindow> mNativeWindow;
     sp<MediaPlayerBase::AudioSink> mAudioSink;
@@ -368,12 +373,7 @@ private:
         int mFd;
         String8 mURI;
         int64_t mBitrate;
-#ifdef BGM_ENABLED
-        KeyedVector<String8, String8> mUriHeaders;
-        sp<DataSource> mFileSource;
-        int64_t mPositionUs;
-        int64_t mDurationUs; /* store the file duration */
-#endif //BGM_ENABLED
+
         // FIXME:
         // These two indices are just 0 or 1 for now
         // They are not representing the actual track
@@ -388,6 +388,7 @@ private:
         int32_t mFrameRate;
         uint32_t mFlags;
         Vector<TrackStat> mTracks;
+
     } mStats;
 
     bool    mOffloadAudio;
