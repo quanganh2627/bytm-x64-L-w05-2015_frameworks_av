@@ -125,6 +125,10 @@ struct AwesomePlayer {
     void postAudioSeekComplete();
     void postAudioTearDown();
     status_t dump(int fd, const Vector<String16> &args) const;
+
+    status_t tearDownToNonDeepBufferAudio();
+
+    bool mIsDeepBufferPossible;
 #ifdef BGM_ENABLED
     status_t remoteBGMSuspend();
     status_t remoteBGMResume();
@@ -410,6 +414,8 @@ private:
 
     AwesomePlayer(const AwesomePlayer &);
     AwesomePlayer &operator=(const AwesomePlayer &);
+
+    bool mDeepBufferAudio;
 };
 
 }  // namespace android

@@ -620,6 +620,5 @@ bool canOffloadStream(const sp<MetaData>& meta, bool hasVideo, bool isStreaming)
     // bit rate, duration, video and streaming
     return AudioSystem::isOffloadSupported(info);
 }
-
 }  // namespace android
 
