@@ -57,11 +57,14 @@ endif
 #endif
 #endif
 
+LOCAL_SHARED_LIBRARIES += libstagefright
+
 ifdef DOLBY_DAP
     ifdef DOLBY_DAP_OPENSLES
         LOCAL_CFLAGS += -DDOLBY_DAP_OPENSLES
     endif
 endif #DOLBY_END
+
 LOCAL_MODULE:= libstagefright_nuplayer
 
 LOCAL_MODULE_TAGS := eng

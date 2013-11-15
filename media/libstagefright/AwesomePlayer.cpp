@@ -280,6 +280,7 @@ AwesomePlayer::AwesomePlayer()
       mVPPProcessor(NULL),
       mVPPInit(false),
 #endif
+      mDeepBufferAudio(false),
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDClient(NULL),
       mVideoSessionId(-1),
@@ -292,7 +293,8 @@ AwesomePlayer::AwesomePlayer()
       ,
       mAudioPlayerPaused(false)
 #endif
-     {
+      ,mIsDeepBufferPossible(true)
+    {
     CHECK_EQ(mClient.connect(), (status_t)OK);
 
     DataSource::RegisterDefaultSniffers();
@@ -431,6 +433,10 @@ status_t AwesomePlayer::setDataSource_l(
 status_t AwesomePlayer::setDataSource(
         int fd, int64_t offset, int64_t length) {
     Mutex::Autolock autoLock(mLock);
+
+    if (offset > 0) {
+        mIsDeepBufferPossible = false;
+    }
 
     reset_l();
 
@@ -679,6 +685,7 @@ void AwesomePlayer::reset() {
 }
 
 void AwesomePlayer::reset_l() {
+    mDeepBufferAudio = false;
     mVideoRenderingStarted = false;
     mActiveAudioTrackIndex = -1;
     mDisplayWidth = 0;
@@ -1270,20 +1277,29 @@ void AwesomePlayer::createAudioPlayer_l()
     uint32_t flags = 0;
     int64_t cachedDurationUs;
     bool eos;
+    char value[PROPERTY_VALUE_MAX];
 
     if (mOffloadAudio) {
         flags |= AudioPlayer::USE_OFFLOAD;
     } else if (mVideoSource == NULL
             && (mDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US ||
             (getCachedDuration_l(&cachedDurationUs, &eos) &&
-            cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))) {
+            cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))
+            && mIsDeepBufferPossible) {
+        if (property_get("lpa.deepbuffer.enable", value, "0")
+                && ((bool)atoi(value))) {
 #ifndef DOLBY_DAP_OPENSLES
-        // DS Effect is attached only to the Non-Deep Buffered Output
-        // And we want all audio to flow through DS Effect.
-        // As such, we force both Music and Movie Playbacks to take
-        // the Non-Deep Buffered Output
-        flags |= AudioPlayer::ALLOW_DEEP_BUFFERING;
+            // DS Effect is attached only to the Non-Deep Buffered Output
+            // And we want all audio to flow through DS Effect.
+            // As such, we force both Music and Movie Playbacks to take
+            // the Non-Deep Buffered Output
+            flags |= AudioPlayer::ALLOW_DEEP_BUFFERING;
+            mDeepBufferAudio = true;
+#else
+            mDeepBufferAudio = false;
+
 #endif //LINE ADDED BY DOLBY
+        }
     }
     if (isStreamingHTTP()) {
         flags |= AudioPlayer::IS_STREAMING;

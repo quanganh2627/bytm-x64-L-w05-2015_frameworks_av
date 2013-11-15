@@ -1004,7 +1004,9 @@ status_t AudioTrack::createTrack_l(
     if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
         trackFlags |= IAudioFlinger::TRACK_OFFLOAD;
     }
-
+    if (flags & AUDIO_OUTPUT_FLAG_DEEP_BUFFER) {
+        trackFlags |= IAudioFlinger::TRACK_DEEPBUFFER;
+    }
     sp<IAudioTrack> track = audioFlinger->createTrack(streamType,
                                                       sampleRate,
                                                       // AudioFlinger only sees 16-bit PCM

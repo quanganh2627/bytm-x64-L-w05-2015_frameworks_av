@@ -87,6 +87,10 @@ public:
 
     virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
 
+    bool isDeepBuffer() const {
+        return mFlags & IAudioFlinger::TRACK_DEEPBUFFER;
+    }
+
 protected:
     // for numerous
     friend class PlaybackThread;
