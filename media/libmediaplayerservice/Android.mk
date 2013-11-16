@@ -68,9 +68,11 @@ ifeq ($(strip $(INTEL_MUSIC_OFFLOAD_FEATURE)),true)
 endif
 
 ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
-    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
     LOCAL_SHARED_LIBRARIES += libmultidisplay
     LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+ifeq ($(USE_MDS_LEGACY),true)
+    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
+endif
 endif
 #VPP support on MRFLD only
 ifeq ($(TARGET_HAS_VPP), true)

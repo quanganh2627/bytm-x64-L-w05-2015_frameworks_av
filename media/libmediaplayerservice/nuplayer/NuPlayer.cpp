@@ -198,15 +198,32 @@ void NuPlayer::setMDSVideoState_l(int state) {
         return;
     }
     if (mMDClient == NULL) {
+#ifdef USE_MDS_LEGACY
         mMDClient = new MultiDisplayClient();
+#else
+        sp<IServiceManager> sm = defaultServiceManager();
+        if (sm == NULL) {
+            LOGE("%s: Fail to get service manager", __func__);
+            return;
+        }
+        sp<IMDService> mds = interface_cast<IMDService>(
+                sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
+        if (mds == NULL) {
+            LOGE("%s: Failed to get MDS service", __func__);
+            return;
+        }
+        mMDClient = mds->getVideoControl();
+#endif
     }
     if (mVideoSessionId < 0) {
         mVideoSessionId = mMDClient->allocateVideoSessionId();
     }
-    mMDClient->setVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
+    mMDClient->updateVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
     if (state == MDS_VIDEO_UNPREPARED) {
         mVideoSessionId = -1;
+#ifdef USE_MDS_LEGACY
         delete mMDClient;
+#endif
         mMDClient = NULL;
     }
 }
@@ -234,8 +251,10 @@ void NuPlayer::setMDSVideoInfo_l() {
     int32_t displayW, displayH, frameRate;
     bool success = false;
     displayW = displayH = frameRate = 0;
-    info.isplaying = true;
-    info.isprotected = false;
+#ifdef USE_MDS_LEGACY
+    info.isPlaying = true;
+#endif
+    info.isProtected = false;
     msg = mSource->getFormat(false);
     if (msg != NULL) {
         success = msg->findInt32("frame-rate", &frameRate);
@@ -251,7 +270,7 @@ void NuPlayer::setMDSVideoInfo_l() {
     info.frameRate = frameRate;
     info.displayW  = displayW;
     info.displayH  = displayH;
-    mMDClient->setVideoSourceInfo(mVideoSessionId, &info);
+    mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
     setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
 }
 #endif

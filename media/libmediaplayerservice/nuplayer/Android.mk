@@ -40,9 +40,11 @@ LOCAL_C_INCLUDES := \
 	$(TOP)/frameworks/native/include/media/openmax
 
 ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
-    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/display
     LOCAL_SHARED_LIBRARIES += libmultidisplay
     LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+ifeq ($(USE_MDS_LEGACY),true)
+    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
+endif
 endif
 
 LOCAL_SHARED_LIBRARIES += libstagefright

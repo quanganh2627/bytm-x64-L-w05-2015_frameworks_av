@@ -36,7 +36,13 @@
 #include <utils/threads.h>
 #include <drm/DrmManagerClient.h>
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
 #include <display/MultiDisplayClient.h>
+#else
+#include <display/MultiDisplayService.h>
+#include <display/IMultiDisplayVideoControl.h>
+using namespace android::intel;
+#endif
 #endif
 
 #include <media/stagefright/MetaData.h> // for AAC aparams
@@ -59,6 +65,7 @@ class DecryptHandle;
 
 class TimedTextDriver;
 struct WVMExtractor;
+
 
 struct AwesomeRenderer : public RefBase {
     AwesomeRenderer() {}
@@ -235,7 +242,11 @@ private:
     bool mWatchForAudioSeekComplete;
     bool mWatchForAudioEOS;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
     MultiDisplayClient* mMDClient;
+#else
+    sp<IMultiDisplayVideoControl> mMDClient;
+#endif
     int mFramesToDirty;
     uint32_t mRenderedFrames;
     int mVideoSessionId;
