@@ -1085,6 +1085,11 @@ void AwesomePlayer::onStreamDone() {
 
 status_t AwesomePlayer::play() {
     ATRACE_CALL();
+    if (mDeepBufferAudio && isInCall()) {
+        mAudioTearDown = true;     // to avoid any events posting to upperlayer
+        postAudioTearDownEvent(0);
+        mAudioTearDown = false;
+    }
 #ifdef BGM_ENABLED
     if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
@@ -1285,7 +1290,7 @@ void AwesomePlayer::createAudioPlayer_l()
             && (mDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US ||
             (getCachedDuration_l(&cachedDurationUs, &eos) &&
             cachedDurationUs > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US))
-            && mIsDeepBufferPossible) {
+            && mIsDeepBufferPossible && !isInCall()) {
         if (property_get("lpa.deepbuffer.enable", value, "0")
                 && ((bool)atoi(value))) {
 #ifndef DOLBY_DAP_OPENSLES
@@ -3620,7 +3625,6 @@ void AwesomePlayer::onAudioTearDownEvent() {
     // Call prepare for the host decoding
     beginPrepareAsync_l();
 }
-
 #ifdef BGM_ENABLED
 status_t AwesomePlayer::remoteBGMSuspend() {
     int64_t durationUs =0;
