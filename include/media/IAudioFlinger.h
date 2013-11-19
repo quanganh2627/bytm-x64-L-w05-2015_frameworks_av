@@ -210,6 +210,8 @@ public:
     // and should be called at most once.  For a definition of what "low RAM" means, see
     // android.app.ActivityManager.isLowRamDevice().
     virtual status_t setLowRamDevice(bool isLowRamDevice) = 0;
+    // get audio mode
+    virtual audio_mode_t   getMode() const  = 0;
 };
 
 
