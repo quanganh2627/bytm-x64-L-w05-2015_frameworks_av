@@ -74,6 +74,7 @@ enum {
     GET_PRIMARY_OUTPUT_SAMPLING_RATE,
     GET_PRIMARY_OUTPUT_FRAME_COUNT,
     SET_LOW_RAM_DEVICE,
+    GET_MODE
 };
 
 class BpAudioFlinger : public BpInterface<IAudioFlinger>
@@ -323,7 +324,13 @@ public:
         remote()->transact(SET_MODE, data, &reply);
         return reply.readInt32();
     }
-
+    virtual audio_mode_t getMode() const
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioFlinger::getInterfaceDescriptor());
+        status_t status = remote()->transact(GET_MODE, data, &reply);
+        return (( audio_mode_t)reply.readInt32());
+    }
     virtual status_t setMicMute(bool state)
     {
         Parcel data, reply;
@@ -876,6 +883,11 @@ status_t BnAudioFlinger::onTransact(
             CHECK_INTERFACE(IAudioFlinger, data, reply);
             audio_mode_t mode = (audio_mode_t) data.readInt32();
             reply->writeInt32( setMode(mode) );
+            return NO_ERROR;
+        } break;
+        case GET_MODE: {
+            CHECK_INTERFACE(IAudioFlinger, data, reply);
+            reply->writeInt32( getMode() );
             return NO_ERROR;
         } break;
         case SET_MIC_MUTE: {
