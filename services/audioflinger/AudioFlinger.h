@@ -248,6 +248,7 @@ public:
                                 Parcel* reply,
                                 uint32_t flags);
 
+    virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
     sp<NBLog::Writer>   newWriter_l(size_t size, const char *name);
@@ -300,7 +301,6 @@ public:
 private:
     class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
 
-               audio_mode_t getMode() const { return mMode; }
 
                 bool        btNrecIsOff() const { return mBtNrecIsOff; }
 

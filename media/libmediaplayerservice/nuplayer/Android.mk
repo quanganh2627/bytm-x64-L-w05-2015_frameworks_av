@@ -64,7 +64,7 @@ ifdef DOLBY_DAP
         LOCAL_CFLAGS += -DDOLBY_DAP_OPENSLES
     endif
 endif #DOLBY_END
-
+LOCAL_SHARED_LIBRARIES += libstagefright
 LOCAL_MODULE:= libstagefright_nuplayer
 
 LOCAL_MODULE_TAGS := eng

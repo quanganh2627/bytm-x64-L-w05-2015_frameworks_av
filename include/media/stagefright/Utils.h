@@ -58,7 +58,6 @@ status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink, const sp<MetaDa
 
 // Check whether the stream defined by meta can be offloaded to hardware
 bool canOffloadStream(const sp<MetaData>& meta, bool hasVideo, bool isStreaming);
-
 bool isInCall();
 }  // namespace android
 
