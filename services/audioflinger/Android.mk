@@ -88,7 +88,8 @@ LOCAL_CFLAGS += -UFAST_TRACKS_AT_NON_NATIVE_SAMPLE_RATE
 # LOCAL_SRC_FILES += AudioWatchdog.cpp
 # LOCAL_CFLAGS += -DAUDIO_WATCHDOG
 
-ifeq ($(USE_INTEL_SRC),true)
+# Currently set to false, to be revert back to USE_INTEL_SRC later
+ifeq ($(USE_INTEL_SRC_IN_MEDIAFRAMEWORK),true)
   LOCAL_CFLAGS += -DUSE_INTEL_SRC
   LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
   LOCAL_SRC_FILES += AudioResamplerIA.cpp
