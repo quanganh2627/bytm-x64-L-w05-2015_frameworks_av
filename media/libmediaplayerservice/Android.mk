@@ -48,7 +48,8 @@ ifeq ($(TARGET_HAS_VPP),true)
 LOCAL_SHARED_LIBRARIES += libva \
                           libva-android \
                           libva-tpi \
-                          libui
+                          libui \
+                          libvpp_setting
 LOCAL_STATIC_LIBRARIES += libvpp
 endif
 
