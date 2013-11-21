@@ -46,7 +46,8 @@ LOCAL_C_INCLUDES += \
         $(TARGET_OUT_HEADERS)/libva	\
 LOCAL_SHARED_LIBRARIES += libva \
                           libva-android \
-                          libva-tpi
+                          libva-tpi \
+                          libvpp_setting
 endif
 
 #ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
