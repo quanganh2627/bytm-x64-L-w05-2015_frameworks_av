@@ -152,7 +152,8 @@ LOCAL_C_INCLUDES += \
 LOCAL_STATIC_LIBRARIES += libvpp
 LOCAL_SHARED_LIBRARIES += libva \
                           libva-android \
-                          libva-tpi
+                          libva-tpi \
+                          libvpp_setting
 endif
 
 ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
