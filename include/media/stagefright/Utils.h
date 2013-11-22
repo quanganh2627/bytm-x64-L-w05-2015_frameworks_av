@@ -22,7 +22,6 @@
 #include <stdint.h>
 #include <utils/Errors.h>
 #include <utils/RefBase.h>
-#include <media/MediaPlayerInterface.h>
 
 namespace android {
 
@@ -48,17 +47,7 @@ void convertMessageToMetaData(
         const sp<AMessage> &format, sp<MetaData> &meta);
 
 AString MakeUserAgent();
-// Send information from MetaData to the HAL via AudioSink
-status_t sendMetaDataToHal(sp<MediaPlayerBase::AudioSink>& sink,
-                            const sp<MetaData>& meta);
-bool isInCall();
 
-// Check whether the stream defined by meta can be offloaded to hardware
-bool canOffloadStream( const sp<MetaData>& meta, bool hasVideo, bool isStreaming , uint32_t sessionId);
-
-// used to set the AAC parameters for offloaded AAC files
-status_t setAACParameters(sp<MetaData> meta, audio_format_t *aFormat, uint32_t *avgBitRate);
-status_t mapMimeToAudioFormat(audio_format_t *audioFormat, const char *mime);
 }  // namespace android
 
 #endif  // UTILS_H_

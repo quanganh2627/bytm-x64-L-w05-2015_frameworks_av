@@ -973,7 +973,7 @@ M4OSA_ERR VideoEditor3gpReader_getNextAu(M4OSA_Context context,
     MediaSource::ReadOptions options;
     M4OSA_Bool flag = M4OSA_FALSE;
     status_t error;
-    int32_t i32Tmp = 0, isFakeSync = 0;
+    int32_t i32Tmp = 0;
 
     M4OSA_DEBUG_IF1(( pC== 0), M4ERR_PARAMETER,
         "VideoEditor3gpReader_getNextAu: invalid context");
@@ -1027,14 +1027,8 @@ M4OSA_ERR VideoEditor3gpReader_getNextAu(M4OSA_Context context,
                 {
                     if (mMediaBuffer->meta_data()->findInt32(kKeyIsSyncFrame,
                         &i32Tmp) && i32Tmp) {
-                        mMediaBuffer->meta_data()->findInt32(kKeyIsFakeSync, &isFakeSync);
-                        if (!isFakeSync){
                             ALOGV("SYNC FRAME FOUND--%d", i32Tmp);
-                            pAu->attribute = AU_RAP;
-                        } else {
-                            ALOGW("It's a fake sync frame!");
-                            pAu->attribute = AU_P_Frame;
-                        }
+                        pAu->attribute = AU_RAP;
                     }
                     else {
                         pAu->attribute = AU_P_Frame;
@@ -1057,14 +1051,8 @@ M4OSA_ERR VideoEditor3gpReader_getNextAu(M4OSA_Context context,
             if(mMediaBuffer != NULL) {
                 if (mMediaBuffer->meta_data()->findInt32(kKeyIsSyncFrame,
                     &i32Tmp) && i32Tmp) {
-                    mMediaBuffer->meta_data()->findInt32(kKeyIsFakeSync, &isFakeSync);
-                    if (!isFakeSync){
-                        ALOGV("SYNC FRAME FOUND--%d", i32Tmp);
-                        pAu->attribute = AU_RAP;
-                    } else {
-                        ALOGW("It's a fake sync frame!");
-                        pAu->attribute = AU_P_Frame;
-                    }
+                    ALOGV("SYNC FRAME FOUND--%d", i32Tmp);
+                    pAu->attribute = AU_RAP;
                 }
                 else {
                     pAu->attribute = AU_P_Frame;
@@ -1082,10 +1070,6 @@ M4OSA_ERR VideoEditor3gpReader_getNextAu(M4OSA_Context context,
         return M4ERR_PARAMETER;
     }
 
-    if (tempTime64 == 0 && pAu->attribute == AU_P_Frame) {
-        ALOGW("The first frame should be sync frame!");
-        pAu->attribute = AU_RAP;
-    }
     if (mMediaBuffer != NULL) {
         if( (pAu->dataAddress == NULL) ||  (pAu->size < \
             mMediaBuffer->range_length())) {
@@ -1822,7 +1806,6 @@ M4OSA_ERR VideoEditor3gpReader_getNextStreamHandler(M4OSA_Context context,
                 }
             } else {
                 ALOGV("VideoEditor3gpReader_getNextStream mStreamType: none ");
-                pC->mCurrTrack++; //Increment current track to get the next track
                 return M4ERR_READER_UNKNOWN_STREAM_TYPE;
             }
         } else {

@@ -13,25 +13,6 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
-**
-** This file was modified by Dolby Laboratories, Inc. The portions of the
-** code that are surrounded by "DOLBY..." are copyrighted and
-** licensed separately, as follows:
-**
-**  (C) 2011-2013 Dolby Laboratories, Inc.
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**    http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-**
 */
 
 #ifndef ANDROID_AUDIO_FLINGER_H
@@ -161,6 +142,7 @@ public:
 
     virtual     status_t    setMicMute(bool state);
     virtual     bool        getMicMute() const;
+
     virtual     status_t    setParameters(audio_io_handle_t ioHandle, const String8& keyValuePairs);
     virtual     String8     getParameters(audio_io_handle_t ioHandle, const String8& keys) const;
 
@@ -240,16 +222,6 @@ public:
                                 Parcel* reply,
                                 uint32_t flags);
 
-    //virtual status_t        setOffloadEOSReached(bool value);
-
-    //Get Offload buffer size
-    size_t getOffloadBufferSize(
-            uint32_t bitRate,
-            uint32_t sampleRate,
-            uint32_t channel,
-            int output);
-
-    virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
     sp<NBLog::Writer>   newWriter_l(size_t size, const char *name);
@@ -299,9 +271,11 @@ public:
                                         sync_event_callback_t callBack,
                                         void *cookie);
 
-
 private:
-   class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
+    class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
+
+               audio_mode_t getMode() const { return mMode; }
+
                 bool        btNrecIsOff() const { return mBtNrecIsOff; }
 
                             AudioFlinger();
@@ -420,9 +394,6 @@ private:
         virtual void        stop();
         virtual void        flush();
         virtual void        pause();
-        virtual void        setVolume(float left, float right);
-        virtual status_t    setParameters(const String8& keyValuePairs);
-        virtual status_t    setOffloadEOSReached(bool value);
         virtual status_t    attachAuxEffect(int effectId);
         virtual status_t    allocateTimedBuffer(size_t size,
                                                 sp<IMemory>* buffer);
@@ -446,8 +417,6 @@ private:
         virtual void        stop();
         virtual status_t onTransact(
             uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
-
-
     private:
         const sp<RecordThread::RecordTrack> mRecordTrack;
 
@@ -466,9 +435,6 @@ private:
                                 { return mStreamTypes[stream].volume; }
               void audioConfigChanged_l(int event, audio_io_handle_t ioHandle, const void *param2);
 
-#ifdef DOLBY_DAP_OPENSLES
-              static bool sendBroadcastMessage(String16 action, int value);
-#endif //DOLBY_DAP_OPENSLES
               // allocate an audio_io_handle_t, session ID, or effect ID
               uint32_t nextUniqueId();
 
@@ -481,9 +447,7 @@ private:
               audio_devices_t primaryOutputDevice_l() const;
 
               sp<PlaybackThread> getEffectThread_l(int sessionId, int EffectId);
-              // Check if all effects that are enabled in this session have DSP implementation.
-              // Use to check if an audio playback can be offloaded
-              bool isEnabledEffectEligibleForOffload(int sessionId) const;
+
 
                 void        removeClient_l(pid_t pid);
                 void        removeNotificationClient(pid_t pid);
@@ -562,7 +526,6 @@ private:
 
                 // These two fields are immutable after onFirstRef(), so no lock needed to access
                 AudioHwDevice*                      mPrimaryHardwareDev; // mAudioHwDevs[0] or NULL
-                audio_hw_device_t*                  mOffloadDev;
                 DefaultKeyedVector<audio_module_handle_t, AudioHwDevice*>  mAudioHwDevs;
 
     // for dump, indicates which hardware operation is currently in progress (but not stream ops)

@@ -28,8 +28,7 @@ public:
         TERMINATED,
         FLUSHED,
         STOPPED,
-        // next 2 states are currently used for fast tracks
-        // and offloaded audio only
+        // next 2 states are currently used for fast tracks only
         STOPPING_1,     // waiting for first underrun
         STOPPING_2,     // waiting for presentation complete
         RESUMING,
@@ -56,8 +55,6 @@ public:
             audio_track_cblk_t* cblk() const { return mCblk; }
             int         sessionId() const { return mSessionId; }
     virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
-            status_t    setParameters(const String8& keyValuePairs);
-     void        setVolume(float left, float right);
 
 protected:
                         TrackBase(const TrackBase&);
@@ -92,7 +89,7 @@ protected:
         return (mState == STOPPED || mState == FLUSHED);
     }
 
-    // for fast tracks and offloaded tracks only
+    // for fast tracks only
     bool isStopping() const {
         return mState == STOPPING_1 || mState == STOPPING_2;
     }
@@ -105,10 +102,6 @@ protected:
 
     bool isTerminated() const {
         return mState == TERMINATED;
-    }
-	
-    bool isFlushed() const {
-        return mState == FLUSHED;    
     }
 
     bool step();    // mStepCount is an implicit input

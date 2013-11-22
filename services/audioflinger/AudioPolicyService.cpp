@@ -91,38 +91,14 @@ AudioPolicyService::AudioPolicyService()
     if (rc)
         return;
 
-    property_get("ro.camera.sound.forced", value, "0");
-    forced_val = strtol(value, NULL, 0);
-    mpAudioPolicy->set_can_mute_enforced_audible(mpAudioPolicy, !forced_val);
-
     ALOGI("Loaded audio policy from %s (%s)", module->name, module->id);
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    // This part of code is to enable the testing of offload effects.
-    // Not needed when full offloaded effects are implimented.
-    // Loading different audio_offload_conf files to suit the
-    // requirement. TBD - Need to be cleaned when full effect
-    // offload is supported.
-    //
-    char propValue[PROPERTY_VALUE_MAX];
-    uint32_t LPAformat = 0;
-    if (property_get("lpa.tunnelling.enable", propValue, "0")) {
-        LPAformat = strtoul(propValue, NULL, 16);
-        ALOGV("init: LPAformat = %x", LPAformat);
+
+    // load audio pre processing modules
+    if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
+        loadPreProcessorConfig(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
+    } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
+        loadPreProcessorConfig(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
     }
-    if ((LPAformat & EFFECTS_OFFLOAD)){
-        ALOGV("effect offload is enabled in prop");
-        loadPreProcessorConfig(AUDIO_EFFECT_OFFLOAD_CONFIG_FILE);
-    } else {
-#endif
-        // load audio pre processing modules
-        if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
-            loadPreProcessorConfig(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
-        } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
-            loadPreProcessorConfig(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
-        }
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    }
-#endif
 }
 
 AudioPolicyService::~AudioPolicyService()
@@ -932,7 +908,6 @@ void AudioPolicyService::AudioCommandThread::insertCommand_l(AudioCommand *comma
         // commands are sorted by increasing time stamp: no need to scan the rest of mAudioCommands
         if (command2->mTime <= command->mTime) break;
         if (command2->mCommand != command->mCommand) continue;
-        if (command2->mWaitStatus) continue;
 
         switch (command->mCommand) {
         case SET_PARAMETERS: {
@@ -1076,19 +1051,6 @@ int AudioPolicyService::stopTone()
 int AudioPolicyService::setVoiceVolume(float volume, int delayMs)
 {
     return (int)mAudioCommandThread->voiceVolumeCommand(volume, delayMs);
-}
-
-bool AudioPolicyService::isOffloadSupported( const audio_offload_info_t& config )
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mpAudioPolicy == NULL) {
-        return false;
-    }
-
-    return mpAudioPolicy->is_offload_supported(mpAudioPolicy,
-                                               &config);
-#endif
-    return false;
 }
 
 // ----------------------------------------------------------------------------

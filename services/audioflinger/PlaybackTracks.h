@@ -13,25 +13,6 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
-**
-** This file was modified by Dolby Laboratories, Inc. The portions of the
-** code that are surrounded by "DOLBY..." are copyrighted and
-** licensed separately, as follows:
-**
-**  (C) 2011-2013 Dolby Laboratories, Inc.
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**    http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-**
 */
 
 #ifndef INCLUDING_FROM_AUDIOFLINGER_H
@@ -64,9 +45,7 @@ public:
             void        flush();
             void        destroy();
             int         name() const { return mName; }
-            void        setVolume(float left, float right);
-            status_t    setParameters(const String8& keyValuePairs);
-            status_t    setOffloadEOSReached(bool value);
+
             audio_stream_type_t streamType() const {
                 return mStreamType;
             }
@@ -81,11 +60,6 @@ public:
     virtual uint32_t    getVolumeLR();
 
     virtual status_t    setSyncEvent(const sp<SyncEvent>& event);
-	
-            bool        isOffloaded() const { return mFlags & IAudioFlinger::TRACK_OFFLOAD; }
-            bool        isDeepBuffer() const {
-                return mFlags & IAudioFlinger::TRACK_DEEPBUFFER;
-            }
 
 protected:
     // for numerous
@@ -102,12 +76,10 @@ protected:
     // releaseBuffer() not overridden
 
     virtual size_t framesReady() const;
-//offload
-    bool isActive() { return (mState == ACTIVE || mState == RESUMING); }
+
     bool isPausing() const { return mState == PAUSING; }
     bool isPaused() const { return mState == PAUSED; }
     bool isResuming() const { return mState == RESUMING; }
-    bool isActive() const {return (mState == ACTIVE || mState == RESUMING); }
     bool isReady() const;
     void setPaused() { mState = PAUSED; }
     void reset();
@@ -129,18 +101,7 @@ public:
     bool isInvalid() const { return mIsInvalid; }
     virtual bool isTimedTrack() const { return false; }
     bool isFastTrack() const { return (mFlags & IAudioFlinger::TRACK_FAST) != 0; }
-#ifdef DOLBY_DAP_BYPASS_SOUND_TYPES
-    bool isEffectBypassStreamType() const {
-        return ((mStreamType == AUDIO_STREAM_SYSTEM) ||
-                (mStreamType == AUDIO_STREAM_RING) ||
-                (mStreamType == AUDIO_STREAM_ALARM) ||
-                (mStreamType == AUDIO_STREAM_NOTIFICATION) ||
-                (mStreamType == AUDIO_STREAM_DTMF));
-    }
-#endif // DOLBY_DAP_BYPASS_SOUND_TYPES
-    bool mOffloadDrain;
-    bool mOffloadDrained;
-    bool mInOffloadEOS;
+
 protected:
 
     // FILLED state is used for suppressing volume ramp at begin of playing

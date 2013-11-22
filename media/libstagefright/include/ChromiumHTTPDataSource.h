@@ -90,8 +90,6 @@ private:
 
     int64_t mContentSize;
 
-    bool mDisconnectExternal;
-
     String8 mContentType;
 
     sp<DecryptHandle> mDecryptHandle;

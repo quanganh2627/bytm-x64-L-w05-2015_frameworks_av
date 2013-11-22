@@ -361,23 +361,6 @@ status_t AudioSystem::setVoiceVolume(float value)
     return af->setVoiceVolume(value);
 }
 
-status_t AudioSystem::getRenderPosition(audio_io_handle_t ioHandle, size_t *halFrames,
-                                        size_t *dspFrames, audio_stream_type_t stream)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
-    if (af == 0) return PERMISSION_DENIED;
-
-    if (stream == AUDIO_STREAM_DEFAULT) {
-        stream = AUDIO_STREAM_MUSIC;
-    }
-    return af->getRenderPosition(halFrames, dspFrames, ioHandle);
-#else
-    ALOGI("getRenderPosition: is not supported");
-    return 0;
-#endif
-}
-
 status_t AudioSystem::getRenderPosition(size_t *halFrames, size_t *dspFrames,
         audio_stream_type_t stream)
 {
@@ -387,6 +370,7 @@ status_t AudioSystem::getRenderPosition(size_t *halFrames, size_t *dspFrames,
     if (stream == AUDIO_STREAM_DEFAULT) {
         stream = AUDIO_STREAM_MUSIC;
     }
+
     return af->getRenderPosition(halFrames, dspFrames, getOutput(stream));
 }
 
@@ -787,22 +771,6 @@ void AudioSystem::clearAudioConfigCache()
     gOutputs.clear();
 }
 
-bool AudioSystem::isOffloadSupported( const audio_offload_info_t& config )
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    ALOGV("isOffloadSupported");
-    const sp<IAudioPolicyService>& aps = AudioSystem::get_audio_policy_service();
-    if (aps == 0) {
-        ALOGE("isOffloadSupported Error aps = 0");
-         return false;
-    }
-
-    return aps->isOffloadSupported(config);
-#else
-    ALOGI("isOffloadSupported is not supported");
-    return false;
-#endif
-}
 // ---------------------------------------------------------------------------
 
 void AudioSystem::AudioPolicyServiceClient::binderDied(const wp<IBinder>& who) {

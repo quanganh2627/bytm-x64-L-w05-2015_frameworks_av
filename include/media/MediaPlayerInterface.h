@@ -53,7 +53,7 @@ enum player_type {
 };
 
 
-#define DEFAULT_AUDIOSINK_BUFFERCOUNT 2
+#define DEFAULT_AUDIOSINK_BUFFERCOUNT 4
 #define DEFAULT_AUDIOSINK_BUFFERSIZE 1200
 #define DEFAULT_AUDIOSINK_SAMPLERATE 44100
 
@@ -74,20 +74,10 @@ public:
     // AudioSink: abstraction layer for audio output
     class AudioSink : public RefBase {
     public:
-        enum cb_event_t {
-            CB_EVENT_FILL_BUFFER,
-            CB_EVENT_STREAM_END,
-            CB_EVENT_TEAR_DOWN
-        };
-
         // Callback returns the number of bytes actually written to the buffer.
         typedef size_t (*AudioCallback)(
                 AudioSink *audioSink, void *buffer, size_t size, void *cookie);
 
-        // Overloaded Callback function returns the number of bytes actually written to the buffer.
-        typedef size_t (*AudioCallback2)(
-                AudioSink *audioSink, void *buffer, size_t size, void *cookie,
-                        cb_event_t event);
         virtual             ~AudioSink() {}
         virtual bool        ready() const = 0; // audio output is open and ready
         virtual bool        realtime() const = 0; // audio output is real-time output
@@ -111,15 +101,6 @@ public:
                 void *cookie = NULL,
                 audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE) = 0;
 
-        // Over-loaded function for offload playback
-        virtual status_t    open(
-                uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
-                int bitRate,
-                audio_format_t format=AUDIO_FORMAT_PCM_16_BIT,
-                int bufferCount=DEFAULT_AUDIOSINK_BUFFERCOUNT,
-                AudioCallback2 cb = NULL,
-                void *cookie = NULL,
-                audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE) = 0;
         virtual void        start() = 0;
         virtual ssize_t     write(const void* buffer, size_t size) = 0;
         virtual void        stop() = 0;
@@ -129,10 +110,6 @@ public:
 
         virtual status_t    setPlaybackRatePermille(int32_t rate) { return INVALID_OPERATION; }
         virtual bool        needsTrailingPadding() { return true; }
-
-        virtual status_t    setParameters(const String8& keyValuePairs) { return NO_ERROR; };
-        virtual String8     getParameters(const String8& keys) { return String8::empty(); };
-        virtual status_t    setOffloadEOSReached(bool value) { return NO_ERROR; };
     };
 
                         MediaPlayerBase() : mCookie(0), mNotify(0) {}

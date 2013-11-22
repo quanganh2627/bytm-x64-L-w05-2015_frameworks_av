@@ -95,8 +95,6 @@ public:
     virtual status_t queryDefaultPreProcessing(int audioSession,
                                               effect_descriptor_t *descriptors,
                                               uint32_t *count) = 0;
-
-    virtual bool isOffloadSupported(const audio_offload_info_t& config ) = 0;
 };
 
 

@@ -1281,7 +1281,7 @@ int PreProcessingFx_Process(effect_handle_t     self,
         session->procFrame->_payloadDataLengthInSamples =
                 session->apmFrameCount * session->inChannelCount;
 
-        status = effect->session->apm->ProcessStream(session->procFrame);
+        effect->session->apm->ProcessStream(session->procFrame);
 
         if (session->outBufSize < session->framesOut + session->frameCount) {
             session->outBufSize = session->framesOut + session->frameCount;
@@ -1325,10 +1325,11 @@ int PreProcessingFx_Process(effect_handle_t     self,
               (session->framesOut - fr) * session->outChannelCount * sizeof(int16_t));
         session->framesOut -= fr;
         outBuffer->frameCount += fr;
+
+        return 0;
     } else {
-        status = -ENODATA;
+        return -ENODATA;
     }
-    return status;
 }
 
 int PreProcessingFx_Command(effect_handle_t  self,
@@ -1790,11 +1791,11 @@ int PreProcessingFx_ProcessReverse(effect_handle_t     self,
         }
         session->revFrame->_payloadDataLengthInSamples =
                 session->apmFrameCount * session->inChannelCount;
-        status = effect->session->apm->AnalyzeReverseStream(session->revFrame);
+        effect->session->apm->AnalyzeReverseStream(session->revFrame);
+        return 0;
     } else {
-        status = -ENODATA;
+        return -ENODATA;
     }
-    return status;
 }
 
 

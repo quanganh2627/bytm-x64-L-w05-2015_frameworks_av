@@ -189,7 +189,6 @@ NuCachedSource2::NuCachedSource2(
       mFinalStatus(OK),
       mLastAccessPos(0),
       mFetching(true),
-      mForceStop(false),
       mLastFetchTimeUs(-1),
       mNumRetriesLeft(kMaxNumRetries),
       mHighwaterThresholdBytes(kDefaultHighWaterThreshold),
@@ -469,10 +468,6 @@ ssize_t NuCachedSource2::readAt(off64_t offset, void *data, size_t size) {
 
     Mutex::Autolock autoLock(mLock);
 
-    if (offset < 0) {
-        return ERROR_OUT_OF_RANGE;
-    }
-
     // If the request can be completely satisfied from the cache, do so.
 
     if (offset >= mCacheOffset
@@ -563,7 +558,7 @@ ssize_t NuCachedSource2::readInternal(off64_t offset, void *data, size_t size) {
 
     size_t delta = offset - mCacheOffset;
 
-    if (mFinalStatus != OK && (mNumRetriesLeft == 0 || mForceStop)) {
+    if (mFinalStatus != OK && mNumRetriesLeft == 0) {
         if (delta >= mCache->totalSize()) {
             return mFinalStatus;
         }
@@ -710,15 +705,6 @@ void NuCachedSource2::RemoveCacheSpecificHeaders(
         headers->removeItemsAt(index);
 
         ALOGV("Client requested disconnection at highwater mark");
-    }
-}
-
-void NuCachedSource2::interrupt(bool stop) {
-    Mutex::Autolock autolock(mLock);
-    mForceStop = stop;
-    if (mForceStop) {
-        HTTPBase *source = static_cast<HTTPBase *>(mSource.get());
-        source->disconnect();
     }
 }
 

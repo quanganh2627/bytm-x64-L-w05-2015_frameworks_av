@@ -48,7 +48,6 @@ private:
 
     AssemblyStatus addPacket(const sp<ARTPSource> &source);
     void submitAccessUnit();
-    bool accessUnitDamaged();
 
     DISALLOW_EVIL_CONSTRUCTORS(AH263Assembler);
 };

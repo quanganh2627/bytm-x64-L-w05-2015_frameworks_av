@@ -946,12 +946,7 @@ M4OSA_ERR M4VSS3GPP_editOpen( M4VSS3GPP_EditContext pContext,
             break;
         case M4VIDEOEDITING_k1920_1080:
             pC->ewc.uiVideoWidth = 1920;
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-            // Optimization for 1080p encode in Intel Platform
-            pC->ewc.uiVideoHeight = 1080;
-#else
             pC->ewc.uiVideoHeight = 1088; // need to be multiples of 16
-#endif
             break;
 
         default: /* If output video size is not given, we take QCIF size */
@@ -1607,13 +1602,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv1[1].pac_data);
         pC->yuv1[1].pac_data = M4OSA_NULL;
     }
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
+
     if( M4OSA_NULL != pC->yuv1[2].pac_data )
     {
         free(pC->yuv1[2].pac_data);
         pC->yuv1[2].pac_data = M4OSA_NULL;
     }
-#endif
+
     if( M4OSA_NULL != pC->yuv2[0].pac_data )
     {
         free(pC->yuv2[0].pac_data);
@@ -1625,13 +1620,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv2[1].pac_data);
         pC->yuv2[1].pac_data = M4OSA_NULL;
     }
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
+
     if( M4OSA_NULL != pC->yuv2[2].pac_data )
     {
         free(pC->yuv2[2].pac_data);
         pC->yuv2[2].pac_data = M4OSA_NULL;
     }
-#endif
+
     /* RC */
     if( M4OSA_NULL != pC->yuv3[0].pac_data )
     {
@@ -1644,13 +1639,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv3[1].pac_data);
         pC->yuv3[1].pac_data = M4OSA_NULL;
     }
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
+
     if( M4OSA_NULL != pC->yuv3[2].pac_data )
     {
         free(pC->yuv3[2].pac_data);
         pC->yuv3[2].pac_data = M4OSA_NULL;
     }
-#endif
+
     /* RC */
     if( M4OSA_NULL != pC->yuv4[0].pac_data )
     {
@@ -1663,13 +1658,13 @@ M4OSA_ERR M4VSS3GPP_editClose( M4VSS3GPP_EditContext pContext )
         free(pC->yuv4[1].pac_data);
         pC->yuv4[1].pac_data = M4OSA_NULL;
     }
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
+
     if( M4OSA_NULL != pC->yuv4[2].pac_data )
     {
         free(pC->yuv4[2].pac_data);
         pC->yuv4[2].pac_data = M4OSA_NULL;
     }
-#endif
+
     /**
     * RC Free effects list */
     if( pC->pEffectsList != M4OSA_NULL )
@@ -2865,12 +2860,10 @@ static M4OSA_ERR M4VSS3GPP_intSwitchToNextClip(
                 free(pC->pC1->m_pPreResizeFrame[1].pac_data);
                 pC->pC1->m_pPreResizeFrame[1].pac_data = M4OSA_NULL;
             }
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
             if (M4OSA_NULL != pC->pC1->m_pPreResizeFrame[2].pac_data) {
                 free(pC->pC1->m_pPreResizeFrame[2].pac_data);
                 pC->pC1->m_pPreResizeFrame[2].pac_data = M4OSA_NULL;
             }
-#endif
             free(pC->pC1->m_pPreResizeFrame);
             pC->pC1->m_pPreResizeFrame = M4OSA_NULL;
         }
@@ -2975,22 +2968,6 @@ static M4OSA_ERR M4VSS3GPP_intSwitchToNextClip(
             pC->pC1->iAoffset -= pC->ewc.iSilenceFrameDuration;
         }
     }
-
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-    // Shut down the former encode once one clip has finished encoding
-    if( pC->Vstate == M4VSS3GPP_kEditVideoState_DECODE_ENCODE )
-    {
-        err = M4VSS3GPP_intDestroyVideoEncoder(pC);
-        if( M4NO_ERROR != err )
-        {
-            M4OSA_TRACE1_1(
-                "M4VSS3GPP_intSwitchToNextClip:\
-                M4VSS3GPP_editDestroyVideoEncoder() returns 0x%x!",
-                err);
-            return err;
-        }
-    }
-#endif
 
     /**
     * Init starting state for this clip processing */
@@ -3283,8 +3260,7 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                  pClipProperties->uiVideoWidth) ||
             ((M4OSA_UInt32)pC->ewc.uiVideoHeight !=
                  pClipProperties->uiVideoHeight) ||
-            (pClipProperties->videoRotationDegrees != 0 &&
-                 pClip->pSettings->bTranscodingRequired) ) {
+            pClipProperties->videoRotationDegrees != 0) {
 
             if (pClip->m_pPreResizeFrame == M4OSA_NULL) {
                 /**
@@ -3328,13 +3304,8 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                 /**
                 * Allocate the U plane */
                 pClip->m_pPreResizeFrame[1].u_topleft = 0;
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
-                pClip->m_pPreResizeFrame[1].u_width  =
-                    pClip->m_pPreResizeFrame[0].u_width;
-#else
                 pClip->m_pPreResizeFrame[1].u_width  =
                     pClip->m_pPreResizeFrame[0].u_width >> 1;
-#endif
                 pClip->m_pPreResizeFrame[1].u_height =
                     pClip->m_pPreResizeFrame[0].u_height >> 1;
                 pClip->m_pPreResizeFrame[1].u_stride =
@@ -3351,7 +3322,7 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                     free(pClip->m_pPreResizeFrame);
                     return M4ERR_ALLOC;
                 }
-#ifndef VIDEOEDITOR_INTEL_NV12_VERSION
+
                 /**
                 * Allocate the V plane */
                 pClip->m_pPreResizeFrame[2].u_topleft = 0;
@@ -3374,7 +3345,6 @@ M4OSA_ERR M4VSS3GPP_intOpenClip( M4VSS3GPP_InternalEditContext *pC,
                     free(pClip->m_pPreResizeFrame);
                     return M4ERR_ALLOC;
                 }
-#endif
             }
         }
 

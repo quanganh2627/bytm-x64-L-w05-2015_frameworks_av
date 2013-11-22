@@ -18,9 +18,6 @@
 #ifndef INCLUDING_FROM_AUDIOFLINGER_H
     #error This header file should only be included from AudioFlinger.h
 #endif
-#ifdef AUDIO_DUMP_ENABLE
-#include "AudioDumpUtils.h"
-#endif
 
 class ThreadBase : public Thread {
 public:
@@ -397,7 +394,6 @@ public:
                                 status_t *status);
 
                 AudioStreamOut* getOutput() const;
-                AudioStreamOut* getOutput_l() const { return mOutput; }
                 AudioStreamOut* clearOutput();
                 virtual audio_stream_t* stream() const;
 
@@ -428,15 +424,12 @@ public:
                 virtual status_t addEffectChain_l(const sp<EffectChain>& chain);
                 virtual size_t removeEffectChain_l(const sp<EffectChain>& chain);
                 virtual uint32_t hasAudioSession(int sessionId) const;
-                void getEffectSessionIds(Vector<int> &sessionIds);
                 virtual uint32_t getStrategyForSession_l(int sessionId);
 
 
                 virtual status_t setSyncEvent(const sp<SyncEvent>& event);
                 virtual bool     isValidSyncEvent(const sp<SyncEvent>& event) const;
                         void     invalidateTracks(audio_stream_type_t streamType);
-                virtual status_t setParametersMusicOffload(
-                                 const String8& keyValuePairs);
 
 
 protected:
@@ -565,11 +558,6 @@ public:
 protected:
                 // accessed by both binder threads and within threadLoop(), lock on mutex needed
                 unsigned    mFastTrackAvailMask;    // bit i set if fast track [i] is available
-                bool isOffloadTrack() const;
-#ifdef AUDIO_DUMP_ENABLE
-    private:
-       AudioDump *mPlaybackAudioDump;
-#endif
 
 };
 
@@ -637,7 +625,7 @@ public:
     virtual                 ~DirectOutputThread();
 
     // Thread virtuals
-                void        invalidateTracks(audio_stream_type_t streamType);
+
     virtual     bool        checkForNewParameters_l();
 
 protected:
@@ -660,13 +648,8 @@ private:
 
     // prepareTracks_l() tells threadLoop_mix() the name of the single active track
     sp<Track>               mActiveTrack;
-    sp<Track>               mLastTrack;
 public:
     virtual     bool        hasFastMixer() const { return false; }
-
-                bool        mDraining;
-private:
-                bool        mIsOffloaded;   // if current track is offloaded
 };
 
 class DuplicatingThread : public MixerThread {
@@ -822,9 +805,7 @@ private:
             // when < 0, maximum frames to drop before starting capture even if sync event is
             // not received
             ssize_t                             mFramestoDrop;
-#ifdef AUDIO_DUMP_ENABLE
-                AudioDump *mRecordAudioDump;
-#endif
+
             // For dumpsys
             const sp<NBAIO_Sink>                mTeeSink;
 };

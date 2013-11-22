@@ -47,8 +47,6 @@ LiveSession::LiveSession(
       mUIDValid(uidValid),
       mUID(uid),
       mInPreparationPhase(true),
-      mDisconnectInSeek(false),
-      mFetchPending(false),
       mDataSource(new LiveDataSource),
       mHTTPDataSource(
               HTTPBase::Create(
@@ -106,13 +104,6 @@ void LiveSession::seekTo(int64_t timeUs) {
     Mutex::Autolock autoLock(mLock);
     mSeekDone = false;
 
-    // if it's fetching ts or playlist, disconnect http source to avoid blocked in ts fetching
-    // when network is not good
-    if (mFetchPending) {
-        mDisconnectInSeek = true;
-        mHTTPDataSource->disconnect();
-    }
-
     sp<AMessage> msg = new AMessage(kWhatSeek, id());
     msg->setInt64("timeUs", timeUs);
     msg->post();
@@ -147,7 +138,6 @@ void LiveSession::onMessageReceived(const sp<AMessage> &msg) {
         }
 
         case kWhatSeek:
-            mDisconnectInSeek = false;
             onSeek(msg);
             break;
 
@@ -310,9 +300,6 @@ status_t LiveSession::fetchFile(
                 maxBytesToRead);
 
         if (n < 0) {
-            if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
-                source.clear();
-            }
             return n;
         }
 
@@ -325,9 +312,6 @@ status_t LiveSession::fetchFile(
 
     *out = buffer;
 
-    if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
-        source.clear();
-    }
     return OK;
 }
 
@@ -573,26 +557,15 @@ rinse_repeat:
         }
 
         bool unchanged;
-        mFetchPending = true;
         sp<M3UParser> playlist = fetchPlaylist(url.c_str(), &unchanged);
-        mFetchPending = false;
-
         if (playlist == NULL) {
             if (unchanged) {
                 // We succeeded in fetching the playlist, but it was
                 // unchanged from the last time we tried.
             } else {
                 ALOGE("failed to load playlist at url '%s'", url.c_str());
-                if (!mDisconnectInSeek) {
-                    signalEOS(ERROR_IO);
-                }
+                signalEOS(ERROR_IO);
 
-                if (mSeekTimeUs >= 0) {
-                    mSeekTimeUs = -1;
-                    Mutex::Autolock autoLock(mLock);
-                    mSeekDone = true;
-                    mCondition.broadcast();
-                }
                 return;
             }
         } else {
@@ -763,15 +736,10 @@ rinse_repeat:
           mSeqNumber, firstSeqNumberInPlaylist, lastSeqNumberInPlaylist);
 
     sp<ABuffer> buffer;
-    mFetchPending = true;
     status_t err = fetchFile(uri.c_str(), &buffer, range_offset, range_length);
-    mFetchPending = false;
-
     if (err != OK) {
         ALOGE("failed to fetch .ts segment at url '%s'", uri.c_str());
-        if (!mDisconnectInSeek) {
-            signalEOS(err);
-        }
+        signalEOS(err);
         return;
     }
 

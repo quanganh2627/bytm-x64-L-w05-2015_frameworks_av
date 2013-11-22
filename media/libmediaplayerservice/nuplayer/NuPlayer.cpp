@@ -12,25 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * This file was modified by Dolby Laboratories, Inc. The portions of the
- * code that are surrounded by "DOLBY..." are copyrighted and
- * licensed separately, as follows:
- *
- *  (C) 2011-2013 Dolby Laboratories, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  */
 
 //#define LOG_NDEBUG 0
@@ -48,9 +29,7 @@
 #include "StreamingSource.h"
 #include "GenericSource.h"
 #include "mp4/MP4Source.h"
-#ifdef TARGET_HAS_VPP
-#include <NuPlayerVPPProcessor.h>
-#endif
+
 #include "ATSParser.h"
 
 #include <cutils/properties.h> // for property_get
@@ -62,7 +41,6 @@
 #include <media/stagefright/MediaDefs.h>
 #include <media/stagefright/MediaErrors.h>
 #include <media/stagefright/MetaData.h>
-#include <media/stagefright/Utils.h>
 #include <gui/IGraphicBufferProducer.h>
 
 #include "avc_utils.h"
@@ -138,8 +116,6 @@ NuPlayer::NuPlayer()
       mVideoIsAVC(false),
       mAudioEOS(false),
       mVideoEOS(false),
-      mAudioEosPending(false),
-      mVideoEosPending(false),
       mScanSourcesPending(false),
       mScanSourcesGeneration(0),
       mPollDurationGeneration(0),
@@ -151,20 +127,11 @@ NuPlayer::NuPlayer()
       mVideoLateByUs(0ll),
       mNumFramesTotal(0ll),
       mNumFramesDropped(0ll),
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-      mMDClient(NULL),
-#endif
-#ifdef TARGET_HAS_VPP
-      mIsVppInit(false),
-#endif
       mVideoScalingMode(NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW),
       mStarted(false) {
 }
 
 NuPlayer::~NuPlayer() {
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setMDSVideoState_l((int)MDS_VIDEO_UNPREPARED);
-#endif
 }
 
 void NuPlayer::setUID(uid_t uid) {
@@ -191,89 +158,6 @@ void NuPlayer::setDataSourceAsync(const sp<IStreamSource> &source) {
 
     msg->post();
 }
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-void NuPlayer::setMDSVideoState_l(int state) {
-    if (state == MDS_VIDEO_UNPREPARED && mVideoSessionId == -1) {
-        return;
-    }
-    if (mMDClient == NULL) {
-#ifdef USE_MDS_LEGACY
-        mMDClient = new MultiDisplayClient();
-#else
-        sp<IServiceManager> sm = defaultServiceManager();
-        if (sm == NULL) {
-            LOGE("%s: Fail to get service manager", __func__);
-            return;
-        }
-        sp<IMDService> mds = interface_cast<IMDService>(
-                sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
-        if (mds == NULL) {
-            LOGE("%s: Failed to get MDS service", __func__);
-            return;
-        }
-        mMDClient = mds->getVideoControl();
-#endif
-    }
-    if (mVideoSessionId < 0) {
-        mVideoSessionId = mMDClient->allocateVideoSessionId();
-    }
-    mMDClient->updateVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
-    if (state == MDS_VIDEO_UNPREPARED) {
-        mVideoSessionId = -1;
-#ifdef USE_MDS_LEGACY
-        delete mMDClient;
-#endif
-        mMDClient = NULL;
-    }
-}
-
-void NuPlayer::setMDSVideoInfo_l() {
-    MDSVideoSourceInfo info;
-    int wcom = 0;
-    if (mNativeWindow == NULL)
-        return;
-    sp<ANativeWindow> win = mNativeWindow->getNativeWindow().get();
-    if (win == NULL)
-        return;
-    /*
-     * 0 means the buffers do not go directly to the window compositor;
-     * 1 means the ANativeWindow DOES send queued buffers
-     * directly to the window compositor;
-     * For more info, refer system/core/include/system/window.h
-     */
-    win->query(win.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-    if (wcom == 0 || mVideoDecoder == NULL ||
-            mMDClient == NULL || mVideoSessionId < 0)
-        return;
-    memset(&info, 0 ,sizeof(&info));
-    sp<AMessage> msg = NULL;
-    int32_t displayW, displayH, frameRate;
-    bool success = false;
-    displayW = displayH = frameRate = 0;
-#ifdef USE_MDS_LEGACY
-    info.isPlaying = true;
-#endif
-    info.isProtected = false;
-    msg = mSource->getFormat(false);
-    if (msg != NULL) {
-        success = msg->findInt32("frame-rate", &frameRate);
-        if (!success)
-            frameRate = 0;
-        success = msg->findInt32("width", &displayW);
-        if (!success)
-            displayW = 0;
-        success = msg->findInt32("height", &displayH);
-        if (!success)
-            displayH = 0;
-    }
-    info.frameRate = frameRate;
-    info.displayW  = displayW;
-    info.displayH  = displayH;
-    mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
-    setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
-}
-#endif
 
 static bool IsHTTPLiveURL(const char *url) {
     if (!strncasecmp("http://", url, 7)
@@ -338,35 +222,13 @@ void NuPlayer::setVideoSurfaceTextureAsync(
     if (bufferProducer == NULL) {
         msg->setObject("native-window", NULL);
     } else {
-        sp<Surface> surface = new Surface(bufferProducer);
-        if (surface != NULL) {
-            sp<ANativeWindow> anw = surface;
-            //NOTES: we must re-connect api here because we need to get right
-            //infomation from surface texture's back end. Otherwise, we only get
-            //uninitlized mTransformHint, mDefaultWidth, mDefaultHeight, etc.
-            status_t err = native_window_api_disconnect(anw.get(),
-                    NATIVE_WINDOW_API_MEDIA);
-            if (err != OK) {
-                ALOGE("setVideoSurfaceTextureAsync: api disconnect failed: %d", err);
-                return;
-            }
-
-            err = native_window_api_connect(anw.get(),
-                    NATIVE_WINDOW_API_MEDIA);
-            if (err != OK) {
-                ALOGE("setVideoSurfaceTextureAsync: api connect failed: %d", err);
-                return;
-            }
-        }
         msg->setObject(
                 "native-window",
-                new NativeWindowWrapper(surface));
+                new NativeWindowWrapper(
+                    new Surface(bufferProducer)));
     }
 
     msg->post();
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setMDSVideoState_l((int)MDS_VIDEO_UNPREPARED);
-#endif
 }
 
 void NuPlayer::setAudioSink(const sp<MediaPlayerBase::AudioSink> &sink) {
@@ -388,10 +250,6 @@ void NuPlayer::resume() {
 }
 
 void NuPlayer::resetAsync() {
-    // force stop, there are block functions in mSource
-    if (mSource != NULL) {
-        mSource->stop();
-    }
     (new AMessage(kWhatReset, id()))->post();
 }
 
@@ -574,6 +432,7 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     schedulePollDuration();
                 }
             }
+
             status_t err;
             if ((err = mSource->feedMoreTSData()) != OK) {
                 if (mAudioDecoder == NULL && mVideoDecoder == NULL) {
@@ -629,16 +488,7 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                          err);
                 }
 
-                // we should delay EOS message during flushing
-                if (!IsFlushingState(audio ? mFlushingAudio : mFlushingVideo)) {
-                    mRenderer->queueEOS(audio, err);
-                } else if (audio) {
-                    mAudioEosPending = true;
-                    mAudioEosErr = err;
-                } else {
-                    mVideoEosPending = true;
-                    mVideoEosErr = err;
-                }
+                mRenderer->queueEOS(audio, err);
             } else if (what == ACodec::kWhatFlushCompleted) {
                 bool needShutdown;
 
@@ -689,23 +539,14 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     // Current code will just make that we select deep buffer
                     // with video which should not be a problem as it should
                     // not prevent from keeping A/V sync.
-#ifdef DOLBY_DAP_OPENSLES
-                    // DS Effect is attached only to the Non-Deep Buffered
-                    // Output and we want all audio to flow through DS Effect.
-                    // As such, we force both Music and Movie Playbacks to take
-                    // the Non-Deep Buffered Output
-                    flags = AUDIO_OUTPUT_FLAG_NONE;
-#else   // DOLBY_END
                     if (mVideoDecoder == NULL &&
                             mSource->getDuration(&durationUs) == OK &&
                             durationUs
-                                > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US &&
-                            !isInCall()) {
+                                > AUDIO_SINK_MIN_DEEP_BUFFER_DURATION_US) {
                         flags = AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
                     } else {
                         flags = AUDIO_OUTPUT_FLAG_NONE;
                     }
-#endif  // LINE_ADDED_BY_DOLBY
 
                     int32_t channelMask;
                     if (!codecRequest->findInt32("channel-mask", &channelMask)) {
@@ -779,11 +620,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
 
                     CHECK_EQ((int)mFlushingVideo, (int)SHUTTING_DOWN_DECODER);
                     mFlushingVideo = SHUT_DOWN;
-#ifdef TARGET_HAS_VPP
-                    mRenderer->releaseVppProcessor();
-                    mVPPProcessor.clear();
-                    mIsVppInit = false;
-#endif
                 }
 
                 finishFlushIfPossible();
@@ -791,36 +627,8 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                 ALOGE("Received error from %s decoder, aborting playback.",
                      audio ? "audio" : "video");
 
-                // we should delay EOS message during flushing
-                if (!IsFlushingState(audio ? mFlushingAudio : mFlushingVideo)) {
-                    mRenderer->queueEOS(audio, UNKNOWN_ERROR);
-                } else if (audio) {
-                    mAudioEosPending = true;
-                    mAudioEosErr = UNKNOWN_ERROR;
-                } else {
-                    mVideoEosPending = true;
-                    mVideoEosErr = UNKNOWN_ERROR;
-                }
+                mRenderer->queueEOS(audio, UNKNOWN_ERROR);
             } else if (what == ACodec::kWhatDrainThisBuffer) {
-#ifdef TARGET_HAS_VPP
-                // init VPP
-                if (!audio) {
-                    if (!mIsVppInit && mVideoDecoder != NULL && mVPPProcessor != NULL) {
-                        mIsVppInit = true;
-                        sp<ACodec> codec = mVideoDecoder->mCodec;
-                        bool success = codec->isVppBufferAvail();
-                        if (success) {
-                            if(mVPPProcessor->init(codec) != VPP_OK){
-                                mRenderer->releaseVppProcessor();
-                                mVPPProcessor.clear();
-                            }
-                        } else {
-                            mRenderer->releaseVppProcessor();
-                            mVPPProcessor.clear();
-                        }
-                    }
-                }
-#endif
                 renderBuffer(audio, codecRequest);
             } else if (what != ACodec::kWhatComponentAllocated
                     && what != ACodec::kWhatComponentConfigured
@@ -860,12 +668,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     ALOGE("%s track encountered an error (%d)",
                          audio ? "audio" : "video", finalResult);
 
-                    if (!audio && (mVideoDecoder != NULL)
-                            && (mFlushingVideo == AWAITING_DISCONTINUITY)) {
-                        // if video decoder is in AWAITING_DISCONTINUITY state
-                        // shut down it to avoid reset blocking
-                        flushDecoder(false,true);
-                    }
                     notifyListener(
                             MEDIA_ERROR, MEDIA_ERROR_UNKNOWN, finalResult);
                 }
@@ -874,7 +676,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                         && (mVideoEOS || mVideoDecoder == NULL)) {
                     notifyListener(MEDIA_PLAYBACK_COMPLETE, 0, 0);
                 }
-
             } else if (what == Renderer::kWhatPosition) {
                 int64_t positionUs;
                 CHECK(msg->findInt64("positionUs", &positionUs));
@@ -912,6 +713,7 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
 
             mDeferredActions.push_back(
                     new SimpleAction(&NuPlayer::performDecoderShutdown));
+
             mDeferredActions.push_back(
                     new SimpleAction(&NuPlayer::performReset));
 
@@ -921,12 +723,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
 
         case kWhatSeek:
         {
-            if (mAudioDecoder == NULL && mVideoDecoder == NULL) {
-                ALOGV("postpone seek since decoders are not established");
-                msg->post(100000ll);
-                break;
-            }
-
             int64_t seekTimeUs;
             CHECK(msg->findInt64("seekTimeUs", &seekTimeUs));
 
@@ -985,17 +781,6 @@ void NuPlayer::finishFlushIfPossible() {
         mTimeDiscontinuityPending = false;
     }
 
-    if (mAudioEosPending && mRenderer != NULL) {
-        mRenderer->queueEOS(true,  mAudioEosErr);
-    }
-
-    if (mVideoEosPending && mRenderer != NULL) {
-        mRenderer->queueEOS(false, mVideoEosErr);
-    }
-
-    mAudioEosPending = false;
-    mVideoEosPending = false;
-
     if (mAudioDecoder != NULL) {
         mAudioDecoder->signalResume();
     }
@@ -1049,64 +834,12 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
 
     (*decoder)->configure(format);
 
-#ifdef TARGET_HAS_VPP
-    if (!audio) {
-        if(mVPPProcessor == NULL) {
-            mVPPProcessor = createVppProcessor();
-            if(mVPPProcessor != NULL) {
-                sp<ACodec> codec = (*decoder)->mCodec;
-                looper()->registerHandler(mVPPProcessor);
-                LOGE("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
-                        mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
-                codec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
-            }
-        }
-    }
-#endif
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    if (!audio) {
-        setMDSVideoState_l((int)MDS_VIDEO_PREPARING);
-        setMDSVideoInfo_l();
-    }
-#endif
-
     return OK;
 }
-
-#ifdef TARGET_HAS_VPP
-sp<NuPlayerVPPProcessor> NuPlayer::createVppProcessor() {
-    sp<NuPlayerVPPProcessor> processor = NULL;
-    if (NuPlayerVPPProcessor::isVppOn()) {
-        int32_t width = 0, height = 0, fps = 0;
-        VPPVideoInfo info;
-        memset(&info, 0, sizeof(VPPVideoInfo));
-
-        sp<AMessage> format = mSource->getFormat(false);
-        sp<MetaData> meta = new MetaData();
-        convertMessageToMetaData(format, meta);
-        CHECK(meta->findInt32(kKeyWidth, &width));
-        CHECK(meta->findInt32(kKeyHeight, &height));
-        if (!meta->findInt32(kKeyFrameRate, &fps))
-            fps = 0;
-        info.fps = fps;
-        info.width = width;
-        info.height = height;
-
-        processor = mRenderer->createVppProcessor(&info, mNativeWindow);
-    }
-    return processor;
-}
-#endif
 
 status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
     sp<AMessage> reply;
     CHECK(msg->findMessage("reply", &reply));
-    // if one track is in FLUSHED state, it means the other track has not finished flush,
-    // return -EWOULDBLOCK to wait all tracks finish flushed and become NONE state.
-    if ( (audio && mFlushingAudio == FLUSHED) || (!audio && mFlushingVideo == FLUSHED)) {
-        return -EWOULDBLOCK;
-    }
 
     if ((audio && IsFlushingState(mFlushingAudio))
             || (!audio && IsFlushingState(mFlushingVideo))) {
@@ -1178,15 +911,6 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
                                     &NuPlayer::performScanSources));
                     }
 
-#ifdef TARGET_HAS_VPP
-                    if (!audio && mVPPProcessor != NULL) {
-                        if (formatChange) {
-                            mVPPProcessor->flushShutdown();
-                        } else if (timeChange) {
-                            mVPPProcessor->seek();
-                        }
-                    }
-#endif
                     flushDecoder(audio, formatChange);
                 } else {
                     // This stream is unaffected by the discontinuity
@@ -1442,28 +1166,15 @@ void NuPlayer::performDecoderFlush() {
 
     if (mAudioDecoder != NULL) {
         flushDecoder(true /* audio */, false /* needShutdown */);
-        mAudioEOS = false;
     }
 
     if (mVideoDecoder != NULL) {
-#ifdef TARGET_HAS_VPP
-            if (mVPPProcessor != NULL) {
-                mVPPProcessor->seek();
-            }
-#endif
         flushDecoder(false /* audio */, false /* needShutdown */);
-        mVideoEOS = false;
     }
 }
 
 void NuPlayer::performDecoderShutdown() {
     ALOGV("performDecoderShutdown");
-
-#ifdef TARGET_HAS_VPP
-            if (mVPPProcessor != NULL) {
-                mVPPProcessor->flushShutdown();
-            }
-#endif
 
     if (mAudioDecoder == NULL && mVideoDecoder == NULL) {
         return;
@@ -1485,13 +1196,6 @@ void NuPlayer::performReset() {
 
     CHECK(mAudioDecoder == NULL);
     CHECK(mVideoDecoder == NULL);
-
-#ifdef TARGET_HAS_VPP
-    if (mVPPProcessor != NULL && mRenderer != NULL) {
-        mRenderer->releaseVppProcessor();
-        mVPPProcessor.clear();
-    }
-#endif
 
     cancelPollDuration();
 
@@ -1590,13 +1294,6 @@ void NuPlayer::onSourceNotify(const sp<AMessage> &msg) {
                     && (flags & Source::FLAG_DYNAMIC_DURATION)
                     && (mAudioDecoder != NULL || mVideoDecoder != NULL)) {
                 schedulePollDuration();
-            }
-
-            if (mDriver != NULL) {
-                sp<NuPlayerDriver> driver = mDriver.promote();
-                if (driver != NULL) {
-                    driver->notifyFlagsChanged(flags);
-                }
             }
 
             mSourceFlags = flags;

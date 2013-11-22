@@ -87,7 +87,7 @@ static void camera_device_status_change(
 static CameraService *gCameraService;
 
 CameraService::CameraService()
-    :mSoundRef(0), mAudioTrackBurst(NULL), mBufferBurst(NULL), mBufferBurstSize(0), mModule(0)
+    :mSoundRef(0), mModule(0)
 {
     ALOGI("CameraService started (pid=%d)", getpid());
     gCameraService = this;
@@ -120,7 +120,6 @@ void CameraService::onFirstRef()
         }
         for (int i = 0; i < mNumberOfCameras; i++) {
             setCameraFree(i);
-            mLowPriorityPid[i] = -1;
         }
 
         if (mModule->common.module_api_version >=
@@ -138,16 +137,6 @@ CameraService::~CameraService() {
     }
 
     gCameraService = NULL;
-    if (mAudioTrackBurst) {
-        mAudioTrackBurst->stop();
-        delete mAudioTrackBurst;
-        mAudioTrackBurst = NULL;
-    }
-    if (mBufferBurst) {
-        delete [] mBufferBurst;
-        mBufferBurst = NULL;
-        mBufferBurstSize = 0;
-    }
 }
 
 void CameraService::onDeviceStatusChanged(int cameraId,
@@ -365,19 +354,6 @@ bool CameraService::canConnectUnsafe(int cameraId,
     return true;
 }
 
-status_t CameraService::setPriority(int cameraId, bool lowPriority) {
-    if (cameraId < 0 || cameraId >= mNumberOfCameras) {
-        return BAD_VALUE;
-    }
-
-    if (lowPriority) {
-        mLowPriorityPid[cameraId] = getCallingPid();
-    } else {
-        mLowPriorityPid[cameraId] = -1;
-    }
-    return OK;
-}
-
 sp<ICamera> CameraService::connect(
         const sp<ICameraClient>& cameraClient,
         int cameraId,
@@ -389,27 +365,6 @@ sp<ICamera> CameraService::connect(
 
     LOG1("CameraService::connect E (pid %d \"%s\", id %d)", callingPid,
             clientName8.string(), cameraId);
-
-    if (mLowPriorityPid[cameraId] == callingPid) {
-        LOG1("%s: Low priority camera being requested", __FUNCTION__);
-        for (int i = 0; i < mNumberOfCameras; i++) {
-            if (mStatusList[i] != ICameraServiceListener::STATUS_PRESENT) {
-                LOG1("%s: One camera open already. Rejecting low priority "
-                        "request",__FUNCTION__);
-                return NULL;
-            }
-        }
-    } else {
-        LOG1("%s: Normal priority request, checking for a running low "
-                "priority instance",__FUNCTION__);
-        for (int i = 0; i < mNumberOfCameras; i++) {
-            sp<Client> client = mClient[i].promote();
-            if (client != NULL && client.get()->isLowPriorityClient()) {
-                LOG1("%s: Killing low priority camera instance", __FUNCTION__);
-                client.get()->serviceDisconnect();
-            }
-        }
-    }
 
     if (!validateConnect(cameraId, /*inout*/clientUid)) {
         return NULL;
@@ -466,11 +421,6 @@ sp<ICamera> CameraService::connect(
             updateStatus(ICameraServiceListener::STATUS_PRESENT, cameraId);
 
             return NULL;
-        }
-
-        if (client != NULL && mLowPriorityPid[cameraId] == callingPid) {
-            LOG1("%s: Created a low priority client instance", __FUNCTION__);
-            client.get()->setLowPriority();
         }
 
         mClient[cameraId] = client;
@@ -779,71 +729,9 @@ MediaPlayer* CameraService::newMediaPlayer(const char *file) {
         mp->prepare();
     } else {
         ALOGE("Failed to load CameraService sounds: %s", file);
-        delete mp;
         return NULL;
     }
     return mp;
-}
-
-// We use AudioTrack player play short burst sound
-
-void CameraService::loadSoundBurst() {
-    // Create AudioTrack when SOUND_BURST has to be played
-    size_t framecount(0);
-    FILE* fp(NULL);
-
-    if (AudioSystem::getOutputFrameCount(&framecount, AUDIO_STREAM_ENFORCED_AUDIBLE) != (NO_ERROR)) {
-        ALOGE("Failed to get the framecount for audio track in CameraService");
-        return;
-    }
-
-    mAudioTrackBurst = new AudioTrack();
-    if (mAudioTrackBurst == NULL) {
-        ALOGE("Failed alloc CameraService AudioTrack");
-        return;
-    }
-    mAudioTrackBurst->set(AUDIO_STREAM_ENFORCED_AUDIBLE,
-                     0,//AudioTrack calculated this value to defaut 44100 in it's set function
-                     AUDIO_FORMAT_PCM_16_BIT,
-                     AUDIO_CHANNEL_OUT_STEREO,
-                     framecount
-    );
-
-    status_t err = mAudioTrackBurst->initCheck();
-    if (err != NO_ERROR) {
-        ALOGE("CameraService AudioTrack init check failed");
-        goto error1;
-    }
-
-    // Open the fast_click.pcm file and copy the contents into the buffer for later use
-    fp = fopen("/system/media/audio/ui/fast_click.pcm", "r");
-    if (fp == NULL) {
-        ALOGE("Failed to load CameraService sound file /system/media/audio/ui/fast_click.pcm");
-        goto error1;
-    }
-
-    fseek(fp, 0, SEEK_END);
-    mBufferBurstSize = ftell(fp); // filesize
-    rewind(fp);
-
-    mBufferBurst = new uint8_t[mBufferBurstSize];
-    if (mBufferBurst == NULL) {
-        ALOGE("Failed alloc CameraService mBufferBurst");
-        goto error2;
-    }
-    fread(mBufferBurst, 1, mBufferBurstSize, fp);
-    fclose(fp);
-
-    return;
-
-    // error situation handling
-error2:
-    fclose(fp);
-    mBufferBurstSize = 0;
-
-error1:
-    delete mAudioTrackBurst;
-    mAudioTrackBurst = NULL;
 }
 
 void CameraService::loadSound() {
@@ -851,14 +739,8 @@ void CameraService::loadSound() {
     LOG1("CameraService::loadSound ref=%d", mSoundRef);
     if (mSoundRef++) return;
 
-    int64_t token = IPCThreadState::self()->clearCallingIdentity();
-
     mSoundPlayer[SOUND_SHUTTER] = newMediaPlayer("/system/media/audio/ui/camera_click.ogg");
     mSoundPlayer[SOUND_RECORDING] = newMediaPlayer("/system/media/audio/ui/VideoRecord.ogg");
-    mSoundPlayer[SOUND_BURST].clear(); //we use AudioTrack instead of MediaPlayer
-    loadSoundBurst();
-
-    IPCThreadState::self()->restoreCallingIdentity(token);
 }
 
 void CameraService::releaseSound() {
@@ -866,63 +748,22 @@ void CameraService::releaseSound() {
     LOG1("CameraService::releaseSound ref=%d", mSoundRef);
     if (--mSoundRef) return;
 
-    int64_t token = IPCThreadState::self()->clearCallingIdentity();
-
     for (int i = 0; i < NUM_SOUNDS; i++) {
         if (mSoundPlayer[i] != 0) {
             mSoundPlayer[i]->disconnect();
             mSoundPlayer[i].clear();
         }
     }
-
-    if (mAudioTrackBurst) {
-        mAudioTrackBurst->stop();
-        delete mAudioTrackBurst;
-        mAudioTrackBurst = NULL;
-    }
-    if (mBufferBurst) {
-        delete [] mBufferBurst;
-        mBufferBurst = NULL;
-        mBufferBurstSize = 0;
-    }
-
-    IPCThreadState::self()->restoreCallingIdentity(token);
 }
 
 void CameraService::playSound(sound_kind kind) {
     LOG1("playSound(%d)", kind);
     Mutex::Autolock lock(mSoundLock);
-
-    int64_t token = IPCThreadState::self()->clearCallingIdentity();
-
-    //Only for SOUND_BURST play the sound from fast_click.pcm
-    if (kind == SOUND_BURST) {
-        if (mAudioTrackBurst == NULL)
-            return;
-        if (!mAudioTrackBurst->stopped()) { // stop the track if already playing
-            mAudioTrackBurst->stop();
-            mAudioTrackBurst->flush();
-        }
-        mAudioTrackBurst->start();
-        mAudioTrackBurst->write((const void*) mBufferBurst, (size_t) mBufferBurstSize);
-
-        int atSize = mAudioTrackBurst->frameCount() * mAudioTrackBurst->frameSize();
-        if (mBufferBurstSize < atSize) {
-            // call stop() to make the audiotrack played immediately.
-            mAudioTrackBurst->stop();
-        }
-
-        IPCThreadState::self()->restoreCallingIdentity(token);
-        return;
-    }
-
     sp<MediaPlayer> player = mSoundPlayer[kind];
     if (player != 0) {
         player->seekTo(0);
         player->start();
     }
-
-    IPCThreadState::self()->restoreCallingIdentity(token);
 }
 
 // ----------------------------------------------------------------------------
@@ -937,8 +778,7 @@ CameraService::Client::Client(const sp<CameraService>& cameraService,
                 clientPackageName,
                 cameraId, cameraFacing,
                 clientPid, clientUid,
-                servicePid),
-        mLowPriorityClient(false)
+                servicePid)
 {
     int callingPid = getCallingPid();
     LOG1("Client::Client E (pid %d, id %d)", callingPid, cameraId);
@@ -1055,15 +895,6 @@ void CameraService::BasicClient::opChanged(int32_t op, const String16& packageNa
         notifyError();
         disconnect();
     }
-}
-
-void CameraService::BasicClient::serviceDisconnect() {
-    // Reset the client PID to allow a server-initiated disconnect,
-    // and to prevent further calls by the client.
-    LOG1("%s: Forcing a server initiated disconnect", __FUNCTION__);
-    mClientPid = getCallingPid();
-    notifyError();
-    disconnect();
 }
 
 // ----------------------------------------------------------------------------
@@ -1184,7 +1015,6 @@ status_t CameraService::dump(int fd, const Vector<String16>& args) {
         if (!mModule) {
             result = String8::format("No camera module available!\n");
             write(fd, result.string(), result.size());
-            if (locked) mServiceLock.unlock();
             return NO_ERROR;
         }
 

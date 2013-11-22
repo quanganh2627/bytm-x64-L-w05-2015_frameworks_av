@@ -160,10 +160,6 @@ bool SampleTable::isValid() const {
         && mTimeToSample != NULL;
 }
 
-bool SampleTable::isSyncTableValid() const {
-    return mSyncSampleOffset >= 0;
-}
-
 status_t SampleTable::setChunkOffsetParams(
         uint32_t type, off64_t data_offset, size_t data_size) {
     if (mChunkOffsetOffset >= 0) {
@@ -330,8 +326,7 @@ status_t SampleTable::setTimeToSampleParams(
 
     if (U32_AT(header) != 0) {
         // Expected version = 0, flags = 0.
-        ALOGW("Expected version = 0, flags = 0");
-        return OK;
+        return ERROR_MALFORMED;
     }
 
     mTimeToSampleCount = U32_AT(&header[4]);
@@ -645,10 +640,6 @@ status_t SampleTable::findSyncSampleNear(
         left = left - 1;
     }
 
-    if (left > 0) {
-        --left;
-    }
-
     // Now ssi[left] is the sync sample index just before (or at)
     // start_sample_index.
     // Also start_sample_index < ssi[left + 1], if left + 1 < mNumSyncSamples.
@@ -692,18 +683,14 @@ status_t SampleTable::findSyncSampleNear(
         case kFlagBefore:
         {
             if (x > start_sample_index) {
+                CHECK(left > 0);
 
-                if (left > 0) {
-                    x = mSyncSamples[left - 1];
+                x = mSyncSamples[left - 1];
 
-                    if (x > start_sample_index) {
-                        // The table of sync sample indices was not sorted
-                        // properly.
-                        return ERROR_MALFORMED;
-                    }
-                } else {
-                    // If seek time is 0, return the first sample as a sync sample
-                    x = 0;
+                if (x > start_sample_index) {
+                    // The table of sync sample indices was not sorted
+                    // properly.
+                    return ERROR_MALFORMED;
                 }
             }
             break;
@@ -790,7 +777,7 @@ status_t SampleTable::getMetaDataForSample(
         uint32_t sampleIndex,
         off64_t *offset,
         size_t *size,
-        int64_t *compositionTime,
+        uint32_t *compositionTime,
         bool *isSyncSample) {
     Mutex::Autolock autoLock(mLock);
 

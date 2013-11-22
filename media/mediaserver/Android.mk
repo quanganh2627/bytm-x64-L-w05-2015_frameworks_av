@@ -25,15 +25,6 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libbinder
 
-ifeq ($(INTEL_WIDI), true)
-LOCAL_SHARED_LIBRARIES += libdl
-LOCAL_CFLAGS += -DINTEL_WIDI
-endif
-
-ifeq ($(INTEL_VIDEO_XPROC_SHARING),true)
-LOCAL_SHARED_LIBRARIES += libintelmetadatabuffer
-endif
-
 LOCAL_STATIC_LIBRARIES := \
 	libregistermsext
 
@@ -42,8 +33,6 @@ LOCAL_C_INCLUDES := \
     frameworks/av/services/medialog \
     frameworks/av/services/audioflinger \
     frameworks/av/services/camera/libcameraservice
-
-LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libmix_videoencoder
 
 LOCAL_MODULE:= mediaserver
 

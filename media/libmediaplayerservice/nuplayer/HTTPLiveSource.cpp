@@ -100,53 +100,6 @@ sp<MetaData> NuPlayer::HTTPLiveSource::getFormatMeta(bool audio) {
         return NULL;
     }
 
-#ifdef TARGET_HAS_VPP
-    if (!audio) {
-       static const int64_t kMinDurationUs = 1000000ll;
-       sp<MetaData> format = source->getFormat();
-       size_t sampleCount = 0;
-       status_t err;
-       int framerate = 0;
-       int64_t duration = source->getBufferedDurationUs(&err,&sampleCount);
-       if (!(format != NULL && format->findInt32(kKeyFrameRate, &framerate) && framerate != 0)) {
-           if (format != NULL && err == OK && duration >= kMinDurationUs) {
-               framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
-               format->setInt32(kKeyFrameRate, framerate);
-           } else {
-               return NULL;
-           }
-       }
-    }
-#endif
-    // check if the format of the other stream is null,if it's still null
-    // return null for this stream's format to make sure two decoders can
-    // be initialized at the same time
-    ATSParser::SourceType otherType =
-        !audio ? ATSParser::AUDIO : ATSParser::VIDEO;
-    sp<AnotherPacketSource> anotherSource =
-        static_cast<AnotherPacketSource *>(mTSParser->getSource(otherType).get());
-    if (anotherSource != NULL && anotherSource->getFormat() == NULL) {
-        return NULL;
-    }
-
-#ifdef TARGET_HAS_VPP
-    if (otherType == ATSParser::VIDEO && anotherSource != NULL) {
-       static const int64_t kMinDurationUs = 1000000ll;
-       sp<MetaData> format = anotherSource->getFormat();
-       size_t sampleCount = 0;
-       status_t err;
-       int framerate = 0;
-       int64_t duration = anotherSource->getBufferedDurationUs(&err,&sampleCount);
-       if (!(format != NULL && format->findInt32(kKeyFrameRate, &framerate) && framerate != 0)) {
-           if (format != NULL && err == OK && duration >= kMinDurationUs) {
-               framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
-               format->setInt32(kKeyFrameRate, framerate);
-           } else {
-               return NULL;
-           }
-       }
-    }
-#endif
     return source->getFormat();
 }
 
@@ -244,20 +197,6 @@ status_t NuPlayer::HTTPLiveSource::seekTo(int64_t seekTimeUs) {
 
     mLiveSession->seekTo(seekTimeUs);
 
-    if (mFinalResult != OK) {
-        mFinalResult = OK;
-        sp<AnotherPacketSource> audiosource =
-            static_cast<AnotherPacketSource*>(mTSParser->getSource(ATSParser::AUDIO).get());
-        if (audiosource != NULL) {
-            audiosource->resetEOS();
-        }
-        sp<AnotherPacketSource> videosource =
-            static_cast<AnotherPacketSource*>(mTSParser->getSource(ATSParser::VIDEO).get());
-        if (videosource != NULL) {
-            videosource->resetEOS();
-        }
-    }
-
     return OK;
 }
 
@@ -312,12 +251,6 @@ void NuPlayer::HTTPLiveSource::onSessionNotify(const sp<AMessage> &msg) {
 
         default:
             TRESPASS();
-    }
-}
-
-void NuPlayer::HTTPLiveSource::stop() {
-    if (mLiveSession != NULL) {
-        mLiveSession->disconnect();
     }
 }
 

@@ -414,12 +414,7 @@ OMX_ERRORTYPE OMX::OnEvent(
     msg.u.event_data.data1 = nData1;
     msg.u.event_data.data2 = nData2;
 
-    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
-    if (cbd == NULL) {
-        LOGE("CallbackDispatcher for this node is not found");
-        return OMX_ErrorUndefined;
-    }
-    cbd->post(msg);
+    findDispatcher(node)->post(msg);
 
     return OMX_ErrorNone;
 }
@@ -433,12 +428,7 @@ OMX_ERRORTYPE OMX::OnEmptyBufferDone(
     msg.node = node;
     msg.u.buffer_data.buffer = pBuffer;
 
-    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
-    if (cbd == NULL) {
-        LOGE("CallbackDispatcher for this node is not found");
-        return OMX_ErrorUndefined;
-    }
-    cbd->post(msg);
+    findDispatcher(node)->post(msg);
 
     return OMX_ErrorNone;
 }
@@ -458,12 +448,7 @@ OMX_ERRORTYPE OMX::OnFillBufferDone(
     msg.u.extended_buffer_data.platform_private = pBuffer->pPlatformPrivate;
     msg.u.extended_buffer_data.data_ptr = pBuffer->pBuffer;
 
-    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
-    if (cbd == NULL) {
-        LOGE("CallbackDispatcher for this node is not found");
-        return OMX_ErrorUndefined;
-    }
-    cbd->post(msg);
+    findDispatcher(node)->post(msg);
 
     return OMX_ErrorNone;
 }

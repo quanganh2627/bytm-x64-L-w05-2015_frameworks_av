@@ -21,37 +21,15 @@
 #include "HTTPBase.h"
 #include "TimedEventQueue.h"
 
-#ifdef LVSE
-#include "LVAudioSource.h"
-#endif
-#ifdef TARGET_HAS_VPP
-#include "VPPProcessor.h"
-#include <media/stagefright/OMXCodec.h>
-#endif
-
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/DataSource.h>
 #include <media/stagefright/OMXClient.h>
 #include <media/stagefright/TimeSource.h>
 #include <utils/threads.h>
 #include <drm/DrmManagerClient.h>
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifdef USE_MDS_LEGACY
-#include <display/MultiDisplayClient.h>
-#else
-#include <display/MultiDisplayService.h>
-#include <display/IMultiDisplayVideoControl.h>
-using namespace android::intel;
-#endif
-#endif
-
-#include <media/stagefright/MetaData.h> // for AAC aparams
-extern "C" void timerCallback(union sigval);
-extern "C" void timerCallbackEOS(union sigval);
 
 namespace android {
-#define OFFLOAD_PAUSED_TIMEOUT_DURATION  10000000  //in micro seconds
-#define OFFLOAD_STANDBY_TIMEOUT_DURATION  3000000  //in micro seconds
+
 struct AudioPlayer;
 struct DataSource;
 struct MediaBuffer;
@@ -66,22 +44,15 @@ class DecryptHandle;
 class TimedTextDriver;
 struct WVMExtractor;
 
-
 struct AwesomeRenderer : public RefBase {
     AwesomeRenderer() {}
 
-    virtual void render(MediaBuffer *buffer, void *platformPrivate = NULL) = 0;
+    virtual void render(MediaBuffer *buffer) = 0;
 
 private:
     AwesomeRenderer(const AwesomeRenderer &);
     AwesomeRenderer &operator=(const AwesomeRenderer &);
 };
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-struct IntelPlatformPrivate {
-    int usage;
-};
-#endif
 
 struct AwesomePlayer {
     AwesomePlayer();
@@ -131,19 +102,7 @@ struct AwesomePlayer {
     void postAudioSeekComplete();
 
     status_t dump(int fd, const Vector<String16> &args) const;
-    void offloadPauseStartTimer(int64_t time, bool at_pause = false);
-    status_t offloadSuspend();
-    status_t offloadResume();
-#ifdef BGM_ENABLED
-    status_t remoteBGMSuspend();
-    status_t remoteBGMResume();
-    bool mAudioPlayerPaused;
-#endif
-    bool mOffloadCalAudioEOS;
-    bool mOffloadPostAudioEOS;
-    void postAudioOffloadTearDown();
-    status_t tearDownToNonDeepBufferAudio();
-    bool mIsDeepBufferPossible;
+
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -241,16 +200,6 @@ private:
 
     bool mWatchForAudioSeekComplete;
     bool mWatchForAudioEOS;
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifdef USE_MDS_LEGACY
-    MultiDisplayClient* mMDClient;
-#else
-    sp<IMultiDisplayVideoControl> mMDClient;
-#endif
-    int mFramesToDirty;
-    uint32_t mRenderedFrames;
-    int mVideoSessionId;
-#endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
     bool mVideoEventPending;
@@ -284,11 +233,6 @@ private:
     DrmManagerClient *mDrmManagerClient;
     sp<DecryptHandle> mDecryptHandle;
 
-#ifdef TARGET_HAS_VPP
-    VPPProcessor *mVPPProcessor;
-    bool mVPPInit;
-#endif
-
     int64_t mLastVideoTimeUs;
     TimedTextDriver *mTextDriver;
 
@@ -301,10 +245,6 @@ private:
 
     status_t setDataSource_l(const sp<DataSource> &dataSource);
     status_t setDataSource_l(const sp<MediaExtractor> &extractor);
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    void setMDSVideoState_l(int status);
-    void setMDSVideoInfo_l();
-#endif
     void reset_l();
     status_t seekTo_l(int64_t timeUs);
     status_t pause_l(bool at_eos = false);
@@ -318,9 +258,6 @@ private:
     status_t initAudioDecoder();
 
     void setVideoSource(sp<MediaSource> source);
-#ifdef TARGET_HAS_VPP
-    VPPProcessor* createVppProcessor_l(OMXCodec *omxCodec);
-#endif
     status_t initVideoDecoder(uint32_t flags = 0);
 
     void addTextSource_l(size_t trackIndex, const sp<MediaSource>& source);
@@ -375,10 +312,6 @@ private:
         String8 mURI;
         int64_t mBitrate;
 
-        KeyedVector<String8, String8> mUriHeaders;
-        sp<DataSource> mFileSource;
-        int64_t mPositionUs;
-        int64_t mDurationUs; /* store the file duration */
         // FIXME:
         // These two indices are just 0 or 1 for now
         // They are not representing the actual track
@@ -390,10 +323,8 @@ private:
         int64_t mNumVideoFramesDropped;
         int32_t mVideoWidth;
         int32_t mVideoHeight;
-        int32_t mFrameRate;
         uint32_t mFlags;
         Vector<TrackStat> mTracks;
-        bool mOffloadSinkCreationError;
     } mStats;
 
     status_t setVideoScalingMode(int32_t mode);
@@ -410,30 +341,6 @@ private:
 
     AwesomePlayer(const AwesomePlayer &);
     AwesomePlayer &operator=(const AwesomePlayer &);
-
-    void postAudioOffloadTearDownEvent_l();
-    void onAudioOffloadTearDownEvent();
-    bool isEnabledEffectEligibleForOffload();
-    status_t createAudioPlayer(audio_format_t audioFormat,
-                               int sampleRate,
-                               int channelsCount,
-                               int bitRate);
-
-    audio_format_t mAudioFormat;
-    bool mOffload;
-    timer_t mPausedTimerId;
-    bool mOffloadTearDown;
-    bool mOffloadTearDownForPause;
-    int64_t mOffloadPauseUs;
-    sp<TimedEventQueue::Event> mAudioOffloadTearDownEvent;
-    bool mAudioOffloadTearDownEventPending;
-    bool mOffloadSinkCreationError;
-    bool mDeepBufferAudio;
-    bool mDeepBufferTearDown;
-
-#ifdef LVSE
-    sp<LVAudioSource> mLVAudioSource;
-#endif
 };
 
 }  // namespace android

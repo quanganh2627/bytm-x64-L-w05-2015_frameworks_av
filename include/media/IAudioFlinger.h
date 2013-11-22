@@ -49,8 +49,6 @@ public:
         TRACK_DEFAULT = 0,  // client requests a default AudioTrack
         TRACK_TIMED   = 1,  // client requests a TimedAudioTrack
         TRACK_FAST    = 2,  // client requests a fast AudioTrack or AudioRecord
-        TRACK_OFFLOAD = 4,  // client requests a offload AudioTrack
-        TRACK_DEEPBUFFER = 8,  // client requests a deepbuffer AudioTrack
     };
     typedef uint32_t track_flags_t;
 
@@ -194,16 +192,7 @@ public:
     // that looks on primary device for a stream with fast flag, primary flag, or first one.
     virtual uint32_t getPrimaryOutputSamplingRate() = 0;
     virtual size_t getPrimaryOutputFrameCount() = 0;
-    // get audio mode
-    virtual audio_mode_t   getMode() const  = 0;
 
-    virtual bool isEnabledEffectEligibleForOffload(int sessionId) const = 0;
-
-    virtual size_t getOffloadBufferSize(
-            uint32_t bitRate,
-            uint32_t sampleRate,
-            uint32_t channel,
-            int output) = 0;
 };
 
 

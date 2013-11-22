@@ -64,7 +64,7 @@ public:
                                     // (See setMarkerPosition()).
         EVENT_NEW_POS = 4,          // Playback head is at a new position
                                     // (See setPositionUpdatePeriod()).
-        EVENT_BUFFER_END = 5,       // Playback head is at the end of the buffer.
+        EVENT_BUFFER_END = 5        // Playback head is at the end of the buffer.
     };
 
     /* Client should declare Buffer on the stack and pass address to obtainBuffer()
@@ -462,7 +462,7 @@ public:
             STOPPED = 1
         };
 
-        status_t    obtainBuffer(Buffer* audioBuffer, int32_t waitCount);
+            status_t    obtainBuffer(Buffer* audioBuffer, int32_t waitCount);
 
     /* Release a filled buffer of "frameCount" frames for AudioFlinger to process. */
             void        releaseBuffer(Buffer* audioBuffer);
@@ -513,10 +513,11 @@ protected:
         bool                mPaused;    // whether thread is currently paused
     };
 
-    // body of AudioTrackThread::threadLoop()
-    bool processAudioBuffer(const sp<AudioTrackThread>& thread);
-    // caller must hold lock on mLock for all _l methods
-    status_t createTrack_l(audio_stream_type_t streamType,
+            // body of AudioTrackThread::threadLoop()
+            bool processAudioBuffer(const sp<AudioTrackThread>& thread);
+
+            // caller must hold lock on mLock for all _l methods
+            status_t createTrack_l(audio_stream_type_t streamType,
                                  uint32_t sampleRate,
                                  audio_format_t format,
                                  size_t frameCount,

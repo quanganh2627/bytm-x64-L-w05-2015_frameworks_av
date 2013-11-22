@@ -128,9 +128,6 @@ public:
     // - BAD_VALUE: invalid parameter
     // NOTE: this feature is not supported on all hardware platforms and it is
     // necessary to check returned status before using the returned values.
-    static status_t getRenderPosition(audio_io_handle_t ioHandle,
-                                      size_t *halFrames, size_t *dspFrames,
-                                      audio_stream_type_t stream = AUDIO_STREAM_DEFAULT);
     static status_t getRenderPosition(size_t *halFrames, size_t *dspFrames,
             audio_stream_type_t stream = AUDIO_STREAM_DEFAULT);
 
@@ -244,14 +241,12 @@ public:
 
     static const sp<IAudioPolicyService>& get_audio_policy_service();
 
-    static bool isOffloadSupported(const audio_offload_info_t& config);
-
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
     static uint32_t getPrimaryOutputSamplingRate();
     static size_t getPrimaryOutputFrameCount();
 
-
     // ----------------------------------------------------------------------------
+
 private:
 
     class AudioFlingerClient: public IBinder::DeathRecipient, public BnAudioFlingerClient

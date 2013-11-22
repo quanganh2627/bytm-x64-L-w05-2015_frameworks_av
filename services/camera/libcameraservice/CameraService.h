@@ -24,7 +24,6 @@
 #include <binder/IAppOpsCallback.h>
 #include <camera/ICameraService.h>
 #include <hardware/camera.h>
-#include <media/AudioTrack.h>
 
 #include <camera/ICamera.h>
 #include <camera/ICameraClient.h>
@@ -71,8 +70,6 @@ public:
     virtual status_t    getCameraInfo(int cameraId,
                                       struct CameraInfo* cameraInfo);
 
-    virtual status_t    setPriority(int cameraId, bool priority);
-
     virtual sp<ICamera> connect(const sp<ICameraClient>& cameraClient, int cameraId,
             const String16& clientPackageName, int clientUid);
     virtual sp<IProCameraUser> connect(const sp<IProCameraCallbacks>& cameraCb,
@@ -95,7 +92,6 @@ public:
     enum sound_kind {
         SOUND_SHUTTER = 0,
         SOUND_RECORDING = 1,
-        SOUND_BURST = 2,
         NUM_SOUNDS
     };
 
@@ -122,8 +118,6 @@ public:
         wp<IBinder>     getRemote() {
             return mRemoteBinder;
         }
-
-        void serviceDisconnect();
 
     protected:
         BasicClient(const sp<CameraService>& cameraService,
@@ -227,9 +221,6 @@ public:
             return mRemoteCallback;
         }
 
-        bool                 isLowPriorityClient() { return mLowPriorityClient; }
-        void                 setLowPriority() { mLowPriorityClient = true; }
-
     protected:
         static Mutex*        getClientLockFromCookie(void* user);
         // convert client from cookie. Client lock should be acquired before getting Client.
@@ -241,11 +232,6 @@ public:
 
         // - The app-side Binder interface to receive callbacks from us
         sp<ICameraClient>               mRemoteCallback;
-
-        // When true, the client is running as a background activity and can be
-        // closed by the ServiceLayer when normal priority camera requests are
-        // started by the applications
-        bool                            mLowPriorityClient;
 
     }; // class Client
 
@@ -321,9 +307,6 @@ private:
     Mutex               mClientLock[MAX_CAMERAS]; // prevent Client destruction inside callbacks
     int                 mNumberOfCameras;
 
-    // A process can request a future camera instance to be low priority
-    int                 mLowPriorityPid[MAX_CAMERAS];
-
     typedef wp<ProClient> weak_pro_client_ptr;
     Vector<weak_pro_client_ptr> mProClientList[MAX_CAMERAS];
 
@@ -339,15 +322,10 @@ private:
 
     // sounds
     MediaPlayer*        newMediaPlayer(const char *file);
-    void                loadSoundBurst();
 
     Mutex               mSoundLock;
-    //note mSoundPlayer[SOUND_BURST] is left null, because AudioTrack is used
     sp<MediaPlayer>     mSoundPlayer[NUM_SOUNDS];
     int                 mSoundRef;  // reference count (release all MediaPlayer when 0)
-    AudioTrack*         mAudioTrackBurst;
-    uint8_t*            mBufferBurst;
-    int32_t             mBufferBurstSize;
 
     camera_module_t *mModule;
 

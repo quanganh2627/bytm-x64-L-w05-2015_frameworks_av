@@ -13,25 +13,6 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
-**
-** This file was modified by Dolby Laboratories, Inc. The portions of the
-** code that are surrounded by "DOLBY..." are copyrighted and
-** licensed separately, as follows:
-**
-**  (C) 2011-2013 Dolby Laboratories, Inc.
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**    http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-**
 */
 
 
@@ -47,12 +28,6 @@
 #include "AudioFlinger.h"
 #include "ServiceUtilities.h"
 
-#if defined(DOLBY_DAP_OPENSLES)
-#include "effect_ds.h"
-#elif defined(DOLBY_DAP_DSP)
-#include "DsNative.h"
-#endif // DOLBY_END
-
 // ----------------------------------------------------------------------------
 
 // Note: the following macro is used for extremely verbose logging message.  In
@@ -66,10 +41,6 @@
 #define ALOGVV ALOGV
 #else
 #define ALOGVV(a...) do { } while(0)
-#endif
-
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-#define CODEC_OFFLOAD_MODULE_NAME "codec_offload"
 #endif
 
 namespace android {
@@ -94,10 +65,7 @@ AudioFlinger::EffectModule::EffectModule(ThreadBase *thread,
       mStatus(NO_INIT), mState(IDLE),
       // mMaxDisableWaitCnt is set by configure() and not used before then
       // mDisableWaitCnt is set by process() and updateState() and not used before then
-      mSuspended(false), mStopped(false)
-#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
-      , mDsLeftVolume(UINT_MAX), mDsRightVolume(UINT_MAX)
-#endif // DOLBY_DAP_OPENSLES_PREGAIN
+      mSuspended(false)
 {
     ALOGV("Constructor %p", this);
     int lStatus;
@@ -108,33 +76,6 @@ AudioFlinger::EffectModule::EffectModule(ThreadBase *thread,
     if (mStatus != NO_ERROR) {
         return;
     }
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    PlaybackThread *pbt = thread->mAudioFlinger->checkPlaybackThread_l(thread->mId);
-    // check if the effect can be offloaded with the desc flag
-    if (pbt != NULL && ((desc->flags & EFFECT_FLAG_OFFLOAD_MASK)
-                         == EFFECT_FLAG_OFFLOAD_SUPPORTED)) {
-        bool isOffload = pbt->isOffloadTrack();
-        audio_io_handle_t pbtOutput = pbt->id();
-        effect_offload_param_t offload_param;
-        offload_param.isOffload = isOffload;
-        offload_param.ioHandle = pbtOutput;
-        status_t cmdStatus, status;
-        uint32_t size = sizeof(status_t);
-        status = (*mEffectInterface)->command(mEffectInterface,
-                                 EFFECT_CMD_OFFLOAD,
-                                 sizeof(offload_param),
-                                 &offload_param,
-                                 &size,
-                                 &cmdStatus);
-        if (status == NO_ERROR) {
-            status = cmdStatus;
-        }
-        if (status != NO_ERROR) {
-            mStatus = status;
-            goto Error;
-        }
-    }
-#endif
     lStatus = init();
     if (lStatus < 0) {
         mStatus = lStatus;
@@ -151,12 +92,18 @@ Error:
 
 AudioFlinger::EffectModule::~EffectModule()
 {
-    Mutex::Autolock _l(mLock);
-
     ALOGV("Destructor %p", this);
     if (mEffectInterface != NULL) {
-        //stop effect if it has not already stopped
-        stop_effect_l();
+        if ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC ||
+                (mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_POST_PROC) {
+            sp<ThreadBase> thread = mThread.promote();
+            if (thread != 0) {
+                audio_stream_t *stream = thread->stream();
+                if (stream != NULL) {
+                    stream->remove_audio_effect(stream, mEffectInterface);
+                }
+            }
+        }
         // release effect engine
         EffectRelease(mEffectInterface);
     }
@@ -382,19 +329,6 @@ status_t AudioFlinger::EffectModule::configure()
 
     // TODO: handle configuration of effects replacing track process
     channelMask = thread->channelMask();
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    // Since the channel mask is read from the current active PB thread,
-    // it used to be > 2 for multichannel offload. Due to this, effect
-    // was not created and offload tear down was not working.
-    // Setting the channel mask as stereo to fix tear down
-    // from multi-channel offload
-    // TODO: Remove this change when the effect lib supports multichannel
-    if ((thread->type() == ThreadBase::DIRECT) &&
-        (((PlaybackThread*)thread.get())->isOffloadTrack()) &&
-        popcount(channelMask) > 2) {
-        channelMask = AUDIO_CHANNEL_OUT_STEREO;
-    }
-#endif
 
     if ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_AUXILIARY) {
         mConfig.inputCfg.channels = AUDIO_CHANNEL_OUT_MONO;
@@ -488,7 +422,6 @@ status_t AudioFlinger::EffectModule::init()
     }
     status_t cmdStatus;
     uint32_t size = sizeof(status_t);
-
     status_t status = (*mEffectInterface)->command(mEffectInterface,
                                                    EFFECT_CMD_INIT,
                                                    0,
@@ -504,7 +437,6 @@ status_t AudioFlinger::EffectModule::init()
 status_t AudioFlinger::EffectModule::start()
 {
     Mutex::Autolock _l(mLock);
-
     return start_l();
 }
 
@@ -535,7 +467,6 @@ status_t AudioFlinger::EffectModule::start_l()
             audio_stream_t *stream = thread->stream();
             if (stream != NULL) {
                 stream->add_audio_effect(stream, mEffectInterface);
-                mStopped = false;
             }
         }
     }
@@ -556,7 +487,7 @@ status_t AudioFlinger::EffectModule::stop_l()
     if (mStatus != NO_ERROR) {
         return mStatus;
     }
-    status_t cmdStatus = 0;
+    status_t cmdStatus;
     uint32_t size = sizeof(status_t);
     status_t status = (*mEffectInterface)->command(mEffectInterface,
                                                    EFFECT_CMD_DISABLE,
@@ -567,19 +498,7 @@ status_t AudioFlinger::EffectModule::stop_l()
     if (status == 0) {
         status = cmdStatus;
     }
-    if (status == 0) {
-        stop_effect_l();
-    }
-    return status;
-}
-
-status_t AudioFlinger::EffectModule::stop_effect_l()
-{
-    if (mEffectInterface == NULL) {
-        return NO_INIT;
-    }
-
-    if (mStopped == false &&
+    if (status == 0 &&
             ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC ||
              (mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_POST_PROC)) {
         sp<ThreadBase> thread = mThread.promote();
@@ -587,11 +506,10 @@ status_t AudioFlinger::EffectModule::stop_effect_l()
             audio_stream_t *stream = thread->stream();
             if (stream != NULL) {
                 stream->remove_audio_effect(stream, mEffectInterface);
-                mStopped = true;
             }
         }
     }
-    return 0;
+    return status;
 }
 
 status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
@@ -630,29 +548,7 @@ status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
 status_t AudioFlinger::EffectModule::setEnabled(bool enabled)
 {
     Mutex::Autolock _l(mLock);
-
-    status_t status = setEnabled_l(enabled);
-#ifdef DOLBY_DAP_OPENSLES
-    if (status == NO_ERROR) {
-        if (memcmp(&(desc().uuid), &(EFFECT_UUID_DS), sizeof(effect_uuid_t)) == 0) { // DS1 Effects
-            AudioParameter param;
-            if (enabled) {
-                ALOGV("Setting to bypass non-linear post-processing...");
-                param.add(String8(AUDIO_PARAMETER_KEY_BYPASS_NON_LINEAR_POSTPROCESSING_SETTING),
-                                        String8(AUDIO_PARAMETER_VALUE_BYPASS_NON_LINEAR_PP_ON));
-            } else {
-                ALOGV("Setting not to bypass non-linear PP...");
-                param.add(String8(AUDIO_PARAMETER_KEY_BYPASS_NON_LINEAR_POSTPROCESSING_SETTING),
-                                        String8(AUDIO_PARAMETER_VALUE_BYPASS_NON_LINEAR_PP_OFF));
-            }
-            sp<ThreadBase> thread;
-            thread = mThread.promote();
-            PlaybackThread *p = (PlaybackThread *)thread.get();
-            p->getOutput_l()->hwDev()->set_parameters(p->getOutput_l()->hwDev(), param.toString());
-        }
-    }
-#endif
-    return status;
+    return setEnabled_l(enabled);
 }
 
 // must be called with EffectModule::mLock held
@@ -698,24 +594,6 @@ status_t AudioFlinger::EffectModule::setEnabled_l(bool enabled)
                 h->setEnabled(enabled);
             }
         }
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        sp<ThreadBase> thread = mThread.promote();
-        if (thread == 0) {
-            return NO_ERROR;
-        }
-        if (thread->type() == ThreadBase::DIRECT) {
-            PlaybackThread *effectThread = (PlaybackThread *)thread.get();
-            if ((effectThread->isOffloadTrack()) && (enabled) &&
-               ((sessionId() == AUDIO_SESSION_OUTPUT_MIX) ||
-               ((desc().flags & EFFECT_FLAG_OFFLOAD_MASK)
-                                 != EFFECT_FLAG_OFFLOAD_SUPPORTED))) {
-                // Global effects. Hence tear down offload
-                PlaybackThread *p = (PlaybackThread *)thread.get();
-                ALOGV("setEnabled: Offload, invalidate tracks");
-                p->invalidateTracks(AUDIO_STREAM_MUSIC);
-            }
-        }
-#endif
     }
     return NO_ERROR;
 }
@@ -791,32 +669,6 @@ status_t AudioFlinger::EffectModule::setVolume(uint32_t *left, uint32_t *right, 
     return status;
 }
 
-#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
-status_t AudioFlinger::EffectModule::setDsPregain(uint32_t *left, uint32_t *right)
-{
-    Mutex::Autolock _l(mLock);
-    status_t status = NO_ERROR;
-    uint32_t volume[2];
-    uint32_t size = sizeof(volume);
-    volume[0] = *left;
-    volume[1] = *right;
-
-    if (mDsLeftVolume != volume[0] || mDsRightVolume != volume[1]) {
-        status = (*mEffectInterface)->command(mEffectInterface,
-                                              EFFECT_CMD_DOLBY_SET_PREGAIN,
-                                              size,
-                                              volume,
-                                              &size,
-                                              NULL);
-        if (status == NO_ERROR && size == sizeof(volume)) {
-            mDsLeftVolume  = volume[0];
-            mDsRightVolume = volume[1];
-        }
-    }
-
-    return status;
-}
-#endif // DOLBY_DAP_OPENSLES_PREGAIN
 status_t AudioFlinger::EffectModule::setDevice(audio_devices_t device)
 {
     if (device == AUDIO_DEVICE_NONE) {
@@ -891,33 +743,6 @@ void AudioFlinger::EffectModule::setSuspended(bool suspended)
     mSuspended = suspended;
 }
 
-#ifdef DOLBY_DAP_BYPASS_SOUND_TYPES
-status_t AudioFlinger::EffectModule::setBypass(bool bypass, bool crossFade)
-{
-    Mutex::Autolock _l(mLock);
-    status_t  status = NO_ERROR;
-    uint32_t  size   = sizeof(status_t);
-    uint32_t  bypassParams[2];
-
-    bypassParams[0] = mBypassed = bypass;
-    bypassParams[1] = crossFade;
-
-    status = (*mEffectInterface)->command(mEffectInterface,
-                                          EFFECT_CMD_DOLBY_DAP_SET_BYPASS,
-                                          sizeof(bypassParams),
-                                          bypassParams,
-                                          &size,
-                                          NULL);
-
-    return status;
-}
-
-bool AudioFlinger::EffectModule::bypassed() const
-{
-    Mutex::Autolock _l(mLock);
-    return mBypassed;
-}
-#endif //DOLBY_DAP_BYPASS_SOUND_TYPES
 bool AudioFlinger::EffectModule::suspended() const
 {
     Mutex::Autolock _l(mLock);
@@ -1038,8 +863,7 @@ AudioFlinger::EffectHandle::EffectHandle(const sp<EffectModule>& effect,
                                         int32_t priority)
     : BnEffect(),
     mEffect(effect), mEffectClient(effectClient), mClient(client), mCblk(NULL),
-    mBuffer(NULL), mPriority(priority), mHasControl(false), mEnabled(false),
-    mDestroyed(false)
+    mPriority(priority), mHasControl(false), mEnabled(false), mDestroyed(false)
 {
     ALOGV("constructor %p", this);
 
@@ -1379,29 +1203,6 @@ sp<AudioFlinger::EffectModule> AudioFlinger::EffectChain::getEffectFromType_l(
     return 0;
 }
 
-bool AudioFlinger::EffectChain::isEnabledEffectEligibleForOffload() const
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    size_t size = mEffects.size();
-    for (size_t i = 0; i < size; i++) {
-        if (mEffects[i]->isEnabled()) {
-            // If an effect is enabled, check if the effect can be offloaded.
-            // If the OFFLOAD flag does not exist, SW effects will be applied
-            // and hence offload playback cannot be supported.
-            // So this function returns false
-            effect_descriptor_t desc = mEffects[i]->desc();
-            if ((desc.flags & EFFECT_FLAG_OFFLOAD_MASK)
-                                 != EFFECT_FLAG_OFFLOAD_SUPPORTED) {
-                return false;
-            }
-        }
-    }
-    return true;
-#else
-    return false;
-#endif
-}
-
 void AudioFlinger::EffectChain::clearInputBuffer()
 {
     Mutex::Autolock _l(mLock);
@@ -1414,39 +1215,10 @@ void AudioFlinger::EffectChain::clearInputBuffer()
 }
 
 // Must be called with EffectChain::mLock locked
-
 void AudioFlinger::EffectChain::clearInputBuffer_l(sp<ThreadBase> thread)
 {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-     // For offload the framecount is the one used for allocation the
-     // mInBuffer so modify the numSamples accordingly before memsetting
-     size_t numSamples;
-     PlaybackThread* pBThread = static_cast<PlaybackThread*>(thread.get());
-
-     if (pBThread->type() != ThreadBase::DIRECT) {
-         size_t numSamples = thread->frameCount() * thread->channelCount();
-         memset(mInBuffer, 0, numSamples * sizeof(int16_t));
-     } else {
-         size_t numSamples = thread->frameCount();
-         memset(mInBuffer, 0, numSamples * sizeof(int8_t));
-     }
-#else
-    size_t numSamples;
-    PlaybackThread* pBThread = static_cast<PlaybackThread*>(thread.get());
-     // [WORKAROUND]
-     // for DUT, effects need not be applied
-     // when the number of channels is more than 2, the effects chain
-     // is not supported at present;
-     if((thread->channelCount() > 2) && (pBThread->type() == ThreadBase::DIRECT)) {
-       ALOGI("Effects for multi-channel- NA");
-       numSamples = thread->frameCount();
-       memset(mInBuffer, 0, numSamples * sizeof(int8_t));
-     }
-     else {
-       numSamples = thread->frameCount() * thread->channelCount();
-       memset(mInBuffer, 0, numSamples * sizeof(int16_t));
-     }
-#endif
+    size_t numSamples = thread->frameCount() * thread->channelCount();
+    memset(mInBuffer, 0, numSamples * sizeof(int16_t));
 
 }
 
@@ -1782,10 +1554,6 @@ void AudioFlinger::EffectChain::setEffectSuspended_l(
             desc->mType = *type;
             mSuspendedEffects.add(type->timeLow, desc);
             ALOGV("setEffectSuspended_l() add entry for %08x", type->timeLow);
-#ifdef DOLBY_DAP_OPENSLES
-            if (memcmp(&desc->mType, EFFECT_SL_IID_DS, sizeof(effect_uuid_t)) == 0)
-                AudioFlinger::sendBroadcastMessage(String16("DS_EFFECT_SUSPEND_ACTION"), 1);
-#endif // DOLBY_END
         }
         if (desc->mRefCount++ == 0) {
             sp<EffectModule> effect = getEffectIfEnabled(type);
@@ -1819,10 +1587,6 @@ void AudioFlinger::EffectChain::setEffectSuspended_l(
                 }
                 desc->mEffect.clear();
             }
-#ifdef DOLBY_DAP_OPENSLES
-            if (memcmp(&desc->mType, EFFECT_SL_IID_DS, sizeof(effect_uuid_t)) == 0)
-                AudioFlinger::sendBroadcastMessage(String16("DS_EFFECT_SUSPEND_ACTION"), 0);
-#endif // DOLBY_END
             mSuspendedEffects.removeItemsAt(index);
         }
     }

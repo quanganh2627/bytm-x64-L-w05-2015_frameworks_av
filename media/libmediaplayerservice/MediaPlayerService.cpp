@@ -15,17 +15,12 @@
 ** limitations under the License.
 */
 
-/*
-* Portions contributed by: Intel Corporation
-*/
-
 // Proxy for media player implementations
 
 //#define LOG_NDEBUG 0
 #define LOG_TAG "MediaPlayerService"
 #include <utils/Log.h>
 
-#include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -56,9 +51,6 @@
 #include <media/MediaMetadataRetrieverInterface.h>
 #include <media/Metadata.h>
 #include <media/AudioTrack.h>
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-#include <media/AudioTrackOffload.h>
-#endif
 #include <media/MemoryLeakTrackUtil.h>
 #include <media/stagefright/MediaErrors.h>
 
@@ -85,15 +77,6 @@
 #include "HTTPBase.h"
 #include "RemoteDisplay.h"
 
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifdef USE_MDS_LEGACY
-#include <display/MultiDisplayClient.h>
-#else
-#include <display/MultiDisplayService.h>
-#include <display/IMultiDisplayVideoControl.h>
-#endif
-#endif
-
 namespace {
 using android::media::Metadata;
 using android::status_t;
@@ -101,11 +84,6 @@ using android::OK;
 using android::BAD_VALUE;
 using android::NOT_ENOUGH_DATA;
 using android::Parcel;
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifndef USE_MDS_LEGACY
-using namespace android::intel;
-#endif
-#endif
 
 // Max number of entries in the filter.
 const int kMaxFilterSize = 64;  // I pulled that out of thin air.
@@ -218,7 +196,7 @@ static bool checkPermission(const char* permissionString) {
 }
 
 // TODO: Find real cause of Audio/Video delay in PV framework and remove this workaround
-/* static */ int MediaPlayerService::AudioOutput::mMinBufferCount = 2;
+/* static */ int MediaPlayerService::AudioOutput::mMinBufferCount = 4;
 /* static */ bool MediaPlayerService::AudioOutput::mIsOnEmulator = false;
 
 void MediaPlayerService::instantiate() {
@@ -241,33 +219,6 @@ MediaPlayerService::MediaPlayerService()
     mBatteryAudio.deviceOn[SPEAKER] = 1;
 
     MediaPlayerFactory::registerBuiltinFactories();
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    // Reset video playback status in case media server crashes.
-#ifdef USE_MDS_LEGACY
-    MultiDisplayClient* mdsclient = new MultiDisplayClient();
-#else
-    sp<IServiceManager> sm = defaultServiceManager();
-    if (sm == NULL) {
-        LOGE("%s: Fail to get service manager", __func__);
-        return;
-    }
-    sp<IMDService> mds = interface_cast<IMDService>(
-            sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
-    if (mds == NULL) {
-        LOGE("%s: Failed to get MDS service", __func__);
-        return;
-    }
-    sp<IMultiDisplayVideoControl> mdsclient = mds->getVideoControl();
-#endif
-    if (mdsclient != NULL) {
-        mdsclient->resetVideoPlayback();
-#ifdef USE_MDS_LEGACY
-        delete mdsclient;
-#endif
-        mdsclient = NULL;
-    }
-#endif
 }
 
 MediaPlayerService::~MediaPlayerService()
@@ -350,33 +301,7 @@ sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
         return NULL;
     }
 
-#ifdef INTEL_WIDI
-    void *hlibintelwidi = dlopen("libwidiservice.so", RTLD_NOW);
-    if (hlibintelwidi) {
-        ALOGE("dlopen(libwidiservice.so) succeeded in opening from MediaPlayerService.cpp");
-        dlerror(); // Clear existing errors
-        typedef sp<IRemoteDisplay> (*getRemoteDisplayFunc_t)(const String8&, const sp<IRemoteDisplayClient>& );
-        getRemoteDisplayFunc_t getRemoteDisplay = NULL;
-        getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(hlibintelwidi, "getRemoteDisplay");
-        sp<IRemoteDisplay> rd;
-        const char* error = dlerror();
-        if((error == NULL) && (getRemoteDisplay != NULL)) {
-            rd = (*getRemoteDisplay)(iface, client);
-        }
-        else {
-            ALOGI("dlsym(getRemoteDisplay) failed with error %s. Falling back to non-Intel version.", error);
-            rd = new RemoteDisplay(client, iface.string());
-        }
-        dlclose(hlibintelwidi);
-        return rd;
-    }
-    else {
-        ALOGE("dlopen(libwidiservice.so) failed. Falling back to non-Intel version.");
-        return new RemoteDisplay(client, iface.string());
-    }
-#else
     return new RemoteDisplay(client, iface.string());
-#endif
 }
 
 status_t MediaPlayerService::updateProxyConfig(
@@ -611,17 +536,15 @@ void MediaPlayerService::Client::disconnect()
         Mutex::Autolock l(mLock);
         p = mPlayer;
     }
-    // clear the notification to prevent callbacks to dead client
-    // and reset the player. We assume the player will serialize
-    // access to itself if necessary.
-    if (p != 0)
-        p->setNotifyCallback(0, 0);
-
     mClient.clear();
 
     mPlayer.clear();
 
+    // clear the notification to prevent callbacks to dead client
+    // and reset the player. We assume the player will serialize
+    // access to itself if necessary.
     if (p != 0) {
+        p->setNotifyCallback(0, 0);
 #if CALLBACK_ANTAGONIZER
         ALOGD("kill Antagonizer");
         mAntagonizer->kill();
@@ -971,9 +894,15 @@ status_t MediaPlayerService::Client::isPlaying(bool* state)
 
 status_t MediaPlayerService::Client::getCurrentPosition(int *msec)
 {
+    ALOGV("getCurrentPosition");
     sp<MediaPlayerBase> p = getPlayer();
     if (p == 0) return UNKNOWN_ERROR;
     status_t ret = p->getCurrentPosition(msec);
+    if (ret == NO_ERROR) {
+        ALOGV("[%d] getCurrentPosition = %d", mConnId, *msec);
+    } else {
+        ALOGE("getCurrentPosition returned %d", ret);
+    }
     return ret;
 }
 
@@ -1159,25 +1088,11 @@ void MediaPlayerService::Client::notify(
     {
         Mutex::Autolock l(client->mLock);
         c = client->mClient;
-        if ((msg == MEDIA_PLAYBACK_COMPLETE || msg == MEDIA_ERROR)
-             && client->mNextClient != NULL) {
-            if (c != NULL) {
-               ALOGV("[%d] notify (%p, %d, %d, %d)", client->mConnId, cookie,
-                      msg, ext1, ext2);
-               c->notify(msg, ext1, ext2, obj);
-            }
+        if (msg == MEDIA_PLAYBACK_COMPLETE && client->mNextClient != NULL) {
             if (client->mAudioOutput != NULL)
                 client->mAudioOutput->switchToNextOutput();
-            if ( client->mNextClient->start() == NO_ERROR ){
-                ALOGV("next client started with out problem");
-                client->mNextClient->mClient->notify(MEDIA_INFO,
-                                       MEDIA_INFO_STARTED_AS_NEXT, 0, obj);
-            } else {
-                ALOGE("next client start failed notify");
-                client->mNextClient->mClient->notify(MEDIA_ERROR,
-                                       MEDIA_ERROR_SERVER_DIED,0, obj);
-           }
-           return;
+            client->mNextClient->start();
+            client->mNextClient->mClient->notify(MEDIA_INFO, MEDIA_INFO_STARTED_AS_NEXT, 0, obj);
         }
     }
 
@@ -1195,8 +1110,7 @@ void MediaPlayerService::Client::notify(
     }
 
     if (c != NULL) {
-        ALOGV("[%d] notify (%p, %d, %d, %d)",
-               client->mConnId, cookie, msg, ext1, ext2);
+        ALOGV("[%d] notify (%p, %d, %d, %d)", client->mConnId, cookie, msg, ext1, ext2);
         c->notify(msg, ext1, ext2, obj);
     }
 }
@@ -1379,8 +1293,7 @@ MediaPlayerService::AudioOutput::AudioOutput(int sessionId)
       mCallbackData(NULL),
       mBytesWritten(0),
       mSessionId(sessionId),
-      mFlags(AUDIO_OUTPUT_FLAG_NONE)
-{
+      mFlags(AUDIO_OUTPUT_FLAG_NONE) {
     ALOGV("AudioOutput(%d)", sessionId);
     mTrack = 0;
     mRecycledTrack = 0;
@@ -1393,10 +1306,6 @@ MediaPlayerService::AudioOutput::AudioOutput(int sessionId)
     mAuxEffectId = 0;
     mSendLevel = 0.0;
     setMinBufferCount();
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    mBitRate = 0;
-    mCallback2 = NULL;
-#endif
 }
 
 MediaPlayerService::AudioOutput::~AudioOutput()
@@ -1465,11 +1374,6 @@ float MediaPlayerService::AudioOutput::msecsPerFrame() const
 status_t MediaPlayerService::AudioOutput::getPosition(uint32_t *position) const
 {
     if (mTrack == 0) return NO_INIT;
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        return static_cast<AudioTrackOffload*>(mTrack)->getPosition(position);
-    }
-#endif
     return mTrack->getPosition(position);
 }
 
@@ -1480,322 +1384,31 @@ status_t MediaPlayerService::AudioOutput::getFramesWritten(uint32_t *frameswritt
     return OK;
 }
 
-status_t MediaPlayerService::AudioOutput::setOffloadEOSReached(bool value)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mTrack == 0) return NO_INIT;
-    ALOGV("setOffloadEOSReached");
-    return static_cast<AudioTrackOffload*>(mTrack)->setOffloadEOSReached(value);
-#else
-    return OK;
-#endif
-}
-
-status_t MediaPlayerService::AudioOutput::setParameters(const String8& keyValuePairs)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mTrack == 0) return NO_INIT;
-    return static_cast<AudioTrackOffload*>(mTrack)->setParameters(keyValuePairs);
-#else
-    return OK;
-#endif
-}
-
-String8 MediaPlayerService::AudioOutput::getParameters(const String8& keys)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (mTrack == 0) return String8::empty();
-    return AudioSystem::getParameters( mTrack->getOutput(), keys );
-#else
-    return String8::empty();
-#endif
-}
-
-// Overloaded open
 status_t MediaPlayerService::AudioOutput::open(
-        uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
-        int bitRate,
-        audio_format_t format, int bufferCount,
-        AudioCallback2 cb, void *cookie,
-        audio_output_flags_t flags)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD){
-        mBitRate = bitRate;
-        mCallback2 = cb;
-     }
-     return open(sampleRate, channelCount, channelMask, format,
-                 bufferCount, NULL /*cb*/, cookie, flags);
-#else
-    return 0;
-#endif
-}
-void MediaPlayerService::AudioOutput::deleteRecycledTrack()
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-     ALOGV("cannot reuse, deleting the mRecycledTrack = %p", mRecycledTrack);
-     // if we're not going to reuse the track, unblock and flush it
-     if (mCallbackData != NULL) {
-          mCallbackData->setOutput(NULL);
-          mCallbackData->endTrackSwitch();
-     }
-     mRecycledTrack->flush();
-     delete mRecycledTrack;
-     mRecycledTrack = NULL;
-     delete mCallbackData;
-     mCallbackData = NULL;
-     close();
-#endif
-}
-
-status_t MediaPlayerService::AudioOutput::local_open(
         uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
         audio_format_t format, int bufferCount,
         AudioCallback cb, void *cookie,
         audio_output_flags_t flags)
 {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
     mCallback = cb;
     mCallbackCookie = cookie;
 
     // Check argument "bufferCount" against the mininum buffer count
     if (bufferCount < mMinBufferCount) {
-        ALOGD("bufferCount (%d) is too small and increased to %d", bufferCount,
-               mMinBufferCount);
+        ALOGD("bufferCount (%d) is too small and increased to %d", bufferCount, mMinBufferCount);
         bufferCount = mMinBufferCount;
 
     }
-    ALOGV("local_open(%u, %d, 0x%x, %d, %d, %d)",
-            sampleRate, channelCount, channelMask,
+    ALOGV("open(%u, %d, 0x%x, %d, %d, %d)", sampleRate, channelCount, channelMask,
             format, bufferCount, mSessionId);
     uint32_t afSampleRate;
     size_t afFrameCount;
     uint32_t frameCount;
 
-    if (AudioSystem::getOutputFrameCount(&afFrameCount, mStreamType) !=
-        NO_ERROR) {
+    if (AudioSystem::getOutputFrameCount(&afFrameCount, mStreamType) != NO_ERROR) {
         return NO_INIT;
     }
-    if (AudioSystem::getOutputSamplingRate(&afSampleRate, mStreamType) !=
-        NO_ERROR) {
-        return NO_INIT;
-    }
-
-    frameCount = (sampleRate*afFrameCount*bufferCount)/afSampleRate;
-
-    if (channelMask == CHANNEL_MASK_USE_CHANNEL_ORDER) {
-        channelMask = audio_channel_out_mask_from_count(channelCount);
-        if (0 == channelMask) {
-            ALOGE("open() error, can\'t derive mask for %d audio channels",
-                   channelCount);
-            return NO_INIT;
-        }
-    }
-    bool reuse = true;
-    ALOGV("local_open:mRecycledTrack = %p", mRecycledTrack);
-    if (mRecycledTrack) {
-        // check if the existing track can be reused as-is,
-        // or if a new track needs to be created.
-        if ( (!(flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
-                && (mCallbackData == NULL && mCallback != NULL)) ||
-                (!(flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
-                && (mCallbackData != NULL && mCallback == NULL)) ) {
-            // recycled track uses callbacks but the caller
-            // wants to use writes, or vice versa
-            reuse = false;
-        } else if ( ((flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
-                && (mCallbackData == NULL && mCallback2 != NULL)) ||
-                ((flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)
-                && (mCallbackData != NULL && mCallback2 == NULL)) ) {
-            // recycled track uses callbacks but the caller wants
-            // to use writes, or vice versa
-            reuse = false;
-        } else if ((mRecycledTrack->getSampleRate() != sampleRate) ||
-                (mRecycledTrack->channelCount() != channelCount)) {
-            ALOGV("local_open:samplerate, channelcount or framecount differ:"
-                  "%d/%d Hz, %d/%d ch",
-                  mRecycledTrack->getSampleRate(), sampleRate,
-                  mRecycledTrack->channelCount(), channelCount);
-            reuse = false;
-        } else if (flags != mFlags) {
-            ALOGV("local_open: output flags differ %08x/%08x", flags, mFlags);
-            reuse = false;
-        }
-        else if ((mRecycledTrack->format() != format) &&
-              (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)) {
-            reuse = false;
-        }
-        if (!reuse) {
-            deleteRecycledTrack();
-        }
-    }
-
-    // check the flag and call the appropriate audio track constructor.
-    AudioTrack *t;
-    CallbackData *newcbd = NULL;
-    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-       if (mCallback2 != NULL) {
-            newcbd = new CallbackData(this);
-            t = new AudioTrackOffload(
-                mStreamType,
-                mBitRate,
-                sampleRate,
-                format,
-                channelMask,
-                frameCount,
-                flags,
-                CallbackWrapper,
-                newcbd,
-                0,  // notification frames
-                mSessionId);
-        } else {
-            t = new AudioTrackOffload(
-                mStreamType,
-                mBitRate,
-                sampleRate,
-                format,
-                channelMask,
-                frameCount,
-                flags,
-                NULL,
-                NULL,
-                0,
-                mSessionId);
-        }
-    } else { //flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD
-        if (mCallback != NULL) {
-            newcbd = new CallbackData(this);
-            t = new AudioTrack(
-                mStreamType,
-                sampleRate,
-                format,
-                channelMask,
-                frameCount,
-                flags,
-                CallbackWrapper,
-                newcbd,
-                0,  // notification frames
-                mSessionId);
-        } else {
-            t = new AudioTrack(
-                mStreamType,
-                sampleRate,
-                format,
-                channelMask,
-                frameCount,
-                flags,
-                NULL,
-                NULL,
-                0,
-                mSessionId);
-        }
-    } //flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD
-
-    if ((t == 0) || (t->initCheck() != NO_ERROR)) {
-        ALOGE("Unable to create audio track");
-        delete t;
-        delete newcbd;
-        return NO_INIT;
-    }
-    if (reuse && mRecycledTrack) {
-        // check the framecount to see if it can be reused
-        if (mRecycledTrack->frameCount() != t->frameCount()) {
-            // can't reuse the track. Delete the mRecycled track
-            // and use the new track created
-            ALOGV("local_open: can't reuse, framecount differs"
-                   " delete mRecycledTrack = %p", mRecycledTrack);
-            deleteRecycledTrack();
-        } else {
-            // reuse the track. Delete the new track created
-            ALOGV("local_open: chaining to next output");
-            close();
-            mTrack = mRecycledTrack;
-            mRecycledTrack = NULL;
-            if (mCallbackData != NULL) {
-                mCallbackData->setOutput(this);
-            }
-            ALOGV("local_open: chaining to next output mTrack=%p, track t=%p",
-                  mTrack, t);
-            delete t;
-            delete newcbd;
-            return OK;
-        }
-    }
-    ALOGV("track creation is sucessfull");
-    mCallbackData = newcbd;
-    ALOGV("local_open: setVolume");
-    t->setVolume(mLeftVolume, mRightVolume);
-
-    mSampleRateHz = sampleRate;
-    mFlags = flags;
-    mMsecsPerFrame = mPlaybackRatePermille / (float) sampleRate;
-    uint32_t pos;
-    if (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-        if (static_cast<AudioTrackOffload*>(t)->getPosition(&pos) == OK) {
-            mBytesWritten = uint64_t(pos) * t->frameSize();
-        }
-    } else {
-        if (t->getPosition(&pos) == OK) {
-            mBytesWritten = uint64_t(pos) * t->frameSize();
-        }
-    }
-    mTrack = t;
-    status_t res = t->setSampleRate(mPlaybackRatePermille * mSampleRateHz/1000);
-    if (res != NO_ERROR) goto Error_exit;
-
-    t->setAuxEffectSendLevel(mSendLevel);
-
-    res = t->attachAuxEffect(mAuxEffectId);
-    if( res != NO_ERROR ) goto Error_exit;
-
-    return OK;
-Error_exit:
-    ALOGV("local_open: Error happened remove tracks created here.");
-    delete t;
-    delete newcbd;
-    mTrack = NULL;
-    return res;
-#else
-    ALOGI("local_open called with out offload feature flag enabled");
-    return OK;
-#endif
-}
-
-status_t MediaPlayerService::AudioOutput::open(
-        uint32_t sampleRate, int channelCount, audio_channel_mask_t channelMask,
-        audio_format_t format, int bufferCount,
-        AudioCallback cb, void *cookie,
-        audio_output_flags_t flags)
-{
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    // if Offload is feature is enabled use the local_open function for both
-    // offload and PCM playback.
-    return local_open(sampleRate,channelCount,  channelMask, format,
-                      bufferCount, cb, cookie, flags);
-#endif // INTEL_MUSIC_OFFLOAD_FEATURE
-
-    mCallback = cb;
-    mCallbackCookie = cookie;
-
-    // Check argument "bufferCount" against the mininum buffer count
-    if (bufferCount < mMinBufferCount) {
-        ALOGD("bufferCount (%d) is too small and increased to %d",
-               bufferCount, mMinBufferCount);
-        bufferCount = mMinBufferCount;
-
-    }
-    ALOGV("open(%u, %d, 0x%x, %d, %d, %d)", sampleRate, channelCount,
-          channelMask, format, bufferCount, mSessionId);
-    uint32_t afSampleRate;
-    size_t afFrameCount;
-    uint32_t frameCount;
-
-    if (AudioSystem::getOutputFrameCount(&afFrameCount, mStreamType) !=
-        NO_ERROR) {
-        return NO_INIT;
-    }
-    if (AudioSystem::getOutputSamplingRate(&afSampleRate, mStreamType) !=
-        NO_ERROR) {
+    if (AudioSystem::getOutputSamplingRate(&afSampleRate, mStreamType) != NO_ERROR) {
         return NO_INIT;
     }
 
@@ -1804,8 +1417,7 @@ status_t MediaPlayerService::AudioOutput::open(
     if (channelMask == CHANNEL_MASK_USE_CHANNEL_ORDER) {
         channelMask = audio_channel_out_mask_from_count(channelCount);
         if (0 == channelMask) {
-            ALOGE("open() error, can\'t derive mask for %d audio channels",
-                  channelCount);
+            ALOGE("open() error, can\'t derive mask for %d audio channels", channelCount);
             return NO_INIT;
         }
     }
@@ -1815,51 +1427,51 @@ status_t MediaPlayerService::AudioOutput::open(
     if (mCallback != NULL) {
         newcbd = new CallbackData(this);
         t = new AudioTrack(
-            mStreamType,
-            sampleRate,
-            format,
-            channelMask,
-            frameCount,
-            flags,
-            CallbackWrapper,
-            newcbd,
-            0,  // notification frames
-            mSessionId);
+                mStreamType,
+                sampleRate,
+                format,
+                channelMask,
+                frameCount,
+                flags,
+                CallbackWrapper,
+                newcbd,
+                0,  // notification frames
+                mSessionId);
     } else {
         t = new AudioTrack(
-            mStreamType,
-            sampleRate,
-            format,
-            channelMask,
-            frameCount,
-            flags,
-            NULL,
-            NULL,
-            0,
-            mSessionId);
+                mStreamType,
+                sampleRate,
+                format,
+                channelMask,
+                frameCount,
+                flags,
+                NULL,
+                NULL,
+                0,
+                mSessionId);
     }
+
     if ((t == 0) || (t->initCheck() != NO_ERROR)) {
         ALOGE("Unable to create audio track");
         delete t;
         delete newcbd;
         return NO_INIT;
     }
+
+
     if (mRecycledTrack) {
-        // check if the existing track can be reused as-is,
-        // or if a new track needs to be created.
+        // check if the existing track can be reused as-is, or if a new track needs to be created.
 
         bool reuse = true;
         if ((mCallbackData == NULL && mCallback != NULL) ||
                 (mCallbackData != NULL && mCallback == NULL)) {
-            // recycled track uses callbacks but the caller wants to
-            // use writes, or vice versa
+            // recycled track uses callbacks but the caller wants to use writes, or vice versa
             ALOGV("can't chain callback and write");
             reuse = false;
         } else if ((mRecycledTrack->getSampleRate() != sampleRate) ||
                 (mRecycledTrack->channelCount() != channelCount) ||
                 (mRecycledTrack->frameCount() != t->frameCount())) {
-            ALOGV("samplerate, channelcount or framecount differ:"
-                  "%d/%d Hz, %d/%d ch, %d/%d frames",
+            ALOGV("samplerate, channelcount or framecount differ: %d/%d Hz, %d/%d ch, %d/%d frames",
                   mRecycledTrack->getSampleRate(), sampleRate,
                   mRecycledTrack->channelCount(), channelCount,
                   mRecycledTrack->frameCount(), t->frameCount());
@@ -1912,7 +1524,7 @@ status_t MediaPlayerService::AudioOutput::open(
         return res;
     }
     t->setAuxEffectSendLevel(mSendLevel);
-    return t->attachAuxEffect(mAuxEffectId);
+    return t->attachAuxEffect(mAuxEffectId);;
 }
 
 void MediaPlayerService::AudioOutput::start()
@@ -1984,7 +1596,7 @@ void MediaPlayerService::AudioOutput::pause()
 
 void MediaPlayerService::AudioOutput::close()
 {
-    ALOGV("close mTrack = %p", mTrack);
+    ALOGV("close");
     delete mTrack;
     mTrack = 0;
 }
@@ -1995,15 +1607,7 @@ void MediaPlayerService::AudioOutput::setVolume(float left, float right)
     mLeftVolume = left;
     mRightVolume = right;
     if (mTrack) {
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-        if (mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-            static_cast<AudioTrackOffload*>(mTrack)->setVolume(left, right);
-        } else {
-            mTrack->setVolume(left, right);
-        }
-#else
         mTrack->setVolume(left, right);
-#endif
     }
 }
 
@@ -2046,69 +1650,7 @@ status_t MediaPlayerService::AudioOutput::attachAuxEffect(int effectId)
 // static
 void MediaPlayerService::AudioOutput::CallbackWrapper(
         int event, void *cookie, void *info) {
-    ALOGV("callbackwrapper");
-#ifdef INTEL_MUSIC_OFFLOAD_FEATURE
-    CallbackData *data = (CallbackData*)cookie;
-    data->lock();
-    AudioOutput *me = data->getOutput();
-    AudioTrack::Buffer *buffer = (AudioTrack::Buffer *)info;
-
-    if (me == NULL) {
-        // no output set, likely because the track was scheduled to be reused
-        // by another player, but the format turned out to be incompatible.
-        data->unlock();
-        // check validity of buffer before using it.
-        if (buffer) {
-            buffer->size = 0;
-        }
-        return;
-    }
-
-    switch(event) {
-    case AudioTrackOffload::EVENT_TEAR_DOWN:
-    {
-        // For AudioTrack events of Tear down  just call
-        // registered call back function and pass the event
-        if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-            (*me->mCallback2)(me, NULL, 0, me->mCallbackCookie, CB_EVENT_TEAR_DOWN);
-        }
-    } break;
-    case AudioTrack::EVENT_MORE_DATA:
-    {
-        size_t actualSize = 0;
-        if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-            actualSize = (*me->mCallback2)(
-                me, buffer->raw, buffer->size, me->mCallbackCookie,
-                CB_EVENT_FILL_BUFFER);
-        } else {
-            actualSize = (*me->mCallback)(
-                me, buffer->raw, buffer->size, me->mCallbackCookie);
-
-            if (actualSize == 0 && buffer->size > 0 && me->mNextOutput == NULL) {
-                // We've reached EOS but the audio track is not stopped yet,
-                // keep playing silence.
-                memset(buffer->raw, 0, buffer->size);
-                actualSize = buffer->size;
-            }
-        }
-        buffer->size = actualSize;
-    } break;
-    case AudioTrackOffload::EVENT_STREAM_END:
-    {
-        ALOGV("STREAM_END received");
-        if (me->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-            (*me->mCallback2)(me, NULL, 0, me->mCallbackCookie, CB_EVENT_STREAM_END);
-        }
-    } break;
-
-    default:
-    {
-        LOGE("received unknown event type: %d inside CallbackWrapper !", event);
-        break;
-    }
-    }
-    data->unlock();
-#else
+    //ALOGV("callbackwrapper");
     if (event != AudioTrack::EVENT_MORE_DATA) {
         return;
     }
@@ -2121,7 +1663,7 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
         // no output set, likely because the track was scheduled to be reused
         // by another player, but the format turned out to be incompatible.
         data->unlock();
-        if (buffer != NULL) buffer->size = 0;
+        buffer->size = 0;
         return;
     }
 
@@ -2138,7 +1680,6 @@ void MediaPlayerService::AudioOutput::CallbackWrapper(
 
     buffer->size = actualSize;
     data->unlock();
-#endif
 }
 
 int MediaPlayerService::AudioOutput::getSessionId() const

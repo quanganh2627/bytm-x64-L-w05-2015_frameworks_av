@@ -58,7 +58,6 @@ public:
     typedef typename TCamTraits::TCamUser        TCamUser;
     typedef typename TCamTraits::TCamCallbacks   TCamCallbacks;
 
-    static status_t      setPriority(int cameraId, bool lowPriority);
     static sp<TCam>      connect(int cameraId,
                                  const String16& clientPackageName,
                                  int clientUid);

@@ -36,7 +36,6 @@ struct NuPlayer::HTTPLiveSource : public NuPlayer::Source {
 
     virtual void prepareAsync();
     virtual void start();
-    virtual void stop();
 
     virtual status_t feedMoreTSData();
 

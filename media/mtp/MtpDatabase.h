@@ -106,10 +106,6 @@ public:
     virtual void                    sessionStarted() = 0;
 
     virtual void                    sessionEnded() = 0;
-
-    virtual void                    transferStarted() = 0;
-
-    virtual void                    transferEnded() = 0;
 };
 
 }; // namespace android
