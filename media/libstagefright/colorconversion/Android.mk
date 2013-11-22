@@ -16,12 +16,12 @@ LOCAL_C_INCLUDES += \
         $(TARGET_OUT_HEADERS)/libva
 endif
 
-#ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
-#    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
-#ifeq ($(USE_MDS_LEGACY),true)
-#    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
-#endif
-#endif
+ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+ifeq ($(USE_MDS_LEGACY),true)
+    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
+endif
+endif
 
 LOCAL_MODULE:= libstagefright_color_conversion
 

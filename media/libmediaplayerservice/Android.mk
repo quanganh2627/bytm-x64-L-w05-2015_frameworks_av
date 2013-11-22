@@ -69,14 +69,13 @@ ifeq ($(TARGET_HAS_VPP), true)
         $(TARGET_OUT_HEADERS)/libva
 endif
 
-
-#ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
-#    LOCAL_SHARED_LIBRARIES += libmultidisplay
-#    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
-#ifeq ($(USE_MDS_LEGACY),true)
-#    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
-#endif
-#endif
+ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+    LOCAL_SHARED_LIBRARIES += libmultidisplay
+    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+ifeq ($(USE_MDS_LEGACY),true)
+    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
+endif
+endif
 
 ifeq ($(INTEL_WIDI), true)
 LOCAL_CFLAGS += -DINTEL_WIDI

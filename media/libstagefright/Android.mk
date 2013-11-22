@@ -235,13 +235,13 @@ LOCAL_SHARED_LIBRARIES += \
 
 LOCAL_CFLAGS += -Wno-multichar
 
-#ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
-#    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
-#ifeq ($(USE_MDS_LEGACY),true)
-#    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
-#endif
-#    LOCAL_SHARED_LIBRARIES += libmultidisplay
-#endif
+ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
+    LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY
+ifeq ($(USE_MDS_LEGACY),true)
+    LOCAL_CFLAGS += -DUSE_MDS_LEGACY
+endif
+    LOCAL_SHARED_LIBRARIES += libmultidisplay
+endif
 
 ifeq ($(AUDIO_DUMP_ENABLE),true)
   LOCAL_C_INCLUDES += $(TOP)/frameworks/av/media/libstagefright/include
