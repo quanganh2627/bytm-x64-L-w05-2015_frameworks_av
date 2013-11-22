@@ -115,6 +115,11 @@ void NuPlayer::RTSPSource::stop() {
     if (mLooper == NULL) {
         return;
     }
+    if (mState == DISCONNECTED) {
+        ALOGI("already disconnected.");
+        return;
+    }
+
     sp<AMessage> msg = new AMessage(kWhatDisconnect, mReflector->id());
 
     sp<AMessage> dummy;
@@ -137,7 +142,11 @@ void NuPlayer::RTSPSource::pause() {
 }
 
 void NuPlayer::RTSPSource::resume() {
-    mHandler->resume();
+    if (mState == DISCONNECTED) {
+        return;
+    } else if (mHandler !=  NULL) {
+        mHandler->resume();
+    }
 }
 
 status_t NuPlayer::RTSPSource::feedMoreTSData() {
@@ -280,7 +289,7 @@ void NuPlayer::RTSPSource::setEOSTimeout(bool audio, int64_t timeout) {
 }
 
 status_t NuPlayer::RTSPSource::getDuration(int64_t *durationUs) {
-    *durationUs = 0ll;
+    *durationUs = -1ll;
 
     int64_t audioDurationUs;
     if (mAudioTrack != NULL
@@ -358,11 +367,10 @@ void NuPlayer::RTSPSource::onMessageReceived(const sp<AMessage> &msg) {
             uint32_t flags = 0;
 
             if (mHandler->isSeekable()) {
-                flags = FLAG_CAN_PAUSE | FLAG_CAN_SEEK;
-
-                // Seeking 10secs forward or backward is a very expensive
-                // operation for rtsp, so let's not enable that.
-                // The user can always use the seek bar.
+                flags = FLAG_CAN_PAUSE
+                        | FLAG_CAN_SEEK
+                        | FLAG_CAN_SEEK_BACKWARD
+                        | FLAG_CAN_SEEK_FORWARD;
             }
 
             notifyFlagsChanged(flags);
@@ -463,6 +471,13 @@ void NuPlayer::RTSPSource::onMessageReceived(const sp<AMessage> &msg) {
 
         case MyHandler::kWhatEOS:
         {
+            // If it is in conecting process, when receive bye rtcp,
+            // since mTracks has not been established, break the
+            // operation to mTracks.
+            if (mState == CONNECTING ) {
+                break;
+            }
+
             int32_t finalResult;
             CHECK(msg->findInt32("finalResult", &finalResult));
             CHECK_NE(finalResult, (status_t)OK);
@@ -634,12 +649,18 @@ void NuPlayer::RTSPSource::onSDPLoaded(const sp<AMessage> &msg) {
 }
 
 void NuPlayer::RTSPSource::onDisconnected(const sp<AMessage> &msg) {
+    if (mState == DISCONNECTED) {
+        return;
+    }
+
     status_t err;
     CHECK(msg->findInt32("result", &err));
     CHECK_NE(err, (status_t)OK);
 
-    mLooper->unregisterHandler(mHandler->id());
-    mHandler.clear();
+    if (mHandler != NULL) {
+        mLooper->unregisterHandler(mHandler->id());
+        mHandler.clear();
+    }
 
     if (mState == CONNECTING) {
         // We're still in the preparation phase, signal that it

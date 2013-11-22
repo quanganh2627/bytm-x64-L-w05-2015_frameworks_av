@@ -19,6 +19,10 @@
 #define NUPLAYER_RENDERER_H_
 
 #include "NuPlayer.h"
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#include <VPPBuffer.h>
+#endif
 
 namespace android {
 
@@ -48,11 +52,17 @@ struct NuPlayer::Renderer : public AHandler {
     void pause();
     void resume();
 
+#ifdef TARGET_HAS_VPP
+    sp<NuPlayerVPPProcessor> createVppProcessor(VPPVideoInfo *info, const sp<NativeWindowWrapper> &nativeWindow);
+    void releaseVppProcessor();
+#endif
+
     enum {
         kWhatEOS                 = 'eos ',
         kWhatFlushComplete       = 'fluC',
         kWhatPosition            = 'posi',
         kWhatVideoRenderingStart = 'vdrd',
+        kWhatMediaRenderingStart = 'mdrd',
     };
 
 protected:
@@ -70,6 +80,9 @@ private:
         kWhatAudioSinkChanged   = 'auSC',
         kWhatPause              = 'paus',
         kWhatResume             = 'resm',
+#ifdef TARGET_HAS_VPP
+        kWhatVPPNotify          = 'vppN',
+#endif
     };
 
     struct QueueEntry {
@@ -106,15 +119,28 @@ private:
 
     bool mPaused;
     bool mVideoRenderingStarted;
+    int32_t mVideoRenderingStartGeneration;
+    int32_t mAudioRenderingStartGeneration;
 
     int64_t mLastPositionUpdateUs;
     int64_t mVideoLateByUs;
 
+#ifdef TARGET_HAS_VPP
+    uint32_t mDecodeCount;
+    uint32_t mVPPProcCount;
+    uint32_t mVPPRenderCount;
+    sp<NuPlayerVPPProcessor> mVPPProcessor;
+    void onUpdateVideoQueue(const sp<AMessage> &msg);
+    void onUpdateVPPInput(const sp<AMessage> &msg);
+#endif
     bool onDrainAudioQueue();
     void postDrainAudioQueue(int64_t delayUs = 0);
 
     void onDrainVideoQueue();
     void postDrainVideoQueue();
+
+    void prepareForMediaRenderingStart();
+    void notifyIfMediaRenderingStarted();
 
     void onQueueBuffer(const sp<AMessage> &msg);
     void onQueueEOS(const sp<AMessage> &msg);

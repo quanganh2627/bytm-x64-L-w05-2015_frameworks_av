@@ -32,6 +32,7 @@
 
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include "HTTPBase.h"
 
 namespace android {
 
@@ -69,6 +70,7 @@ struct ARTPConnection::StreamInfo {
 
 ARTPConnection::ARTPConnection(uint32_t flags)
     : mFlags(flags),
+      mUIDValid(false),
       mPollEventPending(false),
       mLastReceiverReportTimeUs(-1) {
 }
@@ -92,7 +94,8 @@ void ARTPConnection::addStream(
     msg->post();
 }
 
-void ARTPConnection::removeStream(int rtpSocket, int rtcpSocket) {
+void ARTPConnection::removeStream(int rtpSocket, int rtcpSocket, bool uidvalid) {
+    mUIDValid = uidvalid;
     sp<AMessage> msg = new AMessage(kWhatRemoveStream, id());
     msg->setInt32("rtp-socket", rtpSocket);
     msg->setInt32("rtcp-socket", rtcpSocket);
@@ -117,7 +120,8 @@ void ARTPConnection::MakePortPair(
 
     bumpSocketBufferSize(*rtcpSocket);
 
-    unsigned start = (rand() * 1000)/ RAND_MAX + 15550;
+    /* rand() * 1000 may overflow int type, use long long */
+    unsigned start = (unsigned)((rand()* 1000ll)/RAND_MAX) + 15550;
     start &= ~1;
 
     for (unsigned port = start; port < 65536; port += 2) {
@@ -224,6 +228,16 @@ void ARTPConnection::onRemoveStream(const sp<AMessage> &msg) {
         return;
     }
 
+    if (mUIDValid) {
+        HTTPBase::UnRegisterSocketUserTag(it->mRTPSocket);
+        HTTPBase::UnRegisterSocketUserTag(it->mRTCPSocket);
+    }
+    // close the socket here
+    close(it->mRTPSocket);
+    close(it->mRTCPSocket);
+    it->mRTPSocket = -1;
+    it->mRTCPSocket = -1;
+
     mStreams.erase(it);
 }
 
@@ -307,7 +321,28 @@ void ARTPConnection::onPollStreams() {
     int64_t nowUs = ALooper::GetNowUs();
     if (mLastReceiverReportTimeUs <= 0
             || mLastReceiverReportTimeUs + 5000000ll <= nowUs) {
-        sp<ABuffer> buffer = new ABuffer(kMaxUDPSize);
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = kSelectTimeoutUs;
+        fd_set ws;
+        FD_ZERO(&ws);
+        int maxSocket = -1;
+        for (List<StreamInfo>::iterator it = mStreams.begin(); it != mStreams.end(); ++it) {
+            if ((*it).mIsInjected) {
+                continue;
+            }
+            FD_SET(it->mRTCPSocket, &ws);
+            if (it->mRTCPSocket > maxSocket) {
+                maxSocket = it->mRTCPSocket;
+            }
+        }
+
+        if (maxSocket == -1) {
+            return;
+        }
+
+        int res = select(maxSocket + 1, NULL, &ws, NULL, &tv);
+
         List<StreamInfo>::iterator it = mStreams.begin();
         while (it != mStreams.end()) {
             StreamInfo *s = &*it;
@@ -324,40 +359,43 @@ void ARTPConnection::onPollStreams() {
                 continue;
             }
 
-            buffer->setRange(0, 0);
+            if (FD_ISSET(s->mRTCPSocket, &ws)) {
+                sp<ABuffer> buffer = new ABuffer(kMaxUDPSize);
+                buffer->setRange(0, 0);
 
-            for (size_t i = 0; i < s->mSources.size(); ++i) {
-                sp<ARTPSource> source = s->mSources.valueAt(i);
+                for (size_t i = 0; i < s->mSources.size(); ++i) {
+                    sp<ARTPSource> source = s->mSources.valueAt(i);
 
-                source->addReceiverReport(buffer);
+                    source->addReceiverReport(buffer);
 
-                if (mFlags & kRegularlyRequestFIR) {
-                    source->addFIR(buffer);
-                }
-            }
-
-            if (buffer->size() > 0) {
-                ALOGV("Sending RR...");
-
-                ssize_t n;
-                do {
-                    n = sendto(
-                        s->mRTCPSocket, buffer->data(), buffer->size(), 0,
-                        (const struct sockaddr *)&s->mRemoteRTCPAddr,
-                        sizeof(s->mRemoteRTCPAddr));
-                } while (n < 0 && errno == EINTR);
-
-                if (n <= 0) {
-                    ALOGW("failed to send RTCP receiver report (%s).",
-                         n == 0 ? "connection gone" : strerror(errno));
-
-                    it = mStreams.erase(it);
-                    continue;
+                    if (mFlags & kRegularlyRequestFIR) {
+                        source->addFIR(buffer);
+                    }
                 }
 
-                CHECK_EQ(n, (ssize_t)buffer->size());
+                if (buffer->size() > 0) {
+                    ALOGV("Sending RR...");
 
-                mLastReceiverReportTimeUs = nowUs;
+                    ssize_t n;
+                    do {
+                        n = sendto(
+                            s->mRTCPSocket, buffer->data(), buffer->size(), 0,
+                            (const struct sockaddr *)&s->mRemoteRTCPAddr,
+                            sizeof(s->mRemoteRTCPAddr));
+                       } while (n < 0 && errno == EINTR);
+
+                    if (n <= 0) {
+                        ALOGW("failed to send RTCP receiver report (%s).",
+                            n == 0 ? "connection gone" : strerror(errno));
+
+                        it = mStreams.erase(it);
+                        continue;
+                    }
+
+                    CHECK_EQ(n, (ssize_t)buffer->size());
+
+                    mLastReceiverReportTimeUs = nowUs;
+                }
             }
 
             ++it;

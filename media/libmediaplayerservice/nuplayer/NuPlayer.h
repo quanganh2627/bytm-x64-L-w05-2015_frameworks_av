@@ -21,6 +21,19 @@
 #include <media/MediaPlayerInterface.h>
 #include <media/stagefright/foundation/AHandler.h>
 #include <media/stagefright/NativeWindowWrapper.h>
+#ifdef TARGET_HAS_VPP
+#include <NuPlayerVPPProcessor.h>
+#endif
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
+#include <display/MultiDisplayClient.h>
+#else
+#include <display/MultiDisplayService.h>
+#include <display/IMultiDisplayVideoControl.h>
+using namespace android::intel;
+#endif
+#endif
 
 namespace android {
 
@@ -60,6 +73,8 @@ struct NuPlayer : public AHandler {
     void seekToAsync(int64_t seekTimeUs);
 
     status_t setVideoScalingMode(int32_t mode);
+    status_t getTrackInfo(Parcel* reply) const;
+    status_t selectTrack(size_t trackIndex, bool select);
 
 protected:
     virtual ~NuPlayer();
@@ -80,6 +95,8 @@ private:
     struct Action;
     struct SeekAction;
     struct SetSurfaceAction;
+    struct ShutdownDecoderAction;
+    struct PostMessageAction;
     struct SimpleAction;
 
     enum {
@@ -99,6 +116,8 @@ private:
         kWhatResume                     = 'rsme',
         kWhatPollDuration               = 'polD',
         kWhatSourceNotify               = 'srcN',
+        kWhatGetTrackInfo               = 'gTrI',
+        kWhatSelectTrack                = 'selT',
     };
 
     wp<NuPlayerDriver> mDriver;
@@ -115,8 +134,18 @@ private:
 
     List<sp<Action> > mDeferredActions;
 
+#ifdef TARGET_HAS_VPP
+    sp<NuPlayerVPPProcessor> mVPPProcessor;
+    bool mIsVppInit;
+    sp<NuPlayerVPPProcessor> createVppProcessor();
+#endif
     bool mAudioEOS;
     bool mVideoEOS;
+
+    bool mAudioEosPending;
+    bool mVideoEosPending;
+    int32_t mAudioEosErr;
+    int32_t mVideoEosErr;
 
     bool mScanSourcesPending;
     int32_t mScanSourcesGeneration;
@@ -145,6 +174,16 @@ private:
 
     int64_t mVideoLateByUs;
     int64_t mNumFramesTotal, mNumFramesDropped;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
+    MultiDisplayClient* mMDClient;
+#else
+    sp<IMultiDisplayVideoControl> mMDClient;
+#endif
+    int mVideoSessionId;
+    void setMDSVideoInfo_l();
+    void setMDSVideoState_l(int state);
+#endif
 
     int32_t mVideoScalingMode;
 
@@ -155,7 +194,7 @@ private:
     status_t feedDecoderInputData(bool audio, const sp<AMessage> &msg);
     void renderBuffer(bool audio, const sp<AMessage> &msg);
 
-    void notifyListener(int msg, int ext1, int ext2);
+    void notifyListener(int msg, int ext1, int ext2, const Parcel *in = NULL);
 
     void finishFlushIfPossible();
 
@@ -172,12 +211,15 @@ private:
 
     void performSeek(int64_t seekTimeUs);
     void performDecoderFlush();
-    void performDecoderShutdown();
+    void performDecoderShutdown(bool audio, bool video);
     void performReset();
     void performScanSources();
     void performSetSurface(const sp<NativeWindowWrapper> &wrapper);
 
     void onSourceNotify(const sp<AMessage> &msg);
+
+    void queueDecoderShutdown(
+            bool audio, bool video, const sp<AMessage> &reply);
 
     DISALLOW_EVIL_CONSTRUCTORS(NuPlayer);
 };

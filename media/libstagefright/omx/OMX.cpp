@@ -331,6 +331,13 @@ status_t OMX::storeMetaDataInBuffers(
     return findInstance(node)->storeMetaDataInBuffers(port_index, enable);
 }
 
+status_t OMX::prepareForAdaptivePlayback(
+        node_id node, OMX_U32 portIndex, OMX_BOOL enable,
+        OMX_U32 maxFrameWidth, OMX_U32 maxFrameHeight) {
+    return findInstance(node)->prepareForAdaptivePlayback(
+            portIndex, enable, maxFrameWidth, maxFrameHeight);
+}
+
 status_t OMX::useBuffer(
         node_id node, OMX_U32 port_index, const sp<IMemory> &params,
         buffer_id *buffer) {
@@ -342,6 +349,13 @@ status_t OMX::useGraphicBuffer(
         node_id node, OMX_U32 port_index,
         const sp<GraphicBuffer> &graphicBuffer, buffer_id *buffer) {
     return findInstance(node)->useGraphicBuffer(
+            port_index, graphicBuffer, buffer);
+}
+
+status_t OMX::updateGraphicBufferInMeta(
+        node_id node, OMX_U32 port_index,
+        const sp<GraphicBuffer> &graphicBuffer, buffer_id buffer) {
+    return findInstance(node)->updateGraphicBufferInMeta(
             port_index, graphicBuffer, buffer);
 }
 
@@ -396,6 +410,15 @@ status_t OMX::getExtensionIndex(
             parameter_name, index);
 }
 
+status_t OMX::setInternalOption(
+        node_id node,
+        OMX_U32 port_index,
+        InternalOptionType type,
+        const void *data,
+        size_t size) {
+    return findInstance(node)->setInternalOption(port_index, type, data, size);
+}
+
 OMX_ERRORTYPE OMX::OnEvent(
         node_id node,
         OMX_IN OMX_EVENTTYPE eEvent,
@@ -414,7 +437,12 @@ OMX_ERRORTYPE OMX::OnEvent(
     msg.u.event_data.data1 = nData1;
     msg.u.event_data.data2 = nData2;
 
-    findDispatcher(node)->post(msg);
+    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
+    if (cbd == NULL) {
+        LOGE("CallbackDispatcher for this node is not found");
+        return OMX_ErrorUndefined;
+    }
+    cbd->post(msg);
 
     return OMX_ErrorNone;
 }
@@ -428,7 +456,12 @@ OMX_ERRORTYPE OMX::OnEmptyBufferDone(
     msg.node = node;
     msg.u.buffer_data.buffer = pBuffer;
 
-    findDispatcher(node)->post(msg);
+    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
+    if (cbd == NULL) {
+        LOGE("CallbackDispatcher for this node is not found");
+        return OMX_ErrorUndefined;
+    }
+    cbd->post(msg);
 
     return OMX_ErrorNone;
 }
@@ -448,7 +481,12 @@ OMX_ERRORTYPE OMX::OnFillBufferDone(
     msg.u.extended_buffer_data.platform_private = pBuffer->pPlatformPrivate;
     msg.u.extended_buffer_data.data_ptr = pBuffer->pBuffer;
 
-    findDispatcher(node)->post(msg);
+    sp<OMX::CallbackDispatcher> cbd = findDispatcher(node);
+    if (cbd == NULL) {
+        LOGE("CallbackDispatcher for this node is not found");
+        return OMX_ErrorUndefined;
+    }
+    cbd->post(msg);
 
     return OMX_ErrorNone;
 }

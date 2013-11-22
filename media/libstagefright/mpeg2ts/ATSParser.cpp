@@ -12,6 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * This file was modified by Dolby Laboratories, Inc. The portions of the
+ * code that are surrounded by "DOLBY..." are copyrighted and
+ * licensed separately, as follows:
+ *
+ *  (C) 2011-2012 Dolby Laboratories, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 //#define LOG_NDEBUG 0
@@ -396,8 +415,8 @@ status_t ATSParser::Program::parseProgramMap(ABitReader *br) {
         }
 
         if (!success) {
-            ALOGI("Stream PIDs changed and we cannot recover.");
-            return ERROR_MALFORMED;
+            mStreams.clear();
+            ALOGI("Stream PIDs changed and we try to recover.");
         }
     }
 
@@ -506,6 +525,19 @@ ATSParser::Stream::Stream(
                     ElementaryStreamQueue::PCM_AUDIO);
             break;
 
+#if defined(DOLBY_UDC) && defined(DOLBY_UDC_STREAMING_HLS)
+        case STREAMTYPE_DDP_AC3_AUDIO:
+            // TODO FIXME verify!
+            mQueue = new ElementaryStreamQueue(
+                    ElementaryStreamQueue::DDP_AC3_AUDIO);
+            break;
+
+        case STREAMTYPE_DDP_EC3_AUDIO:
+            // TODO FIXME verify!
+            mQueue = new ElementaryStreamQueue(
+                    ElementaryStreamQueue::DDP_EC3_AUDIO);
+            break;
+#endif // DOLBY_UDC && DOLBY_UDC_STREAMING_HLS
         default:
             break;
     }
@@ -532,10 +564,11 @@ status_t ATSParser::Stream::parse(
 
     if (mExpectedContinuityCounter >= 0
             && (unsigned)mExpectedContinuityCounter != continuity_counter) {
-        ALOGI("discontinuity on stream pid 0x%04x", mElementaryPID);
-
+        ALOGI("discontinuity on stream pid 0x%04x,expected = %d, got = %d",
+            mElementaryPID, mExpectedContinuityCounter, continuity_counter);
         mPayloadStarted = false;
-        mBuffer->setRange(0, 0);
+        // check if there's a complete PES in current payload buffer
+        flush();
         mExpectedContinuityCounter = -1;
 
 #if 0
@@ -547,8 +580,6 @@ status_t ATSParser::Stream::parse(
             mQueue->clear(true /* clearFormat */);
         }
 #endif
-
-        return OK;
     }
 
     mExpectedContinuityCounter = (continuity_counter + 1) & 0x0f;
@@ -614,6 +645,10 @@ bool ATSParser::Stream::isAudio() const {
         case STREAMTYPE_MPEG2_AUDIO:
         case STREAMTYPE_MPEG2_AUDIO_ADTS:
         case STREAMTYPE_PCM_AUDIO:
+#if defined(DOLBY_UDC) && defined(DOLBY_UDC_STREAMING_HLS)
+        case STREAMTYPE_DDP_AC3_AUDIO:
+        case STREAMTYPE_DDP_EC3_AUDIO:
+#endif // DOLBY_UDC && DOLBY_UDC_STREAMING_HLS
             return true;
 
         default:

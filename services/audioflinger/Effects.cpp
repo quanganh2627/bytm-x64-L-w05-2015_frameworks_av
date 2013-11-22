@@ -13,12 +13,32 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 
 #define LOG_TAG "AudioFlinger"
 //#define LOG_NDEBUG 0
 
+#include "Configuration.h"
 #include <utils/Log.h>
 #include <audio_effects/effect_visualizer.h>
 #include <audio_utils/primitives.h>
@@ -27,6 +47,12 @@
 
 #include "AudioFlinger.h"
 #include "ServiceUtilities.h"
+
+#if defined(DOLBY_DAP_OPENSLES)
+#include "effect_ds.h"
+#elif defined(DOLBY_DAP_DSP)
+#include "DsNative.h"
+#endif // DOLBY_END
 
 // ----------------------------------------------------------------------------
 
@@ -65,7 +91,10 @@ AudioFlinger::EffectModule::EffectModule(ThreadBase *thread,
       mStatus(NO_INIT), mState(IDLE),
       // mMaxDisableWaitCnt is set by configure() and not used before then
       // mDisableWaitCnt is set by process() and updateState() and not used before then
-      mSuspended(false)
+      mSuspended(false), mStopped(false)
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
+      , mDsLeftVolume(UINT_MAX), mDsRightVolume(UINT_MAX)
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
 {
     ALOGV("Constructor %p", this);
     int lStatus;
@@ -92,18 +121,12 @@ Error:
 
 AudioFlinger::EffectModule::~EffectModule()
 {
+    Mutex::Autolock _l(mLock);
+
     ALOGV("Destructor %p", this);
     if (mEffectInterface != NULL) {
-        if ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC ||
-                (mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_POST_PROC) {
-            sp<ThreadBase> thread = mThread.promote();
-            if (thread != 0) {
-                audio_stream_t *stream = thread->stream();
-                if (stream != NULL) {
-                    stream->remove_audio_effect(stream, mEffectInterface);
-                }
-            }
-        }
+        //stop effect if it has not already stopped
+        stop_effect_l();
         // release effect engine
         EffectRelease(mEffectInterface);
     }
@@ -467,6 +490,7 @@ status_t AudioFlinger::EffectModule::start_l()
             audio_stream_t *stream = thread->stream();
             if (stream != NULL) {
                 stream->add_audio_effect(stream, mEffectInterface);
+                mStopped = false;
             }
         }
     }
@@ -487,7 +511,7 @@ status_t AudioFlinger::EffectModule::stop_l()
     if (mStatus != NO_ERROR) {
         return mStatus;
     }
-    status_t cmdStatus;
+    status_t cmdStatus = 0;
     uint32_t size = sizeof(status_t);
     status_t status = (*mEffectInterface)->command(mEffectInterface,
                                                    EFFECT_CMD_DISABLE,
@@ -495,10 +519,22 @@ status_t AudioFlinger::EffectModule::stop_l()
                                                    NULL,
                                                    &size,
                                                    &cmdStatus);
-    if (status == 0) {
+    if (status == NO_ERROR) {
         status = cmdStatus;
     }
-    if (status == 0 &&
+    if (status == 0) {
+        stop_effect_l();
+    }
+    return status;
+}
+
+status_t AudioFlinger::EffectModule::stop_effect_l()
+{
+    if (mEffectInterface == NULL) {
+        return NO_INIT;
+    }
+
+    if (mStopped == false &&
             ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC ||
              (mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_POST_PROC)) {
         sp<ThreadBase> thread = mThread.promote();
@@ -506,10 +542,11 @@ status_t AudioFlinger::EffectModule::stop_l()
             audio_stream_t *stream = thread->stream();
             if (stream != NULL) {
                 stream->remove_audio_effect(stream, mEffectInterface);
+                mStopped = true;
             }
         }
     }
-    return status;
+    return 0;
 }
 
 status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
@@ -669,6 +706,32 @@ status_t AudioFlinger::EffectModule::setVolume(uint32_t *left, uint32_t *right, 
     return status;
 }
 
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
+status_t AudioFlinger::EffectModule::setDsPregain(uint32_t *left, uint32_t *right)
+{
+    Mutex::Autolock _l(mLock);
+    status_t status = NO_ERROR;
+    uint32_t volume[2];
+    uint32_t size = sizeof(volume);
+    volume[0] = *left;
+    volume[1] = *right;
+
+    if (mDsLeftVolume != volume[0] || mDsRightVolume != volume[1]) {
+        status = (*mEffectInterface)->command(mEffectInterface,
+                                              EFFECT_CMD_DOLBY_SET_PREGAIN,
+                                              size,
+                                              volume,
+                                              &size,
+                                              NULL);
+        if (status == NO_ERROR && size == sizeof(volume)) {
+            mDsLeftVolume  = volume[0];
+            mDsRightVolume = volume[1];
+        }
+    }
+
+    return status;
+}
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
 status_t AudioFlinger::EffectModule::setDevice(audio_devices_t device)
 {
     if (device == AUDIO_DEVICE_NONE) {
@@ -743,6 +806,33 @@ void AudioFlinger::EffectModule::setSuspended(bool suspended)
     mSuspended = suspended;
 }
 
+#ifdef DOLBY_DAP_BYPASS_SOUND_TYPES
+status_t AudioFlinger::EffectModule::setBypass(bool bypass, bool crossFade)
+{
+    Mutex::Autolock _l(mLock);
+    status_t  status = NO_ERROR;
+    uint32_t  size   = sizeof(status_t);
+    uint32_t  bypassParams[2];
+
+    bypassParams[0] = mBypassed = bypass;
+    bypassParams[1] = crossFade;
+
+    status = (*mEffectInterface)->command(mEffectInterface,
+                                          EFFECT_CMD_DOLBY_DAP_SET_BYPASS,
+                                          sizeof(bypassParams),
+                                          bypassParams,
+                                          &size,
+                                          NULL);
+
+    return status;
+}
+
+bool AudioFlinger::EffectModule::bypassed() const
+{
+    Mutex::Autolock _l(mLock);
+    return mBypassed;
+}
+#endif //DOLBY_DAP_BYPASS_SOUND_TYPES
 bool AudioFlinger::EffectModule::suspended() const
 {
     Mutex::Autolock _l(mLock);
@@ -763,6 +853,46 @@ bool AudioFlinger::EffectModule::purgeHandles()
         }
     }
     return enabled;
+}
+
+status_t AudioFlinger::EffectModule::setOffloaded(bool offloaded, audio_io_handle_t io)
+{
+    Mutex::Autolock _l(mLock);
+    if (mStatus != NO_ERROR) {
+        return mStatus;
+    }
+    status_t status = NO_ERROR;
+    if ((mDescriptor.flags & EFFECT_FLAG_OFFLOAD_SUPPORTED) != 0) {
+        status_t cmdStatus;
+        uint32_t size = sizeof(status_t);
+        effect_offload_param_t cmd;
+
+        cmd.isOffload = offloaded;
+        cmd.ioHandle = io;
+        status = (*mEffectInterface)->command(mEffectInterface,
+                                              EFFECT_CMD_OFFLOAD,
+                                              sizeof(effect_offload_param_t),
+                                              &cmd,
+                                              &size,
+                                              &cmdStatus);
+        if (status == NO_ERROR) {
+            status = cmdStatus;
+        }
+        mOffloaded = (status == NO_ERROR) ? offloaded : false;
+    } else {
+        if (offloaded) {
+            status = INVALID_OPERATION;
+        }
+        mOffloaded = false;
+    }
+    ALOGV("setOffloaded() offloaded %d io %d status %d", offloaded, io, status);
+    return status;
+}
+
+bool AudioFlinger::EffectModule::isOffloaded() const
+{
+    Mutex::Autolock _l(mLock);
+    return mOffloaded;
 }
 
 void AudioFlinger::EffectModule::dump(int fd, const Vector<String16>& args)
@@ -863,7 +993,8 @@ AudioFlinger::EffectHandle::EffectHandle(const sp<EffectModule>& effect,
                                         int32_t priority)
     : BnEffect(),
     mEffect(effect), mEffectClient(effectClient), mClient(client), mCblk(NULL),
-    mPriority(priority), mHasControl(false), mEnabled(false), mDestroyed(false)
+    mBuffer(NULL), mPriority(priority), mHasControl(false), mEnabled(false),
+    mDestroyed(false)
 {
     ALOGV("constructor %p", this);
 
@@ -932,6 +1063,23 @@ status_t AudioFlinger::EffectHandle::enable()
             thread->checkSuspendOnEffectEnabled(mEffect, false, mEffect->sessionId());
         }
         mEnabled = false;
+    } else {
+        if (thread != 0) {
+            if (thread->type() == ThreadBase::OFFLOAD) {
+                PlaybackThread *t = (PlaybackThread *)thread.get();
+                Mutex::Autolock _l(t->mLock);
+                t->broadcast_l();
+            }
+            if (!mEffect->isOffloadable()) {
+                if (thread->type() == ThreadBase::OFFLOAD) {
+                    PlaybackThread *t = (PlaybackThread *)thread.get();
+                    t->invalidateTracks(AUDIO_STREAM_MUSIC);
+                }
+                if (mEffect->sessionId() == AUDIO_SESSION_OUTPUT_MIX) {
+                    thread->mAudioFlinger->onNonOffloadableGlobalEffectEnable();
+                }
+            }
+        }
     }
     return status;
 }
@@ -960,6 +1108,11 @@ status_t AudioFlinger::EffectHandle::disable()
     sp<ThreadBase> thread = mEffect->thread().promote();
     if (thread != 0) {
         thread->checkSuspendOnEffectEnabled(mEffect, false, mEffect->sessionId());
+        if (thread->type() == ThreadBase::OFFLOAD) {
+            PlaybackThread *t = (PlaybackThread *)thread.get();
+            Mutex::Autolock _l(t->mLock);
+            t->broadcast_l();
+        }
     }
 
     return status;
@@ -1217,9 +1370,7 @@ void AudioFlinger::EffectChain::clearInputBuffer()
 // Must be called with EffectChain::mLock locked
 void AudioFlinger::EffectChain::clearInputBuffer_l(sp<ThreadBase> thread)
 {
-    size_t numSamples = thread->frameCount() * thread->channelCount();
-    memset(mInBuffer, 0, numSamples * sizeof(int16_t));
-
+    memset(mInBuffer, 0, thread->frameCount() * thread->frameSize());
 }
 
 // Must be called with EffectChain::mLock locked
@@ -1232,9 +1383,10 @@ void AudioFlinger::EffectChain::process_l()
     }
     bool isGlobalSession = (mSessionId == AUDIO_SESSION_OUTPUT_MIX) ||
             (mSessionId == AUDIO_SESSION_OUTPUT_STAGE);
-    // always process effects unless no more tracks are on the session and the effect tail
-    // has been rendered
-    bool doProcess = true;
+    // never process effects when:
+    // - on an OFFLOAD thread
+    // - no more tracks are on the session and the effect tail has been rendered
+    bool doProcess = (thread->type() != ThreadBase::OFFLOAD);
     if (!isGlobalSession) {
         bool tracksOnSession = (trackCnt() != 0);
 
@@ -1554,6 +1706,10 @@ void AudioFlinger::EffectChain::setEffectSuspended_l(
             desc->mType = *type;
             mSuspendedEffects.add(type->timeLow, desc);
             ALOGV("setEffectSuspended_l() add entry for %08x", type->timeLow);
+#ifdef DOLBY_DAP_OPENSLES
+            if (memcmp(&desc->mType, EFFECT_SL_IID_DS, sizeof(effect_uuid_t)) == 0)
+                AudioFlinger::sendBroadcastMessage(String16("DS_EFFECT_SUSPEND_ACTION"), 1);
+#endif // DOLBY_END
         }
         if (desc->mRefCount++ == 0) {
             sp<EffectModule> effect = getEffectIfEnabled(type);
@@ -1587,6 +1743,10 @@ void AudioFlinger::EffectChain::setEffectSuspended_l(
                 }
                 desc->mEffect.clear();
             }
+#ifdef DOLBY_DAP_OPENSLES
+            if (memcmp(&desc->mType, EFFECT_SL_IID_DS, sizeof(effect_uuid_t)) == 0)
+                AudioFlinger::sendBroadcastMessage(String16("DS_EFFECT_SUSPEND_ACTION"), 0);
+#endif // DOLBY_END
             mSuspendedEffects.removeItemsAt(index);
         }
     }
@@ -1718,6 +1878,18 @@ void AudioFlinger::EffectChain::checkSuspendOnEffectEnabled(const sp<EffectModul
         desc->mEffect.clear();
         effect->setSuspended(false);
     }
+}
+
+bool AudioFlinger::EffectChain::isNonOffloadableEnabled()
+{
+    Mutex::Autolock _l(mLock);
+    size_t size = mEffects.size();
+    for (size_t i = 0; i < size; i++) {
+        if (mEffects[i]->isEnabled() && !mEffects[i]->isOffloadable()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }; // namespace android

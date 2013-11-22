@@ -13,6 +13,25 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
+**
+** This file was modified by Dolby Laboratories, Inc. The portions of the
+** code that are surrounded by "DOLBY..." are copyrighted and
+** licensed separately, as follows:
+**
+**  (C) 2011-2013 Dolby Laboratories, Inc.
+**
+** Licensed under the Apache License, Version 2.0 (the "License");
+** you may not use this file except in compliance with the License.
+** You may obtain a copy of the License at
+**
+**    http://www.apache.org/licenses/LICENSE-2.0
+**
+** Unless required by applicable law or agreed to in writing, software
+** distributed under the License is distributed on an "AS IS" BASIS,
+** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+** See the License for the specific language governing permissions and
+** limitations under the License.
+**
 */
 
 #ifndef ANDROID_AUDIO_FLINGER_H
@@ -23,6 +42,8 @@
 #include <limits.h>
 
 #include <common_time/cc_helper.h>
+
+#include <cutils/compiler.h>
 
 #include <media/IAudioFlinger.h>
 #include <media/IAudioFlingerClient.h>
@@ -54,6 +75,7 @@
 #include <powermanager/IPowerManager.h>
 
 #include <media/nbaio/NBLog.h>
+#include <private/media/AudioTrackShared.h>
 
 namespace android {
 
@@ -89,7 +111,7 @@ class AudioFlinger :
 {
     friend class BinderService<AudioFlinger>;   // for AudioFlinger()
 public:
-    static const char* getServiceName() { return "media.audio_flinger"; }
+    static const char* getServiceName() ANDROID_API { return "media.audio_flinger"; }
 
     virtual     status_t    dump(int fd, const Vector<String16>& args);
 
@@ -105,6 +127,7 @@ public:
                                 audio_io_handle_t output,
                                 pid_t tid,
                                 int *sessionId,
+                                String8& name,
                                 status_t *status);
 
     virtual sp<IAudioRecord> openRecord(
@@ -113,7 +136,7 @@ public:
                                 audio_format_t format,
                                 audio_channel_mask_t channelMask,
                                 size_t frameCount,
-                                IAudioFlinger::track_flags_t flags,
+                                IAudioFlinger::track_flags_t *flags,
                                 pid_t tid,
                                 int *sessionId,
                                 status_t *status);
@@ -157,7 +180,8 @@ public:
                                          audio_format_t *pFormat,
                                          audio_channel_mask_t *pChannelMask,
                                          uint32_t *pLatencyMs,
-                                         audio_output_flags_t flags);
+                                         audio_output_flags_t flags,
+                                         const audio_offload_info_t *offloadInfo);
 
     virtual audio_io_handle_t openDuplicateOutput(audio_io_handle_t output1,
                                                   audio_io_handle_t output2);
@@ -216,12 +240,15 @@ public:
     virtual uint32_t getPrimaryOutputSamplingRate();
     virtual size_t getPrimaryOutputFrameCount();
 
+    virtual status_t setLowRamDevice(bool isLowRamDevice);
+
     virtual     status_t    onTransact(
                                 uint32_t code,
                                 const Parcel& data,
                                 Parcel* reply,
                                 uint32_t flags);
 
+    virtual audio_mode_t getMode() const { return mMode; }
     // end of IAudioFlinger interface
 
     sp<NBLog::Writer>   newWriter_l(size_t size, const char *name);
@@ -274,11 +301,10 @@ public:
 private:
     class AudioHwDevice;    // fwd declaration for findSuitableHwDev_l
 
-               audio_mode_t getMode() const { return mMode; }
 
                 bool        btNrecIsOff() const { return mBtNrecIsOff; }
 
-                            AudioFlinger();
+                            AudioFlinger() ANDROID_API;
     virtual                 ~AudioFlinger();
 
     // call in any IAudioFlinger method that accesses mPrimaryHardwareDev
@@ -359,7 +385,9 @@ private:
     class PlaybackThread;
     class MixerThread;
     class DirectOutputThread;
+    class OffloadThread;
     class DuplicatingThread;
+    class AsyncCallbackThread;
     class Track;
     class RecordTrack;
     class EffectModule;
@@ -401,8 +429,13 @@ private:
                                              int64_t pts);
         virtual status_t    setMediaTimeTransform(const LinearTransform& xform,
                                                   int target);
+        virtual status_t    setParameters(const String8& keyValuePairs);
+        virtual status_t    getTimestamp(AudioTimestamp& timestamp);
+        virtual void        signal(); // signal playback thread for a change in control block
+
         virtual status_t onTransact(
             uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
+
     private:
         const sp<PlaybackThread::Track> mTrack;
     };
@@ -424,6 +457,7 @@ private:
         void                stop_nonvirtual();
     };
 
+
               PlaybackThread *checkPlaybackThread_l(audio_io_handle_t output) const;
               MixerThread *checkMixerThread_l(audio_io_handle_t output) const;
               RecordThread *checkRecordThread_l(audio_io_handle_t input) const;
@@ -435,6 +469,9 @@ private:
                                 { return mStreamTypes[stream].volume; }
               void audioConfigChanged_l(int event, audio_io_handle_t ioHandle, const void *param2);
 
+#ifdef DOLBY_DAP_OPENSLES
+              static bool sendBroadcastMessage(String16 action, int value);
+#endif //DOLBY_DAP_OPENSLES
               // allocate an audio_io_handle_t, session ID, or effect ID
               uint32_t nextUniqueId();
 
@@ -451,6 +488,9 @@ private:
 
                 void        removeClient_l(pid_t pid);
                 void        removeNotificationClient(pid_t pid);
+
+                bool isNonOffloadableGlobalEffectEnabled_l();
+                void onNonOffloadableGlobalEffectEnable();
 
     class AudioHwDevice {
     public:
@@ -490,11 +530,12 @@ private:
     struct AudioStreamOut {
         AudioHwDevice* const audioHwDev;
         audio_stream_out_t* const stream;
+        audio_output_flags_t flags;
 
         audio_hw_device_t* hwDev() const { return audioHwDev->hwDevice(); }
 
-        AudioStreamOut(AudioHwDevice *dev, audio_stream_out_t *out) :
-            audioHwDev(dev), stream(out) {}
+        AudioStreamOut(AudioHwDevice *dev, audio_stream_out_t *out, audio_output_flags_t flags) :
+            audioHwDev(dev), stream(out), flags(flags) {}
     };
 
     struct AudioStreamIn {
@@ -588,12 +629,11 @@ private:
     status_t    closeOutput_nonvirtual(audio_io_handle_t output);
     status_t    closeInput_nonvirtual(audio_io_handle_t input);
 
-// do not use #ifdef here, since AudioFlinger.h is included by more than one module
-//#ifdef TEE_SINK
+#ifdef TEE_SINK
     // all record threads serially share a common tee sink, which is re-created on format change
     sp<NBAIO_Sink>   mRecordTeeSink;
     sp<NBAIO_Source> mRecordTeeSource;
-//#endif
+#endif
 
 public:
 
@@ -618,6 +658,16 @@ public:
     static const size_t kTeeSinkTrackFramesDefault = 0x1000;
 #endif
 
+    // This method reads from a variable without mLock, but the variable is updated under mLock.  So
+    // we might read a stale value, or a value that's inconsistent with respect to other variables.
+    // In this case, it's safe because the return value isn't used for making an important decision.
+    // The reason we don't want to take mLock is because it could block the caller for a long time.
+    bool    isLowRamDevice() const { return mIsLowRamDevice; }
+
+private:
+    bool    mIsLowRamDevice;
+    bool    mIsDeviceTypeKnown;
+    nsecs_t mGlobalEffectEnableTime;  // when a global effect was last enabled
 };
 
 #undef INCLUDING_FROM_AUDIOFLINGER_H

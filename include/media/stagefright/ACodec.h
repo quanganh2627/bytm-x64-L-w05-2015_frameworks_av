@@ -31,6 +31,9 @@ namespace android {
 
 struct ABuffer;
 struct MemoryDealer;
+#ifdef TARGET_HAS_VPP
+struct NuPlayerVPPProcessor;
+#endif
 
 struct ACodec : public AHierarchicalStateMachine {
     enum {
@@ -66,6 +69,11 @@ struct ACodec : public AHierarchicalStateMachine {
     void initiateStart();
 
     void signalRequestIDRFrame();
+
+#ifdef TARGET_HAS_VPP
+    void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
+    bool isVppBufferAvail();
+#endif
 
     struct PortDescription : public RefBase {
         size_t countBuffers();
@@ -124,7 +132,8 @@ private:
     };
 
     enum {
-        kFlagIsSecure   = 1,
+        kFlagIsSecure                                 = 1,
+        kFlagPushBlankBuffersToNativeWindowOnShutdown = 2,
     };
 
     struct BufferInfo {
@@ -134,14 +143,25 @@ private:
             OWNED_BY_UPSTREAM,
             OWNED_BY_DOWNSTREAM,
             OWNED_BY_NATIVE_WINDOW,
+#ifdef TARGET_HAS_VPP
+            OWNED_BY_VPP,
+#endif
         };
 
         IOMX::buffer_id mBufferID;
         Status mStatus;
+        unsigned mDequeuedAt;
 
         sp<ABuffer> mData;
         sp<GraphicBuffer> mGraphicBuffer;
     };
+
+#ifdef TARGET_HAS_VPP
+    friend struct NuPlayerVPPProcessor;
+    uint32_t mVppInBufNum;
+    uint32_t mVppOutBufNum;
+#endif
+
 
 #if TRACK_BUFFER_TIMING
     struct BufferStats {
@@ -182,7 +202,7 @@ private:
 
     bool mSentFormat;
     bool mIsEncoder;
-
+    bool mUseMetadataOnEncoderOutput;
     bool mShutdownInProgress;
 
     // If "mKeepComponentAllocated" we only transition back to Loaded state
@@ -194,12 +214,22 @@ private:
 
     bool mChannelMaskPresent;
     int32_t mChannelMask;
+    unsigned mDequeueCounter;
+    bool mStoreMetaDataInOutputBuffers;
+    int32_t mMetaDataBuffersToSubmit;
+
+    int64_t mRepeatFrameDelayUs;
 
     status_t setCyclicIntraMacroblockRefresh(const sp<AMessage> &msg, int32_t mode);
     status_t allocateBuffersOnPort(OMX_U32 portIndex);
     status_t freeBuffersOnPort(OMX_U32 portIndex);
     status_t freeBuffer(OMX_U32 portIndex, size_t i);
 
+    status_t configureOutputBuffersFromNativeWindow(
+            OMX_U32 *nBufferCount, OMX_U32 *nBufferSize,
+            OMX_U32 *nMinUndequeuedBuffers);
+    status_t allocateOutputMetaDataBuffers();
+    status_t submitOutputMetaDataBuffer();
     status_t allocateOutputBuffersFromNativeWindow();
     status_t cancelBufferToNativeWindow(BufferInfo *info);
     status_t freeOutputBuffersNotOwnedByComponent();

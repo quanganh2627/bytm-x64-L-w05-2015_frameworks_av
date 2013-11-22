@@ -19,6 +19,7 @@
 #if CHROMIUM_AVAILABLE
 #include "include/chromium_http_stub.h"
 #endif
+#include "include/AVIExtractor.h"
 
 #include "include/AACExtractor.h"
 #include "include/DRMExtractor.h"
@@ -32,6 +33,9 @@
 #include "include/OggExtractor.h"
 #include "include/WAVExtractor.h"
 #include "include/WVMExtractor.h"
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#endif
 
 #include "matroska/MatroskaExtractor.h"
 
@@ -159,7 +163,10 @@ void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer(SniffAAC);
     RegisterSniffer(SniffMPEG2PS);
     RegisterSniffer(SniffWVM);
-
+    RegisterSniffer(SniffAVI);
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    RegisterSniffer(SniffAsf);
+#endif
     char value[PROPERTY_VALUE_MAX];
     if (property_get("drm.service.enabled", value, NULL)
             && (!strcmp(value, "1") || !strcasecmp(value, "true"))) {
@@ -220,6 +227,9 @@ sp<DataSource> DataSource::CreateFromURI(
     }
 
     if (source == NULL || source->initCheck() != OK) {
+        if (source != NULL) {
+            source.clear();
+        }
         return NULL;
     }
 

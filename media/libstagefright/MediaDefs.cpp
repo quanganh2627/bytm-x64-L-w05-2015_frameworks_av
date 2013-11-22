@@ -12,6 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * This file was modified by Dolby Laboratories, Inc. The portions of the
+ * code that are surrounded by "DOLBY..." are copyrighted and
+ * licensed separately, as follows:
+ *
+ *  (C) 2011-2012 Dolby Laboratories, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 #include <media/stagefright/MediaDefs.h>
@@ -20,8 +39,10 @@ namespace android {
 
 const char *MEDIA_MIMETYPE_IMAGE_JPEG = "image/jpeg";
 
-const char *MEDIA_MIMETYPE_VIDEO_VPX = "video/x-vnd.on2.vp8";
+const char *MEDIA_MIMETYPE_VIDEO_VP8 = "video/x-vnd.on2.vp8";
+const char *MEDIA_MIMETYPE_VIDEO_VP9 = "video/x-vnd.on2.vp9";
 const char *MEDIA_MIMETYPE_VIDEO_AVC = "video/avc";
+const char *MEDIA_MIMETYPE_VIDEO_HEVC = "video/hevc";
 const char *MEDIA_MIMETYPE_VIDEO_MPEG4 = "video/mp4v-es";
 const char *MEDIA_MIMETYPE_VIDEO_H263 = "video/3gpp";
 const char *MEDIA_MIMETYPE_VIDEO_MPEG2 = "video/mpeg2";
@@ -41,6 +62,7 @@ const char *MEDIA_MIMETYPE_AUDIO_RAW = "audio/raw";
 const char *MEDIA_MIMETYPE_AUDIO_FLAC = "audio/flac";
 const char *MEDIA_MIMETYPE_AUDIO_AAC_ADTS = "audio/aac-adts";
 const char *MEDIA_MIMETYPE_AUDIO_MSGSM = "audio/gsm";
+const char *MEDIA_MIMETYPE_AUDIO_ALAC = "audio/alac";
 
 const char *MEDIA_MIMETYPE_CONTAINER_MPEG4 = "video/mp4";
 const char *MEDIA_MIMETYPE_CONTAINER_WAV = "audio/x-wav";
@@ -54,5 +76,13 @@ const char *MEDIA_MIMETYPE_CONTAINER_WVM = "video/wvm";
 
 const char *MEDIA_MIMETYPE_TEXT_3GPP = "text/3gpp-tt";
 const char *MEDIA_MIMETYPE_TEXT_SUBRIP = "application/x-subrip";
+#ifdef USE_INTEL_MDP
+const char *MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED = "audio/mp4a-aacextended"; //For Audio Object Type > 31
+#endif
+
+#ifdef DOLBY_UDC
+const char *MEDIA_MIMETYPE_AUDIO_AC3 = "audio/ac3";
+const char *MEDIA_MIMETYPE_AUDIO_EC3 = "audio/eac3";
+#endif // DOLBY_UDC
 
 }  // namespace android

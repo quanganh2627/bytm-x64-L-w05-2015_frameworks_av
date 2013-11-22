@@ -1092,7 +1092,10 @@ void PreviewPlayer::onVideoEvent() {
         }
 
         if(!mIsVideoSourceJpg) {
-            postVideoEvent_l(0);
+            // The next video event scheduling will occur after 10ms so that
+            // any attempts to cancel future video events could take effect within
+            // this 10ms interval
+            postVideoEvent_l();
         }
         else {
             postVideoEvent_l(33000);
@@ -1463,6 +1466,11 @@ status_t PreviewPlayer::setImageClipProperties(uint32_t width,uint32_t height) {
 status_t PreviewPlayer::readFirstVideoFrame() {
     ALOGV("readFirstVideoFrame");
 
+    if (!(mFlags & PREPARED)) {
+        ALOGE("The player is not prepared");
+        return UNKNOWN_ERROR;
+    }
+
     if (!mVideoBuffer) {
         MediaSource::ReadOptions options;
         if (mSeeking != NO_SEEK) {
@@ -1470,7 +1478,7 @@ status_t PreviewPlayer::readFirstVideoFrame() {
                     mSeekTimeUs / 1E6);
 
             options.setSeekTo(
-                    mSeekTimeUs, MediaSource::ReadOptions::SEEK_CLOSEST);
+                    mSeekTimeUs, MediaSource::ReadOptions::SEEK_PREVIOUS_SYNC);
         }
         for (;;) {
             status_t err = mVideoSource->read(&mVideoBuffer, &options);
@@ -1743,7 +1751,7 @@ status_t PreviewPlayer::pause_l(bool at_eos) {
         return OK;
     }
 
-    cancelPlayerEvents_l();
+    cancelPlayerEvents_l(true);
 
     if (mAudioPlayer != NULL && (mFlags & AUDIO_RUNNING)) {
         if (at_eos) {

@@ -115,15 +115,11 @@ MtpServer::~MtpServer() {
 }
 
 void MtpServer::addStorage(MtpStorage* storage) {
-    Mutex::Autolock autoLock(mMutex);
-
     mStorages.push(storage);
     sendStoreAdded(storage->getStorageID());
 }
 
 void MtpServer::removeStorage(MtpStorage* storage) {
-    Mutex::Autolock autoLock(mMutex);
-
     for (int i = 0; i < mStorages.size(); i++) {
         if (mStorages[i] == storage) {
             mStorages.removeAt(i);
@@ -239,6 +235,11 @@ void MtpServer::run() {
         mDatabase->sessionEnded();
     close(fd);
     mFD = -1;
+
+    if (mDirtyFilePath.length() != 0) {
+        ALOGD("Delete dirty file %s. \n", (const char *)mDirtyFilePath);
+        unlink(mDirtyFilePath);
+    }
 }
 
 void MtpServer::sendObjectAdded(MtpObjectHandle handle) {
@@ -736,9 +737,11 @@ MtpResponseCode MtpServer::doGetObject() {
     mfr.transaction_id = mRequest.getTransactionID();
 
     // then transfer the file
+    mDatabase->transferStarted();
     int ret = ioctl(mFD, MTP_SEND_FILE_WITH_HEADER, (unsigned long)&mfr);
     ALOGV("MTP_SEND_FILE_WITH_HEADER returned %d\n", ret);
     close(mfr.fd);
+    mDatabase->transferEnded();
     if (ret < 0) {
         if (errno == ECANCELED)
             return MTP_RESPONSE_TRANSACTION_CANCELLED;
@@ -958,13 +961,18 @@ MtpResponseCode MtpServer::doSendObject() {
         ALOGV("receiving %s\n", (const char *)mSendObjectFilePath);
         // transfer the file
         ret = ioctl(mFD, MTP_RECEIVE_FILE, (unsigned long)&mfr);
-        ALOGV("MTP_RECEIVE_FILE returned %d\n", ret);
+        ALOGV("MTP_RECEIVE_FILE returned %d errno %d \n", ret, errno);
     }
     close(mfr.fd);
 
     if (ret < 0) {
-        unlink(mSendObjectFilePath);
-        if (errno == ECANCELED)
+        if (errno == EIO) {
+            mDirtyFilePath = mSendObjectFilePath;
+        } else {
+            unlink(mSendObjectFilePath);
+        }
+
+        if (errno == ECANCELED || errno == EIO )
             result = MTP_RESPONSE_TRANSACTION_CANCELLED;
         else
             result = MTP_RESPONSE_GENERAL_ERROR;

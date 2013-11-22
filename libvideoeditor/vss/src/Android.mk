@@ -70,8 +70,17 @@ LOCAL_SHARED_LIBRARIES :=       \
 LOCAL_STATIC_LIBRARIES := \
     libstagefright_color_conversion \
     libvideoeditor_mcs \
-    libvideoeditor_stagefrightshells \
     libvideoeditor_3gpwriter \
+
+ifeq ($(USE_VIDEOEDITOR_INTEL_NV12_VERSION),true)
+LOCAL_STATIC_LIBRARIES += \
+    libvideoeditor_stagefrightshells_intel
+LOCAL_SHARED_LIBRARIES += \
+    libsharedbuffer \
+    libva_videoencoder
+else
+LOCAL_STATIC_LIBRARIES += libvideoeditor_stagefrightshells
+endif
 
 LOCAL_C_INCLUDES += \
     $(TOP)/frameworks/av/libvideoeditor/osal/inc \
@@ -95,5 +104,17 @@ LOCAL_LDLIBS := \
 LOCAL_CFLAGS += -Wno-multichar \
     -DM4xVSS_RESERVED_MOOV_DISK_SPACEno \
     -DDECODE_GIF_ON_SAVING
+
+ifeq ($(USE_VIDEOEDITOR_INTEL_NV12_VERSION),true)
+LOCAL_STATIC_LIBRARIES += \
+    liblvpp_intel \
+    libvss_intel \
+
+LOCAL_CFLAGS += -DVIDEOEDITOR_INTEL_NV12_VERSION
+
+LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/videoeditornv12
+endif
+
+
 
 include $(BUILD_SHARED_LIBRARY)

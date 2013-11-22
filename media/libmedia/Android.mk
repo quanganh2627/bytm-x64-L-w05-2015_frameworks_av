@@ -1,5 +1,8 @@
 LOCAL_PATH:= $(call my-dir)
 
+# Build for helper target
+#########################
+
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
@@ -8,6 +11,21 @@ LOCAL_MODULE:= libmedia_helper
 LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_STATIC_LIBRARY)
+
+# Build for helper host test
+############################
+
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:= \
+    AudioParameter.cpp
+LOCAL_MODULE:= libmedia_helper_host
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_HOST_STATIC_LIBRARY)
+
+# Build for main lib target
+###########################
 
 include $(CLEAR_VARS)
 
@@ -53,7 +71,8 @@ LOCAL_SRC_FILES:= \
     Visualizer.cpp \
     MemoryLeakTrackUtil.cpp \
     SoundPool.cpp \
-    SoundPoolThread.cpp
+    SoundPoolThread.cpp \
+    StringArray.cpp
 
 LOCAL_SRC_FILES += ../libnbaio/roundup.c
 
@@ -61,6 +80,7 @@ LOCAL_SRC_FILES += ../libnbaio/roundup.c
 LOCAL_CFLAGS += -DANDROID_SMP=$(if $(findstring true,$(TARGET_CPU_SMP)),1,0)
 LOCAL_SRC_FILES += SingleStateQueue.cpp
 LOCAL_CFLAGS += -DSINGLE_STATE_QUEUE_INSTANTIATIONS='"SingleStateQueueInstantiations.cpp"'
+# Consider a separate a library for SingleStateQueueInstantiations.
 
 LOCAL_SHARED_LIBRARIES := \
 	libui liblog libcutils libutils libbinder libsonivox libicuuc libexpat \
@@ -77,5 +97,11 @@ LOCAL_C_INCLUDES := \
     external/icu4c/common \
     $(call include-path-for, audio-effects) \
     $(call include-path-for, audio-utils)
+
+ifeq ($(USE_INTEL_SRC), true)
+  LOCAL_CFLAGS += -DUSE_INTEL_SRC
+  LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libaudioresample
+  LOCAL_SHARED_LIBRARIES += libaudioresample
+endif
 
 include $(BUILD_SHARED_LIBRARY)

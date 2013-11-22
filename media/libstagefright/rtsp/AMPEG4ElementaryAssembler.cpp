@@ -35,6 +35,7 @@
 
 namespace android {
 
+static const size_t kPacketDisorderThresh = 50;
 static bool GetAttribute(const char *s, const char *key, AString *value) {
     value->clear();
 
@@ -102,6 +103,7 @@ static bool GetSampleRateIndex(int32_t sampleRate, size_t *tableIndex) {
         }
     }
 
+    ALOGW("%d is a non-standarad sample rate.", sampleRate);
     return false;
 }
 
@@ -191,7 +193,9 @@ AMPEG4ElementaryAssembler::AMPEG4ElementaryAssembler(
                 desc.c_str(), &sampleRate, &numChannels);
 
         mChannelConfig = numChannels;
-        CHECK(GetSampleRateIndex(sampleRate, &mSampleRateIndex));
+        // CHECK removed here as SR is recalculated in codec from stream data.
+        // Feng server sets 90k SR default. This removal is necessary then.
+        GetSampleRateIndex(sampleRate, &mSampleRateIndex);
     }
 }
 
@@ -233,7 +237,12 @@ ARTPAssembler::AssemblyStatus AMPEG4ElementaryAssembler::addPacket(
         mNextExpectedSeqNo = (uint32_t)buffer->int32Data();
     } else if ((uint32_t)buffer->int32Data() != mNextExpectedSeqNo) {
         ALOGV("Not the sequence number I expected");
-
+        // too much packet lost and waiting for each packet for 10ms  will cause video stuck.
+        // directly drop the packets if the lost packet surpass the threshold
+        if (!mIsGeneric && ((uint32_t)buffer->int32Data() - mNextExpectedSeqNo) > kPacketDisorderThresh) {
+            mNextExpectedSeqNo = (uint32_t)buffer->int32Data() ;
+            return MALFORMED_PACKET;
+        }
         return WRONG_SEQUENCE_NUMBER;
     }
 
@@ -253,8 +262,14 @@ ARTPAssembler::AssemblyStatus AMPEG4ElementaryAssembler::addPacket(
         CHECK_GE(buffer->size(), 2u);
         unsigned AU_headers_length = U16_AT(buffer->data());  // in bits
 
-        CHECK_GE(buffer->size(), 2 + (AU_headers_length + 7) / 8);
-
+        //CHECK_GE(buffer->size(), 2 + (AU_headers_length + 7) / 8);
+        if (buffer->size() < (2 + (AU_headers_length + 7) / 8)){
+            ALOGE("buffer size is: %u---------------VS-------------AU_headers_length = %u",
+                  buffer->size(), AU_headers_length);
+            queue->erase(queue->begin());
+            ++mNextExpectedSeqNo;
+            return MALFORMED_PACKET;
+        }
         List<AUHeader> headers;
 
         ABitReader bits(buffer->data() + 2, buffer->size() - 2);
@@ -384,7 +399,7 @@ void AMPEG4ElementaryAssembler::submitAccessUnit() {
     fflush(stdout);
 #endif
 
-    if (mAccessUnitDamaged) {
+    if (accessUnitDamaged()) {
         accessUnit->meta()->setInt32("damaged", true);
     }
 
@@ -418,6 +433,41 @@ void AMPEG4ElementaryAssembler::onByeReceived() {
     sp<AMessage> msg = mNotifyMsg->dup();
     msg->setInt32("eos", true);
     msg->post();
+}
+bool AMPEG4ElementaryAssembler::accessUnitDamaged() {
+    if (!mAccessUnitDamaged) {
+        return false;
+    } else if (mPackets.empty()) {
+        return true;
+    }
+    int32_t marker = 0;
+    int32_t lastSeq = -1;
+    List<sp<ABuffer> >::iterator it = mPackets.begin();
+    while (it != mPackets.end()) {
+        const sp<ABuffer> &unit = *it;
+        if (unit->meta()->findInt32("M", &marker)) {
+            ALOGV("Find marker is %d", marker);
+        } else {
+            ALOGV("Not find the marker");
+        }
+        if (lastSeq == -1) {
+            lastSeq = (int32_t)(*it)->int32Data();
+        } else {
+            int32_t seq = (int32_t)(*it)->int32Data();
+            if (seq - lastSeq != 1) {
+                // not continuous
+               return true;
+            }
+            lastSeq = seq;
+        }
+        ++it;
+
+    }
+    if (marker != 1) {
+        return true;
+    }
+    return false;
+
 }
 
 }  // namespace android

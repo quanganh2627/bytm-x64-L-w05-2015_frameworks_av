@@ -12,6 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * This file was modified by Dolby Laboratories, Inc. The portions of the
+ * code that are surrounded by "DOLBY..." are copyrighted and
+ * licensed separately, as follows:
+ *
+ *  (C) 2011-2012 Dolby Laboratories, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 //#define LOG_NDEBUG 0
@@ -50,11 +69,21 @@ static const struct {
     { "OMX.google.mpeg4.encoder", "mpeg4enc", "video_encoder.mpeg4" },
     { "OMX.google.mp3.decoder", "mp3dec", "audio_decoder.mp3" },
     { "OMX.google.vorbis.decoder", "vorbisdec", "audio_decoder.vorbis" },
-    { "OMX.google.vpx.decoder", "vpxdec", "video_decoder.vpx" },
-    { "OMX.google.vpx.encoder", "vpxenc", "video_encoder.vpx" },
+    { "OMX.google.vp8.decoder", "vpxdec", "video_decoder.vp8" },
+    { "OMX.google.vp9.decoder", "vpxdec", "video_decoder.vp9" },
+    { "OMX.google.vp8.encoder", "vpxenc", "video_encoder.vp8" },
+    { "OMX.Intel.alac.decoder", "alacdec", "audio_decoder.alac" },
     { "OMX.google.raw.decoder", "rawdec", "audio_decoder.raw" },
+#ifdef USE_INTEL_MDP
+    { "OMX.Intel.mp3.decoder", "mp3dec_mdp", "audio_decoder.mp3" },
+    { "OMX.Intel.aac.decoder", "aacdec_mdp", "audio_decoder.aac" },
+#endif
     { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" },
     { "OMX.google.gsm.decoder", "gsmdec", "audio_decoder.gsm" },
+#ifdef DOLBY_UDC
+    { "OMX.dolby.ac3.decoder", "ddpdec", "audio_decoder.ac3" },
+    { "OMX.dolby.ec3.decoder", "ddpdec", "audio_decoder.ec3" },
+#endif // DOLBY_UDC
 };
 
 static const size_t kNumComponents =
@@ -124,6 +153,8 @@ OMX_ERRORTYPE SoftOMXPlugin::makeComponentInstance(
 
         codec->incStrong(this);
         codec->setLibHandle(libHandle);
+
+        ALOGI("Created OMXPlugin : %s", kComponents[i].mName);
 
         return OMX_ErrorNone;
     }
