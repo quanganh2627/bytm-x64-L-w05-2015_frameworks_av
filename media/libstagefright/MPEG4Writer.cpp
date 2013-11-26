@@ -1053,11 +1053,68 @@ static void StripStartcode(MediaBuffer *buffer) {
     }
 }
 
-off64_t MPEG4Writer::addLengthPrefixedSample_l(MediaBuffer *buffer) {
-    off64_t old_offset = mOffset;
+#ifdef INTEL_VIDEOENCODER_MULTIPLE_NALUS
+static status_t splitNALUnits(
+        const uint8_t **_data, size_t *_size,
+        const uint8_t **nalStart, size_t *nalSize) {
+    const uint8_t *data = *_data;
+    size_t size = *_size;
 
-    size_t length = buffer->range_length();
+    *nalStart = NULL;
+    *nalSize = 0;
 
+    if (size == 0)
+        return -EAGAIN;
+
+    // Skip any number of leading 0x00.
+    size_t offset = 0;
+    while (offset < size && data[offset] == 0x00)
+        ++offset;
+
+    if (offset == size)
+        return -EAGAIN;
+
+    // A valid startcode consists of at least two 0x00 bytes followed by 0x01.
+    if (offset < 2 || data[offset] != 0x01)
+        return ERROR_MALFORMED;
+
+    ++offset;
+
+    size_t startOffset = offset;
+
+    for (;;) {
+        while (offset < size && data[offset] != 0x01)
+            ++offset;
+
+        if (offset == size)
+            break;
+
+        if (data[offset - 1] == 0x00 && data[offset - 2] == 0x00 && data[offset - 3] == 0x00)
+            break;
+
+        ++offset;
+    }
+
+    size_t endOffset = offset - 3;
+    if (offset == size)
+        endOffset = offset;
+
+    *nalStart = &data[startOffset];
+    *nalSize = endOffset - startOffset;
+
+    if (offset < size) {
+        *_data = &data[offset - 3];
+        *_size = size - offset + 3;
+    } else {
+        *_data = NULL;
+        *_size = 0;
+    }
+
+    return OK;
+}
+#endif
+
+void MPEG4Writer::writeLengthPrefixedSample(const uint8_t* data, uint32_t length) {
     if (mUse4ByteNalLength) {
         uint8_t x = length >> 24;
         ::write(mFd, &x, 1);
@@ -1068,10 +1125,7 @@ off64_t MPEG4Writer::addLengthPrefixedSample_l(MediaBuffer *buffer) {
         x = length & 0xff;
         ::write(mFd, &x, 1);
 
-        ::write(mFd,
-              (const uint8_t *)buffer->data() + buffer->range_offset(),
-              length);
-
+        ::write(mFd, data, length);
         mOffset += length + 4;
     } else {
         CHECK_LT(length, 65536);
@@ -1080,9 +1134,39 @@ off64_t MPEG4Writer::addLengthPrefixedSample_l(MediaBuffer *buffer) {
         ::write(mFd, &x, 1);
         x = length & 0xff;
         ::write(mFd, &x, 1);
-        ::write(mFd, (const uint8_t *)buffer->data() + buffer->range_offset(), length);
+        ::write(mFd, data, length);
         mOffset += length + 2;
     }
+}
+
+off64_t MPEG4Writer::addLengthPrefixedSample_l(MediaBuffer *buffer) {
+    off64_t old_offset = mOffset;
+
+    size_t length = buffer->range_length();
+    const uint8_t *nalStart = (const uint8_t *) buffer->data() + buffer->range_offset();
+    const uint32_t NALUINFO_OFFSET = 256;
+
+    if (buffer->range_offset() == NALUINFO_OFFSET + 4) {
+        uint32_t* nalInfo = (uint32_t*) buffer->data();
+        if (*nalInfo == 0x4e414c4c) {//'nall'
+            uint32_t nalNum = *(++nalInfo);
+            uint32_t offset = 0;
+            for (int i=0; i<nalNum; i++) {
+                uint32_t nalLength = *(++nalInfo);
+                writeLengthPrefixedSample(nalStart + offset, nalLength - 4);
+                offset += nalLength;
+            }
+            return old_offset;
+        }
+    }
+
+#ifdef INTEL_VIDEOENCODER_MULTIPLE_NALUS
+    const uint8_t *data = (const uint8_t *) buffer->data() + buffer->range_offset() - 4;
+    size_t size = length + 4;
+
+    while (splitNALUnits(&data, &size, &nalStart, &length) == OK)
+#endif
+        writeLengthPrefixedSample(nalStart, length);
 
     return old_offset;
 }
@@ -2147,10 +2231,9 @@ status_t MPEG4Writer::Track::threadEntry() {
 
         // Make a deep copy of the MediaBuffer and Metadata and release
         // the original as soon as we can
-        MediaBuffer *copy = new MediaBuffer(buffer->range_length());
-        memcpy(copy->data(), (uint8_t *)buffer->data() + buffer->range_offset(),
-                buffer->range_length());
-        copy->set_range(0, buffer->range_length());
+        MediaBuffer *copy = new MediaBuffer(buffer->range_length() + buffer->range_offset());
+        memcpy(copy->data(), (uint8_t *)buffer->data(), buffer->range_length() + + buffer->range_offset());
+        copy->set_range(buffer->range_offset(), buffer->range_length());
         meta_data = new MetaData(*buffer->meta_data().get());
         buffer->release();
         buffer = NULL;
