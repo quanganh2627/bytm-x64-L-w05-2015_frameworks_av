@@ -49,6 +49,7 @@
 #include "ServiceUtilities.h"
 
 #if defined(DOLBY_DAP_OPENSLES)
+#include "AudioParameter.h"
 #include "effect_ds.h"
 #elif defined(DOLBY_DAP_DSP)
 #include "DsNative.h"
@@ -585,7 +586,35 @@ status_t AudioFlinger::EffectModule::command(uint32_t cmdCode,
 status_t AudioFlinger::EffectModule::setEnabled(bool enabled)
 {
     Mutex::Autolock _l(mLock);
-    return setEnabled_l(enabled);
+
+    status_t status = setEnabled_l(enabled);
+#ifdef DOLBY_DAP_OPENSLES
+    if (status == NO_ERROR) {
+        if (memcmp(&(desc().uuid), &(EFFECT_UUID_DS), sizeof(effect_uuid_t)) == 0) { // DS1 Effects
+            AudioParameter param;
+            if (enabled) {
+                ALOGV("Setting to bypass linear post-processing...");
+                param.add(String8(AUDIO_PARAMETER_KEY_BYPASS_LINEAR_POSTPROCESSING_SETTING),
+                                        String8(AUDIO_PARAMETER_VALUE_BYPASS_LINEAR_PP_ON));
+                ALOGV("Setting to bypass non-linear post-processing...");
+                param.add(String8(AUDIO_PARAMETER_KEY_BYPASS_NON_LINEAR_POSTPROCESSING_SETTING),
+                                        String8(AUDIO_PARAMETER_VALUE_BYPASS_NON_LINEAR_PP_ON));
+            } else {
+                ALOGV("Setting not to bypass linear PP...");
+                param.add(String8(AUDIO_PARAMETER_KEY_BYPASS_LINEAR_POSTPROCESSING_SETTING),
+                                        String8(AUDIO_PARAMETER_VALUE_BYPASS_LINEAR_PP_OFF));
+                ALOGV("Setting not to bypass non-linear PP...");
+                param.add(String8(AUDIO_PARAMETER_KEY_BYPASS_NON_LINEAR_POSTPROCESSING_SETTING),
+                                        String8(AUDIO_PARAMETER_VALUE_BYPASS_NON_LINEAR_PP_OFF));
+            }
+            sp<ThreadBase> thread;
+            thread = mThread.promote();
+            PlaybackThread *p = (PlaybackThread *)thread.get();
+            p->getOutput()->hwDev()->set_parameters(p->getOutput()->hwDev(), param.toString());
+        }
+    }
+#endif
+    return status;
 }
 
 // must be called with EffectModule::mLock held
