@@ -779,8 +779,17 @@ void CameraClient::dataCallbackTimestamp(nsecs_t timestamp,
 
 // snapshot taken callback
 void CameraClient::handleShutter(void) {
+    CameraParameters params(mHardware->getParameters());
     if (mPlayShutterSound) {
-        mCameraService->playSound(CameraService::SOUND_SHUTTER);
+        const char* burstContinuous = params.get("burst-continuous");
+        if ((params.getInt("burst-start-index") == 0) &&
+            ((params.get("burst-length") != NULL) &&
+             (params.getInt("burst-length") > 1)) ||
+            (burstContinuous != NULL &&
+             (strcmp(burstContinuous, "true") == 0)))
+            mCameraService->playSound(CameraService::SOUND_BURST);
+        else
+            mCameraService->playSound(CameraService::SOUND_SHUTTER);
     }
 
     sp<ICameraClient> c = mRemoteCallback;
@@ -789,7 +798,13 @@ void CameraClient::handleShutter(void) {
         c->notifyCallback(CAMERA_MSG_SHUTTER, 0, 0);
         if (!lockIfMessageWanted(CAMERA_MSG_SHUTTER)) return;
     }
-    disableMsgType(CAMERA_MSG_SHUTTER);
+
+    // not disable sound if burst capture,
+    // but disable in normal and continous capture
+    if ((params.get("burst-length") == NULL) ||
+        (params.getInt("burst-length") <= 1) ||
+        (params.getInt("burst-start-index") != 0))
+        disableMsgType(CAMERA_MSG_SHUTTER);
 
     mLock.unlock();
 }
@@ -842,7 +857,11 @@ void CameraClient::handlePreviewData(int32_t msgType,
 
 // picture callback - postview image ready
 void CameraClient::handlePostview(const sp<IMemory>& mem) {
-    disableMsgType(CAMERA_MSG_POSTVIEW_FRAME);
+    CameraParameters params(mHardware->getParameters());
+
+    if ((params.get("burst-length") == NULL) ||
+        (params.getInt("burst-length") == 1))
+        disableMsgType(CAMERA_MSG_POSTVIEW_FRAME);
 
     sp<ICameraClient> c = mRemoteCallback;
     mLock.unlock();
