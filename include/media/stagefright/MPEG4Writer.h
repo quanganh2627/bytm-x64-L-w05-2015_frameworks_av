@@ -182,6 +182,7 @@ private:
     // Acquire lock before calling these methods
     off64_t addSample_l(MediaBuffer *buffer);
     off64_t addLengthPrefixedSample_l(MediaBuffer *buffer);
+    void writeLengthPrefixedSample(const uint8_t* data, uint32_t length);
 
     bool exceedsFileSizeLimit();
     bool use32BitFileOffset() const;
