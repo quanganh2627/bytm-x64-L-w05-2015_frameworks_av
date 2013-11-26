@@ -387,7 +387,7 @@ private:
             CameraAudioTrack& operator=(const CameraAudioTrack& other);
 
     };
-    CameraAudioTrack*   mAudioTrackBurst;
+    sp<CameraAudioTrack> mAudioTrackBurst;
     uint8_t*            mBufferBurst;
     int32_t             mBufferBurstSize;
 

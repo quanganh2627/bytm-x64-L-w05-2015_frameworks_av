@@ -142,9 +142,9 @@ CameraService::~CameraService() {
     }
 
     gCameraService = NULL;
-    if (mAudioTrackBurst) {
+    if (mAudioTrackBurst != NULL) {
         mAudioTrackBurst->stop();
-        delete mAudioTrackBurst;
+        mAudioTrackBurst.clear();
         mAudioTrackBurst = NULL;
     }
     if (mBufferBurst) {
@@ -983,7 +983,7 @@ error2:
     mBufferBurstSize = 0;
 
 error1:
-    delete mAudioTrackBurst;
+    mAudioTrackBurst.clear();
     mAudioTrackBurst = NULL;
 }
 
@@ -1016,9 +1016,9 @@ void CameraService::releaseSound() {
         }
     }
 
-    if (mAudioTrackBurst) {
+    if (mAudioTrackBurst != NULL) {
         mAudioTrackBurst->stop();
-        delete mAudioTrackBurst;
+        mAudioTrackBurst.clear();
         mAudioTrackBurst = NULL;
     }
     if (mBufferBurst) {
