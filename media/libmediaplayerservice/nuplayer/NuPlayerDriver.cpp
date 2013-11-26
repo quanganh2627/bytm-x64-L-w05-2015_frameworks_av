@@ -323,7 +323,7 @@ status_t NuPlayerDriver::getDuration(int *msec) {
     Mutex::Autolock autoLock(mLock);
 
     if (mDurationUs < 0) {
-        return UNKNOWN_ERROR;
+        *msec = -1;//invalid duration
     }
 
     *msec = (mDurationUs + 500ll) / 1000;
