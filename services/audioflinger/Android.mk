@@ -111,6 +111,7 @@ ifdef DOLBY_DAP_OPENSLES
     # Note: Keep this definition consistent with Android.mk in DS effect
     LOCAL_CFLAGS += -DDOLBY_DAP_OPENSLES_PREGAIN
     LOCAL_C_INCLUDES += $(TOP)/vendor/intel/PRIVATE/dolby_ds1/libds/include
+    LOCAL_C_INCLUDES += $(TOP)/frameworks/av/include/media
 
 ifdef DOLBY_DAP_OPENSLES_LPA
     LOCAL_CFLAGS += -DDOLBY_DAP_OPENSLES_LPA
