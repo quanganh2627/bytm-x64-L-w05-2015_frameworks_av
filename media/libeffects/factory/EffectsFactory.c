@@ -24,6 +24,7 @@
 
 #include <cutils/misc.h>
 #include <cutils/config_utils.h>
+#include <cutils/properties.h>
 #include <audio_effects/audio_effects_conf.h>
 
 static list_elem_t *gEffectList; // list of effect_entry_t: all currently created effects
@@ -446,14 +447,30 @@ int init() {
         return 0;
     }
 
-    pthread_mutex_init(&gLibLock, NULL);
-
-    if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
-        loadEffectConfigFile(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
-    } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
-        loadEffectConfigFile(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
+    // This part of code is to enable the testing of offload effects.
+    // Not needed when full offloaded effects are implimented.
+    // currently loading different config file to suit this.
+    // TBD - remove this when full effect offload is enabled.
+    //
+    char value[PROPERTY_VALUE_MAX];
+    uint32_t LPAformat = 0;
+    if (property_get("audio.offload.capabilities", value, "0")) {
+        LPAformat = strtoul(value, NULL, 16);
+        ALOGV("init: LPAformat  = %x", LPAformat);
     }
 
+    if ((LPAformat & EFFECTS_OFFLOAD)) {
+        ALOGV("effect offload is enabled in prop");
+        pthread_mutex_init(&gLibLock, NULL);
+        loadEffectConfigFile(AUDIO_EFFECT_OFFLOAD_CONFIG_FILE);
+    } else {
+        pthread_mutex_init(&gLibLock, NULL);
+        if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
+            loadEffectConfigFile(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
+        } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
+            loadEffectConfigFile(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
+        }
+    }
     updateNumEffects();
     gInitDone = 1;
     ALOGV("init() done");

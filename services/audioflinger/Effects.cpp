@@ -917,6 +917,7 @@ status_t AudioFlinger::EffectModule::setOffloaded(bool offloaded, audio_io_handl
         if (status == NO_ERROR) {
             status = cmdStatus;
         }
+        ALOGV("EffectModule:setOffloaded status %d", status);
         mOffloaded = (status == NO_ERROR) ? offloaded : false;
     } else {
         if (offloaded) {
@@ -1109,7 +1110,7 @@ status_t AudioFlinger::EffectHandle::enable()
                 Mutex::Autolock _l(t->mLock);
                 t->broadcast_l();
             }
-            if (!mEffect->isOffloadable()) {
+            if (!mEffect->isOffloaded()) {
                 if (thread->type() == ThreadBase::OFFLOAD) {
                     PlaybackThread *t = (PlaybackThread *)thread.get();
                     t->invalidateTracks(AUDIO_STREAM_MUSIC);
@@ -1924,7 +1925,7 @@ bool AudioFlinger::EffectChain::isNonOffloadableEnabled()
     Mutex::Autolock _l(mLock);
     size_t size = mEffects.size();
     for (size_t i = 0; i < size; i++) {
-        if (mEffects[i]->isEnabled() && !mEffects[i]->isOffloadable()) {
+        if (mEffects[i]->isEnabled() && !mEffects[i]->isOffloaded()) {
             return true;
         }
     }
