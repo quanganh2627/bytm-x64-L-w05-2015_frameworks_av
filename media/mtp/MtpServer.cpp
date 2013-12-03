@@ -972,7 +972,7 @@ MtpResponseCode MtpServer::doSendObject() {
             unlink(mSendObjectFilePath);
         }
 
-        if (errno == ECANCELED || errno == EIO )
+        if (errno == ECANCELED)
             result = MTP_RESPONSE_TRANSACTION_CANCELLED;
         else
             result = MTP_RESPONSE_GENERAL_ERROR;
