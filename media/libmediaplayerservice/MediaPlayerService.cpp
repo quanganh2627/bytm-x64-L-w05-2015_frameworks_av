@@ -93,6 +93,10 @@
 #endif
 #endif
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+#define SLOWMOTIONFACTORBASE 100
+#endif
+
 namespace {
 using android::media::Metadata;
 using android::status_t;
@@ -1089,6 +1093,15 @@ status_t MediaPlayerService::Client::setAuxEffectSendLevel(float level)
 status_t MediaPlayerService::Client::attachAuxEffect(int effectId)
 {
     ALOGV("[%d] attachAuxEffect(%d)", mConnId, effectId);
+
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    if (effectId >= SLOWMOTIONFACTORBASE) {
+        sp<MediaPlayerBase> p = getPlayer();
+        if (p == 0) return UNKNOWN_ERROR;
+        return p->attachAuxEffect(effectId - SLOWMOTIONFACTORBASE);
+    }
+#endif
+
     Mutex::Autolock l(mLock);
     if (mAudioOutput != 0) return mAudioOutput->attachAuxEffect(effectId);
     return NO_ERROR;

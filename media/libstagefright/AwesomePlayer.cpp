@@ -280,6 +280,10 @@ AwesomePlayer::AwesomePlayer()
       mVPPProcessor(NULL),
       mVPPInit(false),
 #endif
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+      mIsSlowMotionMode(false),
+      mSlowMotionFactor(1),
+#endif
       mDeepBufferAudio(false),
       mLastVideoTimeUs(-1),
       mTextDriver(NULL),
@@ -1649,7 +1653,13 @@ status_t AwesomePlayer::getDuration(int64_t *durationUs) {
 
 status_t AwesomePlayer::getPosition(int64_t *positionUs) {
     if (mSeeking != NO_SEEK) {
-        *positionUs = mSeekTimeUs;
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+        if (mIsSlowMotionMode)
+            *positionUs = mSeekTimeUs * mSlowMotionFactor;
+        else
+#endif
+            *positionUs = mSeekTimeUs;
+
     } else if (mVideoSource != NULL
             && (mAudioPlayer == NULL || !(mFlags & VIDEO_AT_EOS))) {
         Mutex::Autolock autoLock(mMiscStateLock);
@@ -1691,6 +1701,10 @@ status_t AwesomePlayer::seekTo_l(int64_t timeUs) {
 
     mSeeking = SEEK;
     mSeekNotificationSent = false;
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    if (mIsSlowMotionMode)
+        timeUs = timeUs/mSlowMotionFactor;
+#endif
     mSeekTimeUs = timeUs;
     modifyFlags((AT_EOS | AUDIO_AT_EOS | VIDEO_AT_EOS), CLEAR);
 
@@ -1843,7 +1857,11 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
     if (mNativeWindow == NULL)
         return processor;
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    if (mIsSlowMotionMode || VPPProcessor::isVppOn()) {
+#else
     if (VPPProcessor::isVppOn()) {
+#endif
         processor = VPPProcessor::getInstance(mNativeWindow, omxCodec);
         if (processor != NULL) {
             VPPVideoInfo info;
@@ -1867,7 +1885,12 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
             info.fps = fps;
             info.width = width;
             info.height = height;
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+            LOGI("mIsSlowMotionMode = %d, mSlowMotionFactor = %d", mIsSlowMotionMode, mSlowMotionFactor);
+            if (processor->validateVideoInfo(&info, mSlowMotionFactor) != VPP_OK) {
+#else
             if (processor->validateVideoInfo(&info) != VPP_OK) {
+#endif
                 delete processor;
                 processor = NULL;
             }
@@ -1958,6 +1981,10 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
             Mutex::Autolock autoLock(mMiscStateLock);
             if (mDurationUs < 0 || durationUs > mDurationUs) {
                 mDurationUs = durationUs;
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+                if (mIsSlowMotionMode)
+                    mDurationUs *= mSlowMotionFactor;
+#endif
             }
         }
 #ifdef TARGET_HAS_VPP
@@ -2355,6 +2382,13 @@ void AwesomePlayer::onVideoEvent() {
              }
         }
         ALOGV("SET DATA %p\n", mVideoBuffer);
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+        if (mIsSlowMotionMode && mVideoBuffer) {
+            int64_t timeUs;
+            CHECK(mVideoBuffer->meta_data()->findInt64(kKeyTime, &timeUs));
+            CHECK(mVideoBuffer->meta_data()->setInt64(kKeyTime, timeUs*mSlowMotionFactor));
+        }
+#endif
         if (mVPPProcessor->setDecoderBufferToVPP(mVideoBuffer) == VPP_OK) {
             mVideoBuffer = NULL;
         }
@@ -3063,7 +3097,11 @@ void AwesomePlayer::beginPrepareAsync_l() {
         }
     }
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    if (mAudioTrack != NULL && mAudioSource == NULL && !mIsSlowMotionMode) {
+#else
     if (mAudioTrack != NULL && mAudioSource == NULL) {
+#endif
         status_t err = initAudioDecoder();
 
         if (err != OK) {
@@ -3564,6 +3602,156 @@ void AwesomePlayer::onAudioTearDownEvent() {
     // Call prepare for the host decoding
     beginPrepareAsync_l();
 }
+
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+status_t AwesomePlayer::resetDecoder(int slowMotionFactor) {
+    ALOGI("resetDeocder mFlags = 0x%x, slowMotionFactor = %d", mFlags, slowMotionFactor);
+    CHECK(slowMotionFactor > 0);
+    if (slowMotionFactor == mSlowMotionFactor) {
+        ALOGD("Same playback factor, do nothing!");
+        return OK;
+    }
+    if (slowMotionFactor > 1)
+        mIsSlowMotionMode = true;
+    else
+        mIsSlowMotionMode = false;
+
+    if (mFlags == 0 || mFlags & PREPARING) {
+        mSlowMotionFactor = slowMotionFactor;
+        return OK;
+    }
+
+    int playing = isPlaying();
+
+    int lastSlowMotionFactor = mSlowMotionFactor;
+    mSlowMotionFactor = slowMotionFactor;
+    mDeepBufferAudio = false;
+    mVideoRenderingStarted = false;
+    mActiveAudioTrackIndex = -1;
+    mDisplayWidth = 0;
+    mDisplayHeight = 0;
+
+    notifyListener_l(MEDIA_STOPPED);
+
+    if (mDecryptHandle != NULL) {
+        mDrmManagerClient->setPlaybackStatus(mDecryptHandle,
+                Playback::STOP, 0);
+        mDecryptHandle = NULL;
+        mDrmManagerClient = NULL;
+    }
+
+    if (mFlags & PLAYING) {
+        uint32_t params = IMediaPlayerService::kBatteryDataTrackDecoder;
+        if ((mAudioSource != NULL) && (mAudioSource != mAudioTrack)) {
+            params |= IMediaPlayerService::kBatteryDataTrackAudio;
+        }
+        if (mVideoSource != NULL) {
+            params |= IMediaPlayerService::kBatteryDataTrackVideo;
+        }
+        addBatteryData(params);
+    }
+
+    if (mCachedSource != NULL) {
+        mCachedSource->interrupt(true);
+    }
+
+    if (mFlags & PREPARING) {
+        modifyFlags(PREPARE_CANCELLED, SET);
+        if (mConnectingDataSource != NULL) {
+            ALOGI("interrupting the connection process");
+            mConnectingDataSource->disconnect();
+        }
+
+        if (mFlags & PREPARING_CONNECTED) {
+            // We are basically done preparing, we're just buffering
+            // enough data to start playback, we can safely interrupt that.
+            finishAsyncPrepare_l();
+        }
+    }
+
+    while (mFlags & PREPARING) {
+        mPreparedCondition.wait(mLock);
+    }
+
+    cancelPlayerEvents();
+
+    mWVMExtractor.clear();
+    mCachedSource.clear();
+
+    // Shutdown audio first, so that the response to the reset request
+    // appears to happen instantaneously as far as the user is concerned
+    // If we did this later, audio would continue playing while we
+    // shutdown the video-related resources and the player appear to
+    // not be as responsive to a reset request.
+    if ((mAudioPlayer == NULL || !(mFlags & AUDIOPLAYER_STARTED))
+            && mAudioSource != NULL) {
+        // If we had an audio player, it would have effectively
+        // taken possession of the audio source and stopped it when
+        // _it_ is stopped. Otherwise this is still our responsibility.
+        mAudioSource->stop();
+    }
+    mAudioSource.clear();
+    mAudioSource = NULL;
+    mOmxSource.clear();
+
+    mTimeSource = NULL;
+
+    delete mAudioPlayer;
+    mAudioPlayer = NULL;
+
+    if (mTextDriver != NULL) {
+        delete mTextDriver;
+        mTextDriver = NULL;
+    }
+
+    mVideoRenderer.clear();
+
+    if (mVideoSource != NULL) {
+        shutdownVideoDecoder_l();
+    }
+
+    mDurationUs = -1;
+    modifyFlags(0, ASSIGN);
+    mTimeSourceDeltaUs = 0;
+    mVideoTimeUs = 0;
+
+    mUri.setTo("");
+    mUriHeaders.clear();
+
+    mFileSource.clear();
+
+    mBitrate = -1;
+
+    mWatchForAudioSeekComplete = false;
+    mWatchForAudioEOS = false;
+
+    status_t err = prepare_l();
+    if (err != OK) {
+        ALOGE("Failed to prepare the player in slow motion mode, err = 0x%x",err);
+        return err;
+    }
+
+    if (mLastVideoTimeUs >= 0) {
+        err = seekTo_l(mLastVideoTimeUs * mSlowMotionFactor / lastSlowMotionFactor);
+        if (err != OK) {
+            ALOGE("Failed to seek in slow motion mode, err = 0x%x",err);
+            return err;
+        }
+    }
+
+    if (playing) {
+        return play_l();
+    } else {
+        return OK;
+    }
+}
+
+status_t AwesomePlayer::attachAuxEffect(int effectId) {
+    Mutex::Autolock autoLock(mLock);
+    return resetDecoder(effectId);
+}
+#endif
+
 #ifdef BGM_ENABLED
 status_t AwesomePlayer::remoteBGMSuspend() {
     int64_t durationUs =0;
