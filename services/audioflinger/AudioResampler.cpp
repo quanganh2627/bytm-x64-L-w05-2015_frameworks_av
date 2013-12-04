@@ -216,7 +216,7 @@ AudioResampler* AudioResampler::create(int bitDepth, int inChannelCount,
 
     }
 #ifdef USE_INTEL_SRC
-    if (quality == LOW_QUALITY || quality == MED_QUALITY ||
+    if (quality == DEFAULT_QUALITY || quality == LOW_QUALITY || quality == MED_QUALITY ||
                             quality == HIGH_QUALITY) {
         resampler->mResType = AF_DEFAULT_SRC;
     } else {
