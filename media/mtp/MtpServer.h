@@ -105,6 +105,7 @@ public:
 
     void                sendObjectAdded(MtpObjectHandle handle);
     void                sendObjectRemoved(MtpObjectHandle handle);
+    void                changeStorageInfo(MtpStorage* storage);
 
 private:
     void                sendStoreAdded(MtpStorageID id);
@@ -148,6 +149,8 @@ private:
     MtpResponseCode     doTruncateObject();
     MtpResponseCode     doBeginEditObject();
     MtpResponseCode     doEndEditObject();
+
+    void                sendStorageInfoChanged(MtpStorageID id);
 };
 
 }; // namespace android
