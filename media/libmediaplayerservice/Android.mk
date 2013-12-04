@@ -69,6 +69,12 @@ ifeq ($(TARGET_HAS_VPP), true)
         $(TARGET_OUT_HEADERS)/libva
 endif
 
+#slow motion support
+ifeq ($(TARGET_HAS_FRC_SLOW_MOTION), true)
+    LOCAL_CFLAGS += -DTARGET_HAS_FRC_SLOW_MOTION
+endif
+
+
 ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
     LOCAL_SHARED_LIBRARIES += libmultidisplay
     LOCAL_CFLAGS += -DTARGET_HAS_MULTIPLE_DISPLAY

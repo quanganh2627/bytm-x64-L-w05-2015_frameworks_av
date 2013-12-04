@@ -217,4 +217,9 @@ status_t StagefrightPlayer::dump(int fd, const Vector<String16> &args) const {
     return mPlayer->dump(fd, args);
 }
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+status_t StagefrightPlayer::attachAuxEffect(int effectId) {
+    return mPlayer->attachAuxEffect(effectId);
+}
+#endif
 }  // namespace android

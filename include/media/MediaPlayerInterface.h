@@ -136,6 +136,12 @@ public:
         return INVALID_OPERATION;
     }
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    virtual status_t    attachAuxEffect(int effectId) {
+        return OK;
+    }
+#endif
+
     virtual status_t    setDataSource(
             const char *url,
             const KeyedVector<String8, String8> *headers = NULL) = 0;

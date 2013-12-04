@@ -120,6 +120,10 @@ struct AwesomePlayer {
 
     status_t tearDownToNonDeepBufferAudio();
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    status_t attachAuxEffect(int effectId);
+#endif
+
     bool mIsDeepBufferPossible;
 #ifdef BGM_ENABLED
     status_t remoteBGMSuspend();
@@ -255,6 +259,9 @@ private:
     void postVideoLagEvent_l();
     void postAudioTearDownEvent(int64_t delayUs);
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    status_t resetDecoder(int slowMotionFactor);
+#endif
     status_t play_l();
 
     MediaBuffer *mVideoBuffer;
@@ -401,6 +408,12 @@ private:
     AwesomePlayer &operator=(const AwesomePlayer &);
 
     bool mDeepBufferAudio;
+
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    // for video slow motion playback
+    bool mIsSlowMotionMode;
+    int  mSlowMotionFactor;
+#endif
 };
 
 }  // namespace android
