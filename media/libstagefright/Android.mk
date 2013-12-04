@@ -156,6 +156,11 @@ LOCAL_SHARED_LIBRARIES += libva \
                           libvpp_setting
 endif
 
+#slow motion support
+ifeq ($(TARGET_HAS_FRC_SLOW_MOTION), true)
+    LOCAL_CFLAGS += -DTARGET_HAS_FRC_SLOW_MOTION
+endif
+
 ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
   LOCAL_CFLAGS += -DBGM_ENABLED
 endif
