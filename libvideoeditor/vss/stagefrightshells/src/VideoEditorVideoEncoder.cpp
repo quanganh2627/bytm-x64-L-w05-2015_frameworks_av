@@ -606,7 +606,8 @@ M4OSA_ERR VideoEditorVideoEncoder_open(M4ENCODER_Context pContext,
         M4ERR_PARAMETER);
     VIDEOEDITOR_CHECK(0 == pEncoderContext->mCodecParams->FrameWidth  % 16,
         M4ERR_PARAMETER);
-    VIDEOEDITOR_CHECK(0 == pEncoderContext->mCodecParams->FrameHeight % 16,
+    VIDEOEDITOR_CHECK((0 == pEncoderContext->mCodecParams->FrameHeight % 16) \
+        ||(1080 == pEncoderContext->mCodecParams->FrameHeight),
         M4ERR_PARAMETER);
 
     /**
