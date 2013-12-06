@@ -316,7 +316,8 @@ audio_io_handle_t AudioPolicyService::getInput(audio_source_t inputSource,
         return 0;
     }
     // already checked by client, but double-check in case the client wrapper is bypassed
-    if (inputSource >= AUDIO_SOURCE_CNT && inputSource != AUDIO_SOURCE_HOTWORD) {
+    if (((inputSource >= AUDIO_SOURCE_CNT) && (inputSource < AUDIO_SOURCE_LOW_PRIO_START)) ||
+       (inputSource > AUDIO_SOURCE_LOW_PRIO_END)) {
         return 0;
     }
 
