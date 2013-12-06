@@ -29,6 +29,10 @@ include $(BUILD_HOST_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(INTEL_FEATURE_ASF)),true)
+  LOCAL_CPPFLAGS += -DPLATFORM_ASF_VERSION=$(PLATFORM_ASF_VERSION)
+endif
+
 LOCAL_SRC_FILES:= \
     AudioTrack.cpp \
     AudioTrackShared.cpp \
@@ -97,6 +101,15 @@ LOCAL_C_INCLUDES := \
     external/icu4c/common \
     $(call include-path-for, audio-effects) \
     $(call include-path-for, audio-utils)
+
+ifeq ($(strip $(INTEL_FEATURE_ASF)),true)
+ifneq ($(strip $(PLATFORM_ASF_VERSION)),1)
+ifneq ($(strip $(PLATFORM_ASF_VERSION)),0)
+    LOCAL_SHARED_LIBRARIES += libsecuritydeviceserviceclient
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libsecuritydeviceserviceclient
+endif
+endif
+endif
 
 ifeq ($(USE_INTEL_SRC), true)
   LOCAL_CFLAGS += -DUSE_INTEL_SRC

@@ -36,6 +36,7 @@
  *   DEFINITIONS    *
  ********************/
 #define MAX_DEC_BUFFERS 10
+#define THUMBNAIL_THRES 1000
 
 /********************
  *   SOURCE CLASS   *
@@ -948,6 +949,8 @@ M4OSA_ERR VideoEditorVideoDecoder_create(M4OSA_Context *pContext,
     pDecShellContext->m_pReader = pReaderDataInterface;
     pDecShellContext->m_lastDecodedCTS = -1;
     pDecShellContext->m_lastRenderCts = -1;
+    pDecShellContext->mThumbnail = 0;
+
     switch( pStreamHandler->m_streamType ) {
         case M4DA_StreamTypeVideoH263:
             pDecShellContext->mDecoderType = VIDEOEDITOR_kH263VideoDec;
@@ -966,6 +969,7 @@ M4OSA_ERR VideoEditorVideoDecoder_create(M4OSA_Context *pContext,
         case M4DA_StreamTypeVideoMpeg4Avc:
             pDecShellContext->mDecoderType = VIDEOEDITOR_kH264VideoDec;
             break;
+
         default:
             VIDEOEDITOR_CHECK(!"VideoDecoder_create : incorrect stream type",
                 M4ERR_PARAMETER);
@@ -1326,6 +1330,9 @@ M4OSA_ERR VideoEditorVideoDecoder_setOption(M4OSA_Context context,
             break;
         case M4DECODER_kOptionID_DeblockingFilter:
             break;
+        case M4DECODER_kOptionID_VideoDecodersThumbnailMode:
+            pDecShellContext->mThumbnail = *((M4OSA_Int32 *)pValue);
+            break;
         default:
             lerr = M4ERR_BAD_CONTEXT;
             break;
@@ -1453,6 +1460,21 @@ M4OSA_ERR VideoEditorVideoDecoder_decode(M4OSA_Context context,
                 pDecShellContext->m_lastDecodedCTS +
                 pDecShellContext->mFrameIntervalMs +
                 tolerance;
+        if (bJump && pDecShellContext->mThumbnail) {
+            ALOGV("pDecShellContext->mFrameIntervalMs = %lld, tolerance = %d",
+                (int64_t)pDecShellContext->mFrameIntervalMs,
+                tolerance);
+            ALOGI("mThumbnail mode: currTimeMs = %lld, targetTimeMs = %lld",
+                targetTimeMs, (int64_t)*pTime);
+            if (targetTimeMs + THUMBNAIL_THRES < (int64_t)*pTime) {
+                lerr = copyBufferToQueue(pDecShellContext, pDecoderBuffer);
+                if (lerr != M4NO_ERROR) {
+                    goto VIDEOEDITOR_VideoDecode_cleanUP;
+                }
+                break;
+            }
+        }
+
         if (!bJump || targetTimeMs > *pTime) {
             lerr = copyBufferToQueue(pDecShellContext, pDecoderBuffer);
             if (lerr != M4NO_ERROR) {

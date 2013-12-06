@@ -27,6 +27,11 @@
 
 #define WAIT_PERIOD_MS          10
 
+#if PLATFORM_ASF_VERSION >= 2
+// The interface file for inserting hooks to communicate with native service securitydevice
+#include "AsfDeviceAosp.h"
+#endif
+
 namespace android {
 // ---------------------------------------------------------------------------
 
@@ -69,6 +74,18 @@ status_t AudioRecord::getMinFrameCount(
 }
 
 // ---------------------------------------------------------------------------
+
+#if PLATFORM_ASF_VERSION >= 2
+bool AudioRecord::notifyMicrophoneAccess() {
+    // Adding hook to call security device service
+    int pid = IPCThreadState::self()->getCallingPid();
+    int uid = IPCThreadState::self()->getCallingUid();
+    AsfDeviceAosp asfDevice;
+    bool response = asfDevice.sendMicrophoneEvent(uid, pid);
+    return response;
+}
+#endif
+
 
 AudioRecord::AudioRecord()
     : mStatus(NO_INIT), mSessionId(0),
@@ -172,6 +189,18 @@ status_t AudioRecord::set(
         ALOGE("Track already in use");
         return INVALID_OPERATION;
     }
+#if PLATFORM_ASF_VERSION >= 2
+    // Place call to function that acts as a hook point for microphone events
+    bool response = notifyMicrophoneAccess();
+    // If response is false, deny access to requested application and return NULL
+    // if response is true, either ASF allowed access to Microphone to open or
+    // ASF Client is not running
+    if (!response) {
+        ALOGE("ASF client denied permission for microphone, returning NULL");
+        return PERMISSION_DENIED;
+    }
+#endif
+
 
     if (inputSource == AUDIO_SOURCE_DEFAULT) {
         inputSource = AUDIO_SOURCE_MIC;

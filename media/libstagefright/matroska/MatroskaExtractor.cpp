@@ -491,7 +491,7 @@ status_t MatroskaSource::readBlock() {
     int64_t timeUs = mBlockIter.blockTimeUs();
     if (timeUs < 0) {
         ALOGW("mBlockIter.blockTimeUs() is negative, hence exiting");
-        return UNKNOWN_ERROR;
+        return ERROR_IO;
     }
     mBlockIter.advance();
     enum { VIDEO_TRACK = 1, AUDIO_TRACK = 2 };
@@ -505,7 +505,7 @@ status_t MatroskaSource::readBlock() {
             nextBlkTimeUs = mBlockIter.blockTimeUs();
             if (nextBlkTimeUs < 0) {
                 ALOGW("mBlockIter.blockTimeUs() is negative, hence exiting");
-                return UNKNOWN_ERROR;
+                return ERROR_IO;
             }
             diffTimeUs = (nextBlkTimeUs - timeUs) / block->GetFrameCount();
         }
