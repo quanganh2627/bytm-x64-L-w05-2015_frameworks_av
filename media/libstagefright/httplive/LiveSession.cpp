@@ -193,7 +193,6 @@ status_t LiveSession::getStreamFormat(StreamType stream, sp<AMessage> *format) {
     if (!(mStreamMask & stream)) {
         return UNKNOWN_ERROR;
     }
-
     sp<AnotherPacketSource> packetSource = mPacketSources.valueFor(stream);
 
     sp<MetaData> meta = packetSource->getFormat();
@@ -201,7 +200,36 @@ status_t LiveSession::getStreamFormat(StreamType stream, sp<AMessage> *format) {
     if (meta == NULL) {
         return -EAGAIN;
     }
-
+#ifdef TARGET_HAS_VPP
+    int32_t framerate;
+    if (stream == STREAMTYPE_VIDEO && !meta->findInt32(kKeyFrameRate,&framerate)) {
+        static const int64_t kMinDurationUs = 1000000ll;
+        status_t finalResult = OK;
+        size_t sampleCount = 0;
+        int64_t duration = packetSource->getBufferedDurationUs(&finalResult, &sampleCount);
+        if (finalResult == OK && duration < kMinDurationUs) {
+            return -EAGAIN;
+        }
+        framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
+        ALOGI("httplive framerate = %d", framerate);
+        meta->setInt32(kKeyFrameRate,framerate);
+    } else if (stream == STREAMTYPE_AUDIO && (mStreamMask & STREAMTYPE_VIDEO)) {
+        sp<AnotherPacketSource> videopacketSource = mPacketSources.valueFor(STREAMTYPE_VIDEO);
+        sp<MetaData> videometa = videopacketSource->getFormat();
+        if (videometa != NULL && !videometa->findInt32(kKeyFrameRate,&framerate)) {
+            static const int64_t kMinDurationUs = 1000000ll;
+            status_t finalResult = OK;
+            size_t sampleCount = 0;
+            int64_t duration = videopacketSource->getBufferedDurationUs(&finalResult, &sampleCount);
+            if (finalResult == OK && duration < kMinDurationUs) {
+                return -EAGAIN;
+            }
+            framerate = ((sampleCount - 1) * 1000000LL + (duration >> 1)) / duration;
+            ALOGI("httplive framerate = %d", framerate);
+            videometa->setInt32(kKeyFrameRate,framerate);
+        }
+    }
+#endif
     return convertMetaDataToMessage(meta, format);
 }
 
