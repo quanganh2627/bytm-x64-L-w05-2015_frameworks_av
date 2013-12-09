@@ -1615,6 +1615,9 @@ nsecs_t AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
             return NS_NEVER;
         }
 
+#if 0
+// BZ: 155646. The return of timing here delays the fetching of buffers
+// and results in irregular wake patterns for AudioTrack. So disabling the logic
         if (mRetryOnPartialBuffer && !isOffloaded()) {
             mRetryOnPartialBuffer = false;
             if (avail < mRemainingFrames) {
@@ -1625,6 +1628,7 @@ nsecs_t AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
                 return ns;
             }
         }
+#endif
 
         // Divide buffer size by 2 to take into account the expansion
         // due to 8 to 16 bit conversion: the callback must fill only half
