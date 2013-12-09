@@ -41,13 +41,15 @@ public:
     enum {
         GET_NUMBER_OF_CAMERAS = IBinder::FIRST_CALL_TRANSACTION,
         GET_CAMERA_INFO,
-        SET_PRIORITY, // Intel
         CONNECT,
         CONNECT_PRO,
         CONNECT_DEVICE,
         ADD_LISTENER,
         REMOVE_LISTENER,
         GET_CAMERA_CHARACTERISTICS,
+        // Intel extension not added to ICameraService.aidl, since setting
+        // low priority is not supported for Camera HAL v3. Keep at the end
+        SET_PRIORITY,
     };
 
     enum {
@@ -72,8 +74,6 @@ public:
     // - Errors: BAD_VALUE if specified listener was not in the listener list
     virtual status_t removeListener(const sp<ICameraServiceListener>& listener)
                                                                             = 0;
-
-    virtual status_t setPriority(int cameraId, bool lowPriority) = 0;
 
     /**
      * clientPackageName and clientUid are used for permissions checking.  if
@@ -101,6 +101,8 @@ public:
             int clientUid,
             /*out*/
             sp<ICameraDeviceUser>& device) = 0;
+
+    virtual status_t setPriority(int cameraId, bool lowPriority) = 0;
 };
 
 // ----------------------------------------------------------------------------
