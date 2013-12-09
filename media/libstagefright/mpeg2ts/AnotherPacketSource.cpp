@@ -263,7 +263,11 @@ bool AnotherPacketSource::hasBufferAvailable(status_t *finalResult) {
     return false;
 }
 
+#ifndef TARGET_HAS_VPP
 int64_t AnotherPacketSource::getBufferedDurationUs(status_t *finalResult) {
+#else
+int64_t AnotherPacketSource::getBufferedDurationUs(status_t *finalResult, size_t *sampleCount) {
+#endif
     Mutex::Autolock autoLock(mLock);
 
     *finalResult = mEOSResult;
@@ -274,6 +278,9 @@ int64_t AnotherPacketSource::getBufferedDurationUs(status_t *finalResult) {
 
     int64_t time1 = -1;
     int64_t time2 = -1;
+#ifdef TARGET_HAS_VPP
+    size_t bufferCount = 0;
+#endif
 
     List<sp<ABuffer> >::iterator it = mBuffers.begin();
     while (it != mBuffers.end()) {
@@ -286,13 +293,25 @@ int64_t AnotherPacketSource::getBufferedDurationUs(status_t *finalResult) {
             }
 
             time2 = timeUs;
+#ifdef TARGET_HAS_VPP
+            bufferCount++;
+#endif
         } else {
             // This is a discontinuity, reset everything.
             time1 = time2 = -1;
+#ifdef TARGET_HAS_VPP
+            bufferCount = 0;
+#endif
         }
 
         ++it;
     }
+
+#ifdef TARGET_HAS_VPP
+    if (sampleCount != NULL) {
+        *sampleCount = bufferCount;
+    }
+#endif
 
     return time2 - time1;
 }
