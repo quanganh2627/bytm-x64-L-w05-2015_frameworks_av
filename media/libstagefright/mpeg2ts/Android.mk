@@ -44,4 +44,8 @@ ifeq ($(TARGET_ARCH),arm)
     LOCAL_CFLAGS += -Wno-psabi
 endif
 
+ifeq ($(TARGET_HAS_VPP),true)
+    LOCAL_CFLAGS += -DTARGET_HAS_VPP
+endif
+
 include $(BUILD_STATIC_LIBRARY)
