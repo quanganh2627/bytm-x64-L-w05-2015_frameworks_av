@@ -401,6 +401,10 @@ ACodec::ACodec()
       mVppInBufNum(0),
       mVppOutBufNum(0),
 #endif
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mMDSVideoSessionId(-1),
+      mMDClient(NULL),
+#endif
       mChannelMaskPresent(false),
       mChannelMask(0),
       mDequeueCounter(0),
@@ -428,6 +432,9 @@ ACodec::ACodec()
 }
 
 ACodec::~ACodec() {
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l((int)MDS_VIDEO_UNPREPARED, NULL);
+#endif
 }
 
 void ACodec::setNotificationMessage(const sp<AMessage> &msg) {
@@ -606,6 +613,100 @@ bool ACodec::isVppBufferAvail() {
     return (mVppInBufNum != 0);
 }
 #endif
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+
+void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
+    ALOGV("Update Video State: %d, %d, %d, %p",
+            state, mMDSVideoSessionId, (mFlags & kFlagIsSecure), this);
+    if (mIsEncoder) {
+        //ALOGW("Encoder is %d or Native window is invalid", mIsEncoder);
+        return;
+    }
+    if (state >= MDS_VIDEO_UNPREPARING && mMDSVideoSessionId < 0) {
+        //ALOGW("Invalid unprepared or unpreparing state");
+        return;
+    }
+    if (!(mFlags & kFlagIsSecure) &&
+            (state == MDS_VIDEO_PREPARING || state == MDS_VIDEO_UNPREPARING)) {
+        // ignore preparing and unpreparing state if video is not protected
+        //ALOGW("Ignore MDS preparing and unpreparing for clear content");
+        return;
+    }
+    if (state == MDS_VIDEO_PREPARED) {
+        int wcom = 0;
+        /*
+         * 0 means the buffers do not go directly to the window compositor;
+         * 1 means the ANativeWindow DOES send queued buffers
+         * directly to the window compositor;
+         * For more info, refer system/core/include/system/window.h
+         */
+        if (mNativeWindow != NULL) {
+            mNativeWindow->query(mNativeWindow.get(),
+                    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+        }
+        if (wcom == 0) {
+            //ALOGW("MDS's wcom flag is 0");
+            return;
+        }
+    }
+    if (mMDClient == NULL) {
+#ifdef USE_MDS_LEGACY
+        mMDClient = new MultiDisplayClient();
+#else
+        sp<IServiceManager> sm = defaultServiceManager();
+        if (sm == NULL) {
+            ALOGW("%s: Failed to get service manager", __func__);
+            return;
+        }
+        sp<IMDService> mds = interface_cast<IMDService>(
+                sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
+        if (mds == NULL) {
+            ALOGW("%s: Failed to get MDS service", __func__);
+            return;
+        }
+        mMDClient = mds->getVideoControl();
+#endif
+    }
+    if (mMDSVideoSessionId < 0) {
+        mMDSVideoSessionId = mMDClient->allocateVideoSessionId();
+    }
+    if (state == MDS_VIDEO_PREPARED) {
+        if (msg != NULL && msg.get() != NULL) {
+            MDSVideoSourceInfo info;
+            memset(&info, 0, sizeof(MDSVideoSourceInfo));
+#ifdef USE_MDS_LEGACY
+            info.isPlaying = true;
+#endif
+            info.isProtected = ((mFlags & kFlagIsSecure) != 0);
+            bool success = msg->findInt32("frame-rate", &info.frameRate);
+            if (!success)
+                info.frameRate = 0;
+            success = msg->findInt32("width", &info.displayW);
+            if (!success)
+                info.displayW = 0;
+            success = msg->findInt32("height", &info.displayH);
+            if (!success)
+                info.displayH = 0;
+            mMDClient->updateVideoSourceInfo(mMDSVideoSessionId, info);
+        }
+    }
+    mMDClient->updateVideoState(mMDSVideoSessionId, (MDS_VIDEO_STATE)state);
+    if (state == MDS_VIDEO_UNPREPARED) {
+        mMDSVideoSessionId = -1;
+#ifdef USE_MDS_LEGACY
+        delete mMDClient;
+#endif
+        mMDClient = NULL;
+    }
+}
+
+int ACodec::getMDSVideoSessionId() {
+    return mMDSVideoSessionId;
+}
+
+#endif
+
 
 status_t ACodec::configureOutputBuffersFromNativeWindow(
         OMX_U32 *bufferCount, OMX_U32 *bufferSize,
@@ -4164,6 +4265,9 @@ bool ACodec::UninitializedState::onAllocateComponent(const sp<AMessage> &msg) {
         notify->setString("componentName", mCodec->mComponentName.c_str());
         notify->post();
     }
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    mCodec->setMDSVideoState_l((int)MDS_VIDEO_PREPARING, NULL);
+#endif
 
     mCodec->changeState(mCodec->mLoadedState);
 
@@ -4200,6 +4304,9 @@ void ACodec::LoadedState::stateEntered() {
 }
 
 void ACodec::LoadedState::onShutdown(bool keepComponentAllocated) {
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    mCodec->setMDSVideoState_l((int)MDS_VIDEO_UNPREPARING, NULL);
+#endif
     if (!keepComponentAllocated) {
         CHECK_EQ(mCodec->mOMX->freeNode(mCodec->mNode), (status_t)OK);
 
@@ -4305,7 +4412,9 @@ bool ACodec::LoadedState::onConfigureComponent(
         notify->setInt32("what", ACodec::kWhatComponentConfigured);
         notify->post();
     }
-
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    mCodec->setMDSVideoState_l((int)MDS_VIDEO_PREPARED, msg);
+#endif
     return true;
 }
 

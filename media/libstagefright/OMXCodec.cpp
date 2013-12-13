@@ -1617,6 +1617,10 @@ OMXCodec::OMXCodec(
       mVppOutBufNum(0),
       mVppBufAvail(false),
 #endif
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mMDClient(NULL),
+      mMDSVideoSessionId(-1),
+#endif
       mOMXLivesLocally(omx->livesLocally(node, getpid())),
       mNode(node),
       mQuirks(quirks),
@@ -1651,6 +1655,9 @@ OMXCodec::OMXCodec(
     mPortStatus[kPortIndexOutput] = ENABLED;
 
     setComponentRole();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l((int)(MDS_VIDEO_PREPARING));
+#endif
 }
 
 // static
@@ -4188,8 +4195,14 @@ status_t OMXCodec::start(MetaData *meta) {
 status_t OMXCodec::stop() {
     CODEC_LOGV("stop mState=%d", mState);
     Mutex::Autolock autoLock(mLock);
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
+#endif
     status_t err = stopOmxComponent_l();
     mSource->stop();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARED);
+#endif
 
     CODEC_LOGV("stopped in state %d", mState);
     return err;
@@ -4417,6 +4430,11 @@ status_t OMXCodec::read(
         mSkipCutBuffer->submit(info->mMediaBuffer);
     }
     *buffer = info->mMediaBuffer;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    if (mFirstFrame) {
+        setMDSVideoState_l((int)MDS_VIDEO_PREPARED);
+    }
+#endif
     mFirstFrame = false;
 
     return OK;
@@ -5065,6 +5083,107 @@ status_t OMXCodec::pause() {
 
     return OK;
 }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+
+void OMXCodec::setMDSVideoState_l(int state) {
+    ALOGV("Update Video State: %d, %d, %d, %p",
+            state, mMDSVideoSessionId, (mFlags & kEnableGrallocUsageProtected), this);
+    if (mIsEncoder) {
+        //ALOGW("Encoder is %d, Native window is invalid", mIsEncoder);
+        return;
+    }
+    if (state >= MDS_VIDEO_UNPREPARING && mMDSVideoSessionId < 0) {
+        //ALOGW("Invalid unprepared state");
+        return;
+    }
+    if (!(mFlags & kEnableGrallocUsageProtected) &&
+            (state == MDS_VIDEO_PREPARING || state == MDS_VIDEO_UNPREPARING)) {
+        // ignore preparing and unpreparing state if video is not protected
+        //ALOGW("Ignore MDS preparing and unpreparing for clear content");
+        return;
+    }
+    if (state == MDS_VIDEO_PREPARED) {
+        int wcom = 0;
+        /*
+         * 0 means the buffers do not go directly to the window compositor;
+         * 1 means the ANativeWindow DOES send queued buffers
+         * directly to the window compositor;
+         * For more info, refer system/core/include/system/window.h
+         */
+        if (mNativeWindow != NULL) {
+            mNativeWindow->query(mNativeWindow.get(),
+                    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
+        }
+        if (wcom == 0) {
+            //ALOGW("MDS's wcom flag is 0");
+            return;
+        }
+    }
+    if (mMDClient == NULL) {
+#ifdef USE_MDS_LEGACY
+        mMDClient = new MultiDisplayClient();
+#else
+        sp<IServiceManager> sm = defaultServiceManager();
+        if (sm == NULL) {
+            ALOGW("%s: Failed to get service manager", __func__);
+            return;
+        }
+        sp<IMDService> mds = interface_cast<IMDService>(
+                sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
+        if (mds == NULL) {
+            ALOGW("%s: Failed to get MDS service", __func__);
+            return;
+        }
+        mMDClient = mds->getVideoControl();
+#endif
+    }
+    if (mMDSVideoSessionId < 0) {
+        mMDSVideoSessionId = mMDClient->allocateVideoSessionId();
+    }
+    if (state == MDS_VIDEO_PREPARED) {
+        MDSVideoSourceInfo info;
+        memset(&info, 0, sizeof(MDSVideoSourceInfo));
+#ifdef USE_MDS_LEGACY
+        info.isPlaying = true;
+#endif
+        info.isProtected = ((mFlags & kEnableGrallocUsageProtected) != 0);
+        sp<MetaData> meta = mSource->getFormat();
+        if (!meta->findInt32(kKeyFrameRate, &info.frameRate)) {
+            info.frameRate = 0;
+        }
+        if (!meta->findInt32(kKeyDisplayWidth, &info.displayW)) {
+            info.displayW = 0;
+        }
+        if (!meta->findInt32(kKeyDisplayHeight, &info.displayH)) {
+            info.displayH = 0;
+        }
+#if 0
+#ifdef TARGET_HAS_VPP
+        // mVPPProcessor is NULL in case of  VPP is off
+        if (mVPPProcessor) {
+            info.frameRate = mVPPProcessor->getVppOutputFps();
+        }
+#endif
+#endif
+        mMDClient->updateVideoSourceInfo(mMDSVideoSessionId, info);
+    }
+    mMDClient->updateVideoState(mMDSVideoSessionId, (MDS_VIDEO_STATE)state);
+    if (state == MDS_VIDEO_UNPREPARED) {
+        mMDSVideoSessionId = -1;
+#ifdef USE_MDS_LEGACY
+        delete mMDClient;
+#endif
+        mMDClient = NULL;
+    }
+}
+
+int OMXCodec::getMDSVideoSessionId() {
+    Mutex::Autolock autoLock(mLock);
+    return mMDSVideoSessionId;
+}
+
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
