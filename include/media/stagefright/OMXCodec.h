@@ -20,6 +20,7 @@
 
 #include <android/native_window.h>
 #include <media/IOMX.h>
+#include <media/stagefright/OMXCodecBase.h>
 #include <media/stagefright/MediaBuffer.h>
 #include <media/stagefright/MediaSource.h>
 #include <utils/threads.h>
@@ -37,8 +38,11 @@ class SkipCutBuffer;
 class VPPProcessor;
 #endif
 
+// We created the OMXCodecBase as the base class of OMXCodec is for the same design and
+// purpose with what we did for AwesomePlayer. See the detail description in AwesomePlayer.h
 struct OMXCodec : public MediaSource,
-                  public MediaBufferObserver {
+                  public MediaBufferObserver,
+                  public OMXCodecBase {
     enum CreationFlags {
         kPreferSoftwareCodecs    = 1,
         kIgnoreCodecSpecificData = 2,
@@ -136,6 +140,11 @@ private:
 
     // Make sure mLock is accessible to OMXCodecObserver
     friend class OMXCodecObserver;
+
+    // Make sure the private variables are accessible to the
+    // inherit class IMSOMXCodec and IMSOMXCodecObserver
+    friend struct IMSOMXCodec;
+    friend class IMSOMXCodecObserver;
 
 #ifdef TARGET_HAS_VPP
     // Make sure BufferInfo is accessible in VPPProcessor

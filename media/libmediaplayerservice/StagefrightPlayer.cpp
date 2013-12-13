@@ -25,11 +25,21 @@
 #include <media/Metadata.h>
 #include <media/stagefright/MediaExtractor.h>
 
+#define ENABLE_IMS_PLAYER
+
 namespace android {
 
 StagefrightPlayer::StagefrightPlayer()
-    : mPlayer(new AwesomePlayer) {
+    : mPlayer(NULL) {
     ALOGV("StagefrightPlayer");
+
+#ifdef ENABLE_IMS_PLAYER
+    mPlayer = mIMSPlayerLoader.load();
+#endif
+
+    if (NULL == mPlayer) {
+        mPlayer = new AwesomePlayer();
+    }
 
     mPlayer->setListener(this);
 }
@@ -37,6 +47,13 @@ StagefrightPlayer::StagefrightPlayer()
 StagefrightPlayer::~StagefrightPlayer() {
     ALOGV("~StagefrightPlayer");
     reset();
+
+#ifdef ENABLE_IMS_PLAYER
+    if (mIMSPlayerLoader.isIMSPlayerLoaded()) {
+        mIMSPlayerLoader.unload(mPlayer);
+        mPlayer = NULL;
+    }
+#endif
 
     delete mPlayer;
     mPlayer = NULL;

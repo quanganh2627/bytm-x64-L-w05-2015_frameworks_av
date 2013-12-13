@@ -20,6 +20,7 @@
 
 #include "HTTPBase.h"
 #include "TimedEventQueue.h"
+#include "AwesomePlayerBase.h"
 
 #ifdef TARGET_HAS_VPP
 #include "VPPProcessor.h"
@@ -75,7 +76,14 @@ struct IntelPlatformPrivate {
 };
 #endif
 
-struct AwesomePlayer {
+//We attached a base class (AwesomePlayerBase) to AwesomePlayer here is order to:
+//(1) Make several AwesomePlayer's functions as "virtual"(declared in AwesomePlayerBase class),
+//    thus Intel Media Scheduler Player, which derived from AwesomePlayer, is able to
+//    overwrite these virtual functions to provide Intel Media Scheduler features.
+//(2) Declaring "virtual" functions in AwesomePlayerBase class instead of in AwesomePlayer class
+//    directly is to minimize the code changes in libstagefright and minimize the efforts
+//    when Android code base upgrade in future.
+struct AwesomePlayer : public AwesomePlayerBase {
     AwesomePlayer();
     ~AwesomePlayer();
 
@@ -131,6 +139,7 @@ struct AwesomePlayer {
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
+    friend struct IMSPlayer;
 
     enum {
         PLAYING             = 0x01,

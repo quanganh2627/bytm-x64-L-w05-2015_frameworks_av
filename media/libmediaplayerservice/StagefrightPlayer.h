@@ -19,6 +19,7 @@
 #define ANDROID_STAGEFRIGHTPLAYER_H
 
 #include <media/MediaPlayerInterface.h>
+#include "IMSPlayerLoader.h"
 
 namespace android {
 
@@ -66,6 +67,7 @@ public:
 
 private:
     AwesomePlayer *mPlayer;
+    IMSPlayerLoader mIMSPlayerLoader;
 
     StagefrightPlayer(const StagefrightPlayer &);
     StagefrightPlayer &operator=(const StagefrightPlayer &);
