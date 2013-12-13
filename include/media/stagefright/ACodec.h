@@ -25,6 +25,16 @@
 #include <media/stagefright/SkipCutBuffer.h>
 #include <OMX_Audio.h>
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
+#include <display/MultiDisplayClient.h>
+#else
+#include <display/MultiDisplayService.h>
+#include <display/IMultiDisplayVideoControl.h>
+using namespace android::intel;
+#endif
+#endif
+
 #define TRACK_BUFFER_TIMING     0
 
 namespace android {
@@ -73,6 +83,11 @@ struct ACodec : public AHierarchicalStateMachine {
 #ifdef TARGET_HAS_VPP
     void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
     bool isVppBufferAvail();
+#endif
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    void setMDSVideoState_l(int status, const sp<AMessage> &msg);
+    int  getMDSVideoSessionId();
 #endif
 
     struct PortDescription : public RefBase {
@@ -162,6 +177,16 @@ private:
     uint32_t mVppInBufNum;
     uint32_t mVppOutBufNum;
 #endif
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    int mMDSVideoSessionId;
+#ifdef USE_MDS_LEGACY
+    MultiDisplayClient* mMDClient;
+#else
+    sp<IMultiDisplayVideoControl> mMDClient;
+#endif
+#endif
+
 
 
 #if TRACK_BUFFER_TIMING

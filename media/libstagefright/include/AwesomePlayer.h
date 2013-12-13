@@ -33,15 +33,7 @@
 #include <media/stagefright/MetaData.h>
 #include <utils/threads.h>
 #include <drm/DrmManagerClient.h>
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifdef USE_MDS_LEGACY
-#include <display/MultiDisplayClient.h>
-#else
-#include <display/MultiDisplayService.h>
-#include <display/IMultiDisplayVideoControl.h>
-using namespace android::intel;
-#endif
-#endif
+
 
 namespace android {
 
@@ -237,14 +229,6 @@ private:
 
     bool mWatchForAudioSeekComplete;
     bool mWatchForAudioEOS;
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifdef USE_MDS_LEGACY
-    MultiDisplayClient* mMDClient;
-#else
-    sp<IMultiDisplayVideoControl> mMDClient;
-#endif
-    int mVideoSessionId;
-#endif
 
     sp<TimedEventQueue::Event> mVideoEvent;
     bool mVideoEventPending;
@@ -298,9 +282,11 @@ private:
 
     status_t setDataSource_l(const sp<DataSource> &dataSource);
     status_t setDataSource_l(const sp<MediaExtractor> &extractor);
+
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    void setMDSVideoState_l(int status);
+    void updateMDSVideoSessionId_l(struct IntelPlatformPrivate* param);
 #endif
+
     void reset_l();
     status_t seekTo_l(int64_t timeUs);
     status_t pause_l(bool at_eos = false);
