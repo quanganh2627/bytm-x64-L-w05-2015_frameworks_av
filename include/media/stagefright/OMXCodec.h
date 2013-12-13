@@ -25,6 +25,15 @@
 #include <utils/threads.h>
 
 #include <OMX_Audio.h>
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#ifdef USE_MDS_LEGACY
+#include <display/MultiDisplayClient.h>
+#else
+#include <display/MultiDisplayService.h>
+#include <display/IMultiDisplayVideoControl.h>
+using namespace android::intel;
+#endif
+#endif
 
 namespace android {
 
@@ -131,6 +140,10 @@ struct OMXCodec : public MediaSource,
     void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
     bool isVppBufferAvail();
 #endif
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    void setMDSVideoState_l(int status);
+    int  getMDSVideoSessionId();
+#endif
 
 protected:
     virtual ~OMXCodec();
@@ -146,6 +159,14 @@ private:
     uint32_t mVppInBufNum;
     uint32_t mVppOutBufNum;
     bool mVppBufAvail;
+#endif
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    int mMDSVideoSessionId;
+#ifdef USE_MDS_LEGACY
+    MultiDisplayClient* mMDClient;
+#else
+    sp<IMultiDisplayVideoControl> mMDClient;
+#endif
 #endif
 
     // Call this with mLock hold

@@ -281,10 +281,6 @@ AwesomePlayer::AwesomePlayer()
       mVPPInit(false),
 #endif
       mDeepBufferAudio(false),
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-      mMDClient(NULL),
-      mVideoSessionId(-1),
-#endif
       mLastVideoTimeUs(-1),
       mTextDriver(NULL),
       mOffloadAudio(false),
@@ -349,9 +345,6 @@ AwesomePlayer::~AwesomePlayer() {
     reset();
 
     mClient.disconnect();
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setMDSVideoState_l(MDS_VIDEO_UNPREPARED);
-#endif
 }
 
 void AwesomePlayer::cancelPlayerEvents(bool keepNotifications) {
@@ -488,88 +481,6 @@ void AwesomePlayer::checkDrmStatus(const sp<DataSource>& dataSource) {
     }
 }
 
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-
-void AwesomePlayer::setMDSVideoState_l(int state) {
-    if (state == MDS_VIDEO_UNPREPARED && mVideoSessionId == -1) {
-        return;
-    }
-    if ((state == MDS_VIDEO_PREPARING || state == MDS_VIDEO_UNPREPARING) &&
-         (mDecryptHandle == NULL)) {
-        // ignore preparing and unpreparing state if video is not protected
-        return;
-    }
-    ALOGV("update MDS Video State: %d", state);
-    if (state == MDS_VIDEO_PREPARED) {
-        int wcom = 0;
-        if (mNativeWindow == NULL)
-            return;
-        mNativeWindow->query(mNativeWindow.get(),
-                NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-        /*
-         * 0 means the buffers do not go directly to the window compositor;
-         * 1 means the ANativeWindow DOES send queued buffers
-         * directly to the window compositor;
-         * For more info, refer system/core/include/system/window.h
-         */
-        if (wcom == 0 || mVideoSource == NULL) {
-            ALOGI("MDS's wcom flag is 0 or video source is null");
-            return;
-        }
-    }
-    if (mMDClient == NULL) {
-#ifdef USE_MDS_LEGACY
-        mMDClient = new MultiDisplayClient();
-#else
-        sp<IServiceManager> sm = defaultServiceManager();
-        if (sm == NULL) {
-            ALOGW("%s: Failed to get service manager", __func__);
-            return;
-        }
-        sp<IMDService> mds = interface_cast<IMDService>(
-                sm->getService(String16(INTEL_MDS_SERVICE_NAME)));
-        if (mds == NULL) {
-            ALOGW("%s: Failed to get MDS service", __func__);
-            return;
-        }
-        mMDClient = mds->getVideoControl();
-#endif
-    }
-    if (mVideoSessionId < 0) {
-        mVideoSessionId = mMDClient->allocateVideoSessionId();
-    }
-    if (state == MDS_VIDEO_PREPARED) {
-        MDSVideoSourceInfo info;
-        memset(&info, 0, sizeof(MDSVideoSourceInfo));
-#ifdef USE_MDS_LEGACY
-        info.isPlaying = true;
-#endif
-        info.isProtected = (mDecryptHandle != NULL);
-        {
-            Mutex::Autolock autoLock(mStatsLock);
-            info.frameRate = mStats.mFrameRate;
-            info.displayW = mStats.mVideoWidth;
-            info.displayH = mStats.mVideoHeight;
-#ifdef TARGET_HAS_VPP
-            // mVPPProcessor is NULL in case of  VPP is off
-            if (mVPPProcessor) {
-                info.frameRate = mVPPProcessor->getVppOutputFps();
-            }
-#endif
-        }
-        mMDClient->updateVideoSourceInfo(mVideoSessionId, info);
-    }
-    mMDClient->updateVideoState(mVideoSessionId, (MDS_VIDEO_STATE)state);
-    if (state == MDS_VIDEO_UNPREPARED) {
-        mVideoSessionId = -1;
-#ifdef USE_MDS_LEGACY
-        delete mMDClient;
-#endif
-        mMDClient = NULL;
-    }
-}
-#endif
-
 status_t AwesomePlayer::setDataSource_l(const sp<MediaExtractor> &extractor) {
     // Attempt to approximate overall stream bitrate by summing all
     // tracks' individual bitrates, if not all of them advertise bitrate,
@@ -700,11 +611,6 @@ void AwesomePlayer::reset_l() {
     notifyListener_l(MEDIA_STOPPED);
 
     if (mDecryptHandle != NULL) {
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-            if (mVideoSource != NULL) {
-                setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
-            }
-#endif
             mDrmManagerClient->setPlaybackStatus(mDecryptHandle,
                     Playback::STOP, 0);
             mDecryptHandle = NULL;
@@ -1281,12 +1187,6 @@ status_t AwesomePlayer::play_l() {
     if (isStreamingHTTP()) {
         postBufferingEvent_l();
     }
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    if (mVideoSource != NULL) {
-        setMDSVideoState_l(MDS_VIDEO_PREPARED);
-    }
-#endif
     return OK;
 }
 
@@ -1657,16 +1557,7 @@ void AwesomePlayer::shutdownVideoDecoder_l() {
         mVPPProcessor = NULL;
     }
 #endif
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
-#endif
-
     mVideoSource->stop();
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    setMDSVideoState_l(MDS_VIDEO_UNPREPARED);
-#endif
 
     // The following hack is necessary to ensure that the OMX
     // component is completely released by the time we may try
@@ -2062,9 +1953,6 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
     }
 
     if (mVideoSource != NULL) {
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-        setMDSVideoState_l(MDS_VIDEO_PREPARING);
-#endif
         int64_t durationUs;
         if (mVideoTrack->getFormat()->findInt64(kKeyDuration, &durationUs)) {
             Mutex::Autolock autoLock(mMiscStateLock);
@@ -2072,7 +1960,6 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
                 mDurationUs = durationUs;
             }
         }
-
 #ifdef TARGET_HAS_VPP
         OMXCodec* omxCodec;
         if (mCachedSource != NULL) {
@@ -2185,6 +2072,56 @@ void AwesomePlayer::finishSeekIfNecessary(int64_t videoTimeUs) {
                 Playback::START, videoTimeUs / 1000);
     }
 }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+
+// set mds video session ID
+// Limitation: support upto 16 concurrent video sessions
+// native_window usage, bit 24 ~ bit 27 is used to maintain mds video session id
+void AwesomePlayer::updateMDSVideoSessionId_l(struct IntelPlatformPrivate* param) {
+    if (param == NULL)
+        return;
+
+#ifdef USE_MDS_LEGACY
+    // HACK:XXX
+    // BZ#161189, VP8 SW decoder on CTP is implemented as a MediaSource
+    // object. So we cannot access it as an OMXCodec object.
+    sp<MetaData> meta = mVideoSource->getFormat();
+    const char *component;
+
+    CHECK(meta->findCString(kKeyDecoderComponent, &component));
+    if (!strncmp(component, "CPIVP8Decoder", 13) ||
+            !strncmp(component, "CIPVP8Decoder", 13)) {
+        ALOGV("decoder name: %s", component);
+        return;
+    }
+#endif
+
+    struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
+    OMXCodec* omxCodec = NULL;
+    if (mCachedSource != NULL) {
+        AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
+        omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
+    } else
+        omxCodec = (OMXCodec*) (mVideoSource.get());
+    if (omxCodec == NULL)
+        return;
+    int mdSessionId = omxCodec->getMDSVideoSessionId();
+    if (mdSessionId >= 0) {
+        ALOGV("MDS Video session ID is %d, Gfx buffer is %s",
+                mdSessionId, (anwBuff == NULL? "null" : "not null"));
+        if (anwBuff != NULL) {
+            anwBuff->usage |= ((mdSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
+            anwBuff->usage |= GRALLOC_USAGE_PRIVATE_3;
+        } else {
+            param->usage = GRALLOC_USAGE_PRIVATE_3;
+            param->usage |= ((mdSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
+        }
+    }
+    return;
+}
+
+#endif
 
 void AwesomePlayer::onVideoEvent() {
     ATRACE_CALL();
@@ -2615,22 +2552,8 @@ void AwesomePlayer::onVideoEvent() {
         mSinceLastDropped++;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
         struct IntelPlatformPrivate platformPrivate;
-        struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
-        if (mVideoSessionId >= 0) {
-            ALOGV("MDS Video session ID is %d, Gfx buffer is %s", mVideoSessionId, (anwBuff == NULL? "null" : "not null"));
-            if (anwBuff != NULL) {
-                // Get mds_video_session_ID
-                // Limitation: support upto 16 concurrent video sessions
-                // native_window usage, bit 24 ~ bit 27 is used to maintain mds video session id
-                // TODO: use macro to replace magic numbers
-                anwBuff->usage |= ((mVideoSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
-                anwBuff->usage |= GRALLOC_USAGE_PRIVATE_3;
-            } else {
-                platformPrivate.usage = GRALLOC_USAGE_PRIVATE_3;
-                platformPrivate.usage |= ((mVideoSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
-            }
-        }
-
+        memset(&platformPrivate, 0, sizeof(struct IntelPlatformPrivate));
+        updateMDSVideoSessionId_l(&platformPrivate);
         mVideoRenderer->render(mVideoBuffer, &platformPrivate);
 #else
         mVideoRenderer->render(mVideoBuffer);
