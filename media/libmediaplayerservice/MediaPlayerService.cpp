@@ -350,32 +350,37 @@ sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
     }
 
 #ifdef INTEL_WIDI
-    void *hlibintelwidi = dlopen("libwidiservice.so", RTLD_NOW);
-    if (hlibintelwidi) {
-        ALOGE("dlopen(libwidiservice.so) succeeded in opening from MediaPlayerService.cpp");
-        dlerror(); // Clear existing errors
-        typedef sp<IRemoteDisplay> (*getRemoteDisplayFunc_t)(const String8&, const sp<IRemoteDisplayClient>& );
-        getRemoteDisplayFunc_t getRemoteDisplay = NULL;
-        getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(hlibintelwidi, "getRemoteDisplay");
-        sp<IRemoteDisplay> rd;
-        const char* error = dlerror();
-        if((error == NULL) && (getRemoteDisplay != NULL)) {
-            rd = (*getRemoteDisplay)(iface, client);
+    char propertyVal[PROPERTY_VALUE_MAX];
+    if (property_get("widi.media.implementation", propertyVal, "intel") &&
+            strncmp(propertyVal, "intel", 5) == 0) {
+        void *hlibintelwidi = dlopen("libwidiservice.so", RTLD_NOW);
+        if (hlibintelwidi) {
+            ALOGD("dlopen(libwidiservice.so) succeeded in opening from MediaPlayerService.cpp");
+            dlerror(); // Clear existing errors
+            typedef sp<IRemoteDisplay> (*getRemoteDisplayFunc_t)(const String8&,
+                    const sp<IRemoteDisplayClient>&);
+            getRemoteDisplayFunc_t getRemoteDisplay = NULL;
+            getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(hlibintelwidi, "getRemoteDisplay");
+            sp<IRemoteDisplay> rd;
+            const char* error = dlerror();
+            if((error == NULL) && (getRemoteDisplay != NULL)) {
+                rd = (*getRemoteDisplay)(iface, client);
+            }
+            else {
+                ALOGI("dlsym(getRemoteDisplay) failed with error %s."
+                        " Falling back to non-Intel version.", error);
+                rd = new RemoteDisplay(client, iface.string());
+            }
+            dlclose(hlibintelwidi);
+            return rd;
         }
         else {
-            ALOGI("dlsym(getRemoteDisplay) failed with error %s. Falling back to non-Intel version.", error);
-            rd = new RemoteDisplay(client, iface.string());
+            ALOGE("dlopen(libwidiservice.so) failed. Falling back to non-Intel version.");
         }
-        dlclose(hlibintelwidi);
-        return rd;
     }
-    else {
-        ALOGE("dlopen(libwidiservice.so) failed. Falling back to non-Intel version.");
-        return new RemoteDisplay(client, iface.string());
-    }
-#else
-    return new RemoteDisplay(client, iface.string());
 #endif
+
+    return new RemoteDisplay(client, iface.string());
 }
 
 status_t MediaPlayerService::updateProxyConfig(
