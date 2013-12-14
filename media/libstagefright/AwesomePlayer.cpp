@@ -2669,7 +2669,16 @@ void AwesomePlayer::onVideoEvent() {
     if (wasSeeking == NO_SEEK) {
         MediaSource::ReadOptions options;
         for (;;) {
+#ifdef TARGET_HAS_VPP
+            status_t err = OK;
+            if (mVPPProcessor) {
+                err = mVPPProcessor->read(&mVideoBuffer);
+            } else {
+                err = mVideoSource->read(&mVideoBuffer, &options);
+            }
+#else
             status_t err = mVideoSource->read(&mVideoBuffer, &options);
+#endif
             if (err != OK) {
                 // deal with any errors next time
                 CHECK(mVideoBuffer == NULL);
