@@ -77,6 +77,10 @@ endif
 #endif
 #endif
 
+ifeq ($(INTEL_WIDI), true)
+LOCAL_CFLAGS += -DINTEL_WIDI
+endif
+
 LOCAL_MODULE:= libmediaplayerservice
 
 include $(BUILD_SHARED_LIBRARY)
