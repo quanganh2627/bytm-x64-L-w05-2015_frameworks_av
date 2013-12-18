@@ -66,6 +66,10 @@
 #include "MetaDataExt.h"
 #endif
 
+#include <OMX_IndexExt.h>
+#include <OMX_VideoExt.h>
+
+
 namespace android {
 
 template<class T>
@@ -4748,6 +4752,28 @@ status_t ACodec::setParameters(const sp<AMessage> &params) {
         if (err != OK) {
             ALOGE("Requesting a sync frame failed w/ err %d", err);
             return err;
+        }
+    }
+
+    int32_t NALUformat;
+    if (params->findInt32("use-nalu-format", &NALUformat)) {
+        OMX_NALSTREAMFORMATTYPE naluType;
+        InitOMXParams(&naluType);
+        naluType.nPortIndex = kPortIndexOutput;
+        naluType.eNaluFormat = (OMX_NALUFORMATSTYPE) 0;
+
+        status_t err = mOMX->getParameter(mNode, (OMX_INDEXTYPE) OMX_IndexParamNalStreamFormatSupported,(void*)&naluType, sizeof(naluType));
+
+        if (err == OK) {
+            if (naluType.eNaluFormat & NALUformat) {
+                naluType.eNaluFormat = (OMX_NALUFORMATSTYPE) NALUformat;
+                err = mOMX->setParameter(mNode, (OMX_INDEXTYPE) OMX_IndexParamNalStreamFormatSelect,(void*)&naluType, sizeof(naluType));
+
+                if (err != OK) {
+                    ALOGE("SetParameter OMX_IndexParamNalStreamFormatSelect format=0x%08x, returned error 0x%08x",NALUformat, err);
+                    return err;
+                }
+            }
         }
     }
 
