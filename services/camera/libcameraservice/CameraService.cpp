@@ -44,9 +44,13 @@
 #include "api2/CameraDeviceClient.h"
 #include "utils/CameraTraces.h"
 #include "CameraDeviceFactory.h"
-#if PLATFORM_ASF_VERSION >= 2
+#ifdef INTEL_FEATURE_ASF
+#include "AsfVersionAosp.h"
+#if PLATFORM_ASF_VERSION >= ASF_VERSION_2
+
 // The interface file for inserting hooks to communicate with native service securitydevice
 #include "AsfDeviceAosp.h"
+#endif
 #endif
 
 namespace android {
@@ -224,7 +228,7 @@ int32_t CameraService::getNumberOfCameras() {
     return mNumberOfCameras;
 }
 
-#if PLATFORM_ASF_VERSION >= 2
+#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
 bool CameraService::notifyCameraAccess() {
     // Adding hook to call security device service
     const int pid = IPCThreadState::self()->getCallingPid();
@@ -481,7 +485,7 @@ status_t CameraService::connect(
         return status;
     }
 
-#if PLATFORM_ASF_VERSION >= 2
+#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
     bool response;
     // Place call to function that acts as a hook point for camera events
     response = notifyCameraAccess();
