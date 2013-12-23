@@ -1869,10 +1869,11 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
         return processor;
 
 #ifdef TARGET_HAS_FRC_SLOW_MOTION
-    if (mIsSlowMotionMode || VPPProcessor::isVppOn()) {
+    if (mIsSlowMotionMode || VPPProcessor::isVppOn())
 #else
-    if (VPPProcessor::isVppOn()) {
+    if (VPPProcessor::isVppOn())
 #endif
+    {
         processor = VPPProcessor::getInstance(mNativeWindow, omxCodec);
         if (processor != NULL) {
             VPPVideoInfo info;
@@ -1898,13 +1899,23 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
             info.height = height;
 #ifdef TARGET_HAS_FRC_SLOW_MOTION
             LOGI("mIsSlowMotionMode = %d, mSlowMotionFactor = %d", mIsSlowMotionMode, mSlowMotionFactor);
-            if (processor->validateVideoInfo(&info, mSlowMotionFactor) != VPP_OK) {
+            if (processor->validateVideoInfo(&info, mSlowMotionFactor) != VPP_OK)
 #else
-            if (processor->validateVideoInfo(&info) != VPP_OK) {
+            if (processor->validateVideoInfo(&info) != VPP_OK)
 #endif
+            {
                 delete processor;
                 processor = NULL;
             }
+
+#ifdef HDMI_EXTEND_MODE_VPP_FRC_ENABLE
+            /* Enable VPP FRC for HDMI feature
+             * This feature is disabled by default
+             */
+            if (processor->configFrc4Hdmi(true) != STATUS_OK) {
+                LOGW("Warning: VPP failed to enable VPP FRC for HDMI");
+            }
+#endif
         }
     }
     return processor;
@@ -2032,11 +2043,6 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
 
         if (mVPPProcessor != NULL) {
             omxCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
-            int frameRate = mVPPProcessor->getVppOutputFps();
-            ALOGI("VPP SET New frame rate: %d\n", frameRate);
-            if (!omxCodec->setVppFrameRate(frameRate)) {
-                ALOGW("VPP faield to SET New frame rate: %d\n", frameRate);
-            }
         }
 #endif
         status_t err = mVideoSource->start();
@@ -2052,7 +2058,13 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
             if (!success) {
                 delete mVPPProcessor;
                 mVPPProcessor = NULL;
-            }
+            } else {
+                 int frameRate = mVPPProcessor->getVppOutputFps();
+                 ALOGI("VPP SET New frame rate: %d\n", frameRate);
+                 if (!omxCodec->setVppFrameRate(frameRate)) {
+                     ALOGW("VPP faield to SET New frame rate: %d\n", frameRate);
+                 }
+          }
         }
 #endif
     }
