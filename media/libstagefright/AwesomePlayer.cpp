@@ -2195,7 +2195,6 @@ void AwesomePlayer::onVideoEvent() {
         return;
     }
     mVideoEventPending = false;
-
 #ifdef TARGET_HAS_VPP
     if (mVPPProcessor == NULL) {
 #endif
@@ -2674,9 +2673,19 @@ void AwesomePlayer::onVideoEvent() {
                 err = mVPPProcessor->read(&mVideoBuffer);
             } else {
                 err = mVideoSource->read(&mVideoBuffer, &options);
+#ifdef DUMP_DECODE_INFO
+            if(g_log_level >= LOG_LEVEL_1 && err == OK ) {
+                 ++tl_decodeFrameCount;
+            }
+#endif
             }
 #else
             status_t err = mVideoSource->read(&mVideoBuffer, &options);
+#ifdef DUMP_DECODE_INFO
+            if(g_log_level >= LOG_LEVEL_1 && err == OK ) {
+                 ++tl_decodeFrameCount;
+            }
+#endif
 #endif
             if (err != OK) {
                 // deal with any errors next time
@@ -2685,15 +2694,19 @@ void AwesomePlayer::onVideoEvent() {
                 return;
             }
 
-            if (mVideoBuffer->range_length() != 0) {
-                break;
+            if (mVideoBuffer->range_length() == 0) {
+                // Some decoders, notably the PV AVC software decoder
+                // return spurious empty buffers that we just want to ignore.
+#ifdef DUMP_DECODE_INFO
+                log_decode_print(LOG_LEVEL_1,"get the %dth empty buffer", tl_emptyFrameCount++);
+#endif
+
+                mVideoBuffer->release();
+                mVideoBuffer = NULL;
+                continue;
             }
 
-            // Some decoders, notably the PV AVC software decoder
-            // return spurious empty buffers that we just want to ignore.
-
-            mVideoBuffer->release();
-            mVideoBuffer = NULL;
+            break;
         }
 
         {
