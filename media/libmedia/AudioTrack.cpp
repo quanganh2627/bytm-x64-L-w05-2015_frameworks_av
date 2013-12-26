@@ -26,6 +26,7 @@
 #include <utils/Log.h>
 #include <private/media/AudioTrackShared.h>
 #include <media/IAudioFlinger.h>
+#include <cutils/properties.h>
 
 #define WAIT_PERIOD_MS                  10
 #define WAIT_STREAM_END_TIMEOUT_SEC     120
@@ -1101,6 +1102,14 @@ status_t AudioTrack::createTrack_l(
     mAudioTrack->attachAuxEffect(mAuxEffectId);
     // FIXME don't believe this lie
     mLatency = afLatency + (1000*frameCount) / sampleRate;
+    // Intel Platforms have a constant setup time which varies from platform to
+    // platform. This number is taken from a prop and is in ms. Setup time
+    // varies from platform to platform and is arrived through experimentations
+    // TODO: The value should be queried from HAL instead of prop.
+    char value[PROPERTY_VALUE_MAX];
+    if (property_get("lpa.audiosetup.time", value, "0")) {
+        mLatency += atoi(value);
+    }
     mFrameCount = frameCount;
     // If IAudioTrack is re-created, don't let the requested frameCount
     // decrease.  This can confuse clients that cache frameCount().
