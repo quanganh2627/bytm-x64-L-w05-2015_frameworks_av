@@ -24,6 +24,7 @@
 
 #include <cutils/misc.h>
 #include <cutils/config_utils.h>
+#include <cutils/properties.h>
 #include <audio_effects/audio_effects_conf.h>
 
 static list_elem_t *gEffectList; // list of effect_entry_t: all currently created effects
@@ -368,27 +369,21 @@ int EffectRelease(effect_handle_t handle)
     }
     if (e1 == NULL) {
         ret = -ENOENT;
-        pthread_mutex_unlock(&gLibLock);
         goto exit;
     }
 
     // release effect in library
     if (fx->lib == NULL) {
         ALOGW("EffectRelease() fx %p library already unloaded", handle);
-        pthread_mutex_unlock(&gLibLock);
     } else {
         pthread_mutex_lock(&fx->lib->lock);
-        // Releasing the gLibLock here as the list access is over as the
-        // effect is removed from the list.
-        // If the gLibLock is not released, we will have a deadlock situation
-        // since we call the sub effect release inside the EffectRelease of Proxy
-        pthread_mutex_unlock(&gLibLock);
         fx->lib->desc->release_effect(fx->subItfe);
         pthread_mutex_unlock(&fx->lib->lock);
     }
     free(fx);
 
 exit:
+    pthread_mutex_unlock(&gLibLock);
     return ret;
 }
 
@@ -405,7 +400,8 @@ int EffectIsNullUuid(const effect_uuid_t *uuid)
 // matching uuid and then copies the corresponding sub effect descriptors
 // to the inout param
 int EffectGetSubEffects(const effect_uuid_t *uuid,
-                        effect_descriptor_t *pDescriptors, size_t size)
+                        effect_descriptor_t *pDescriptors,
+                        audio_effect_library_t** pAeli, size_t size)
 {
    ALOGV("EffectGetSubEffects() UUID: %08X-%04X-%04X-%04X-%02X%02X%02X%02X%02X"
           "%02X\n",uuid->timeLow, uuid->timeMid, uuid->timeHiAndVersion,
@@ -433,7 +429,8 @@ int EffectGetSubEffects(const effect_uuid_t *uuid,
            while (subefx != NULL) {
                subeffect = (sub_effect_entry_t*)subefx->object;
                d = (effect_descriptor_t*)(subeffect->object);
-               pDescriptors[count++] = *d;
+               pDescriptors[count] = *d;
+               pAeli[count++] = subeffect->lib->desc;
                subefx = subefx->next;
            }
            ALOGV("EffectGetSubEffects end - copied the sub effect descriptors");
@@ -454,14 +451,30 @@ int init() {
         return 0;
     }
 
-    pthread_mutex_init(&gLibLock, NULL);
-
-    if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
-        loadEffectConfigFile(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
-    } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
-        loadEffectConfigFile(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
+    // This part of code is to enable the testing of offload effects.
+    // Not needed when full offloaded effects are implimented.
+    // currently loading different config file to suit this.
+    // TBD - remove this when full effect offload is enabled.
+    //
+    char value[PROPERTY_VALUE_MAX];
+    uint32_t LPAformat = 0;
+    if (property_get("audio.offload.capabilities", value, "0")) {
+        LPAformat = strtoul(value, NULL, 16);
+        ALOGV("init: LPAformat  = %x", LPAformat);
     }
 
+    if ((LPAformat & EFFECTS_OFFLOAD)) {
+        ALOGV("effect offload is enabled in prop");
+        pthread_mutex_init(&gLibLock, NULL);
+        loadEffectConfigFile(AUDIO_EFFECT_OFFLOAD_CONFIG_FILE);
+    } else {
+        pthread_mutex_init(&gLibLock, NULL);
+        if (access(AUDIO_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
+            loadEffectConfigFile(AUDIO_EFFECT_VENDOR_CONFIG_FILE);
+        } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
+            loadEffectConfigFile(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
+        }
+    }
     updateNumEffects();
     gInitDone = 1;
     ALOGV("init() done");

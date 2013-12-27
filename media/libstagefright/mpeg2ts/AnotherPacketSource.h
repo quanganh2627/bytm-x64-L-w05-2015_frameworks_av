@@ -47,7 +47,11 @@ struct AnotherPacketSource : public MediaSource {
 
     // Returns the difference between the last and the first queued
     // presentation timestamps since the last discontinuity (if any).
+#ifndef TARGET_HAS_VPP
     int64_t getBufferedDurationUs(status_t *finalResult);
+#else
+    int64_t getBufferedDurationUs(status_t *finalResult, size_t *sampleCount = NULL);
+#endif
 
     status_t nextBufferTime(int64_t *timeUs);
 

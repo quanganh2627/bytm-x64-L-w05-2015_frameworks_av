@@ -185,13 +185,8 @@ typedef enum
     M4ENCODER_1280_720_Height = 720, /**< 720p 1280x720 */
     M4ENCODER_1080_720_Height = 720, /**< 720p 1080x720 */
     M4ENCODER_960_720_Height  = 720, /**< 720p 960x720 */
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
     // Intel StageFright encoders don't require %16 resolution, for optimization purpose.
     M4ENCODER_1920_1080_Height = 1080 /**< 1080p 1920x1080 */
-#else
-    // StageFright encoders require %16 resolution
-    M4ENCODER_1920_1080_Height = 1088 /**< 1080p 1920x1080 */
-#endif
 /* -CR Google */
 } M4ENCODER_FrameHeight;
 

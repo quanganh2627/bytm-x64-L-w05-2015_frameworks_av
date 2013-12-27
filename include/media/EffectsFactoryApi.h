@@ -184,7 +184,7 @@ int EffectIsNullUuid(const effect_uuid_t *pEffectUuid);
 //
 //    Input/Output:
 //          pDescriptor:    address where to return the sub effect descriptors.
-//
+//          pAeli:          address where to return the sub effect aelis.
 //    Output:
 //        returned value:    0          successful operation.
 //                          -ENODEV     factory failed to initialize
@@ -193,7 +193,9 @@ int EffectIsNullUuid(const effect_uuid_t *pEffectUuid);
 //        *pDescriptor:     updated with the sub effect descriptors.
 //
 ////////////////////////////////////////////////////////////////////////////////
-int EffectGetSubEffects(const effect_uuid_t *pEffectUuid, effect_descriptor_t *pDescriptors, size_t size);
+int EffectGetSubEffects(const effect_uuid_t *pEffectUuid,
+                        effect_descriptor_t *pDescriptors,
+                        audio_effect_library_t **pAeli, size_t size);
 
 #if __cplusplus
 }  // extern "C"
