@@ -355,13 +355,18 @@ status_t AudioFlinger::EffectModule::configure()
     channelMask = thread->channelMask();
 
     // Since the channel mask is read from the current active PB thread,
-    // it used to be > 2 for multichannel offload. Due to this, effect
-    // was not created and offload tear down was not working.
+    // no. of channels will not be equal to 2 for mono and multichannel
+    // offload files. Due to this, effect was not created and offload
+    // tear down was not working.
     // Setting the channel mask as stereo to fix tear down
-    // from multi-channel offload
+    // from mono/multi channel offload.
     // TODO: Remove this change when the effect lib supports multichannel
-    if ((thread->type() == ThreadBase::OFFLOAD) && popcount(channelMask) > 2) {
-        channelMask = AUDIO_CHANNEL_OUT_STEREO;
+    {
+        PlaybackThread *pbt = thread->mAudioFlinger->checkPlaybackThread_l(thread->mId);
+        if ((pbt != NULL) && (thread->type() == ThreadBase::OFFLOAD)
+            && (popcount(channelMask) != 2)) {
+            channelMask = AUDIO_CHANNEL_OUT_STEREO;
+        }
     }
 
     if ((mDescriptor.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_AUXILIARY) {
