@@ -1402,11 +1402,6 @@ status_t StagefrightRecorder::setupVideoEncoder(
 
         case VIDEO_ENCODER_H264:
             enc_meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_AVC);
-            if (mOutputFormat == OUTPUT_FORMAT_DEFAULT
-                || mOutputFormat == OUTPUT_FORMAT_THREE_GPP
-                || mOutputFormat == OUTPUT_FORMAT_MPEG_4) {
-                enc_meta->setInt32('nalT', 128);
-                }
             break;
 
         default:

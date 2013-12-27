@@ -63,9 +63,6 @@
 #include <OMX_Component.h>
 #include <OMX_Ext_Intel.h>
 
-#include <OMX_IndexExt.h>
-#include <OMX_VideoExt.h>
-
 #include "include/avc_utils.h"
 
 #ifdef USE_INTEL_MDP
@@ -1400,27 +1397,6 @@ status_t OMXCodec::setupAVCEncoderParameters(const sp<MetaData>& meta) {
     CHECK_EQ(err, (status_t)OK);
 
     CHECK_EQ(setupBitRate(bitRate), (status_t)OK);
-
-    int32_t NALUformat;
-    if (meta->findInt32('nalT', &NALUformat)) {
-        OMX_NALSTREAMFORMATTYPE naluType;
-        InitOMXParams(&naluType);
-        naluType.nPortIndex = kPortIndexOutput;
-        naluType.eNaluFormat = (OMX_NALUFORMATSTYPE) 0;
-        status_t err = mOMX->getParameter(mNode,(OMX_INDEXTYPE) OMX_IndexParamNalStreamFormatSupported, (void*)&naluType, sizeof(naluType));
-
-        if (err == OK) {
-            if (naluType.eNaluFormat & NALUformat) {
-                naluType.eNaluFormat = (OMX_NALUFORMATSTYPE) NALUformat;
-                err = mOMX->setParameter(mNode, (OMX_INDEXTYPE) OMX_IndexParamNalStreamFormatSelect,(void*)&naluType, sizeof(naluType));
-
-                if (err != OK) {
-                   ALOGE("SetParameter OMX_IndexParamNalStreamFormatSelect format=0x%08x, returned error 0x%08x",NALUformat, err);
-                   return err;
-                }
-            }
-        }
-    }
 
     return OK;
 }

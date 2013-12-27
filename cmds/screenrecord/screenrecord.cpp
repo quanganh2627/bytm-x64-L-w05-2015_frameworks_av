@@ -299,10 +299,6 @@ static status_t runEncoder(const sp<MediaCodec>& encoder,
     int64_t startWhenNsec = systemTime(CLOCK_MONOTONIC);
     int64_t endWhenNsec = startWhenNsec + seconds_to_nanoseconds(gTimeLimitSec);
 
-    sp<AMessage> params = new AMessage;
-    params->setInt32("use-nalu-format", 128);
-    encoder->setParameters(params);
-
     Vector<sp<ABuffer> > buffers;
     err = encoder->getOutputBuffers(&buffers);
     if (err != NO_ERROR) {
