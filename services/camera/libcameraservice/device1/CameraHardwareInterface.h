@@ -108,6 +108,11 @@ public:
         ALOGV("%s(%s) buf %p", __FUNCTION__, mName.string(), buf.get());
 
         if (mDevice->ops->set_preview_window) {
+            if (buf.get() == NULL) {
+                int ret = mDevice->ops->set_preview_window(mDevice, 0);
+                mPreviewWindow = buf;
+                return ret;
+            }
             mPreviewWindow = buf;
             mHalPreviewWindow.user = this;
             ALOGV("%s &mHalPreviewWindow %p mHalPreviewWindow.user %p", __FUNCTION__,
