@@ -9829,12 +9829,11 @@ static M4OSA_ERR M4MCS_intGetInputClipProperties( M4MCS_InternalContext *pC )
                 pC->InputFileProperties.uiExtendedSamplingFrequency =
                     pC->AacProperties.aExtensionSampFreq;
             }
-#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
             if (pC->AacProperties.aSBRPresent == -1){
                 pC->InputFileProperties.uiExtendedSamplingFrequency =
                    pC->AacProperties.aSampFreq;
             }
-#endif
+
             if( pC->AacProperties.aPSPresent )
             {
                 pC->InputFileProperties.AudioStreamType =
