@@ -183,6 +183,7 @@ M4OSA_ERR VideoEditorMp3Reader_open(M4OSA_Context context,
         return UNKNOWN_ERROR;
     }
     pReaderContext->mStreamNumber = 0;
+    pReaderContext->mMediaSource = NULL;
 
     int32_t isDRMProtected = 0;
     sp<MetaData> meta = pReaderContext->mExtractor->getMetaData();
@@ -235,8 +236,10 @@ M4OSA_ERR VideoEditorMp3Reader_close(M4OSA_Context context) {
         }
     }
 
-    pReaderContext->mMediaSource->stop();
-    pReaderContext->mMediaSource.clear();
+    if (pReaderContext->mMediaSource != NULL) {
+        pReaderContext->mMediaSource->stop();
+        pReaderContext->mMediaSource.clear();
+    }
     pReaderContext->mExtractor.clear();
     pReaderContext->mDataSource.clear();
 
