@@ -93,6 +93,7 @@ static const MtpEventCode kSupportedEventCodes[] = {
     MTP_EVENT_OBJECT_REMOVED,
     MTP_EVENT_STORE_ADDED,
     MTP_EVENT_STORE_REMOVED,
+    MTP_EVENT_STORAGE_INFO_CHANGED,
 };
 
 MtpServer::MtpServer(int fd, MtpDatabase* database, bool ptp,
