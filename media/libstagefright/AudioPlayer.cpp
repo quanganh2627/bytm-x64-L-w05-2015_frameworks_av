@@ -980,7 +980,7 @@ size_t AudioPlayer::fillBuffer(void *data, size_t size) {
             } else if (!strcmp(value, "enable") && !mDecAudioDump) {
                 mDecAudioDump = new AudioDump(AudioDump::AUDIO_DECODER);
                 if (mDecAudioDump) {
-                    mDecAudioDump->isOffloadTrack = mOffload;
+                    mDecAudioDump->isOffloadTrack = useOffload();
                     //take audio dump
                     mDecAudioDump->dumpData((uint8_t*)mInputBuffer->data(),
                                             mInputBuffer->range_offset(), copy);

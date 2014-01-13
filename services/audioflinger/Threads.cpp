@@ -87,6 +87,10 @@
 #include <cpustats/ThreadCpuUsage.h>
 #endif
 
+#ifdef AUDIO_DUMP_ENABLE
+#include "AudioDumpUtils.h"
+#endif
+
 #if defined(DOLBY_DAP_OPENSLES)
 #include "effect_ds.h"
 #elif defined(DOLBY_DAP_DSP)
@@ -1416,7 +1420,7 @@ Exit:
     }
 #ifdef AUDIO_DUMP_ENABLE
     if (mPlaybackAudioDump) {
-        mPlaybackAudioDump->isOffloadTrack = isOffloadTrack();
+        mPlaybackAudioDump->isOffloadTrack = track->isOffloaded();
     }
 #endif
     return track;

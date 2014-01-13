@@ -86,6 +86,9 @@ class AudioBuffer;
 class AudioResampler;
 class FastMixer;
 class ServerProxy;
+#ifdef AUDIO_DUMP_ENABLE
+class AudioDump;
+#endif
 
 // ----------------------------------------------------------------------------
 
