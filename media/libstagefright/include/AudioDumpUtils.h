@@ -22,15 +22,15 @@ namespace android {
 
 class AudioDump {
 
+public:
     FILE          *mFilePtr;
     char          *mFileName;
     const char    *mComponentName;
     uint16_t      mComponent;
+    bool          isOffloadTrack;
 
     char* getAudioDumpFileName();
     void  writeToFile(uint8_t* data, size_t offset, size_t range_length);
-public:
-    bool           isOffloadTrack;
 
     enum {
         AUDIO_PARSER = 0,
