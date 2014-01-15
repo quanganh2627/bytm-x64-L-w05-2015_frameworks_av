@@ -408,6 +408,9 @@ private:
     AwesomePlayer &operator=(const AwesomePlayer &);
 
     bool mDeepBufferAudio;
+    int64_t mDropThreshold;
+    int64_t mEarlyThreshold;
+    int64_t mPollThreshold;
 
 #ifdef TARGET_HAS_FRC_SLOW_MOTION
     // for video slow motion playback
