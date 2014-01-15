@@ -182,6 +182,7 @@ private:
 
     bool mReconfigurationInProgress;
     bool mSwitchInProgress;
+    bool mReadInProgress;
     uint32_t mDisconnectReplyID;
     uint32_t mSeekReplyID;
 
