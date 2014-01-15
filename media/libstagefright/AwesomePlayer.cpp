@@ -2033,6 +2033,17 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
 
             stat->mDecoderName = componentName;
         }
+        int32_t framerate = 0;
+        mDropThreshold = 40000ll;
+        mEarlyThreshold = 10000ll;
+        mPollThreshold = 10000ll;
+        if (mVideoTrack->getFormat()->findInt32(kKeyFrameRate, &framerate)) {
+            if (framerate > 30) {
+                mDropThreshold = 1200000ll/framerate;
+                mEarlyThreshold = 300000ll/framerate;
+            }
+            mPollThreshold = 1000000ll/framerate;
+        }
 
         static const char *kPrefix = "OMX.Nvidia.";
         static const char *kSuffix = ".decode";
@@ -2536,7 +2547,7 @@ void AwesomePlayer::onVideoEvent() {
             }
         }
 
-        if (latenessUs > 40000) {
+        if (latenessUs > mDropThreshold) {
             // We're more than 40ms late.
             ALOGV("we're late by %lld us (%.2f secs)",
                  latenessUs, latenessUs / 1E6);
@@ -2563,14 +2574,13 @@ void AwesomePlayer::onVideoEvent() {
                 return;
             }
         }
-
         if (latenessUs < -30000) {
             // We're more than 30ms early.
             postVideoEvent_l(30000);
             return;
-        } else if (latenessUs < -10000) {
+        } else if (latenessUs < -mEarlyThreshold) {
             // We're more than 10ms early.
-            postVideoEvent_l(8000);
+            postVideoEvent_l();
             return;
         }
     }
@@ -2674,7 +2684,7 @@ void AwesomePlayer::onVideoEvent() {
         int64_t nextTimeUs;
         CHECK(mVideoBuffer->meta_data()->findInt64(kKeyTime, &nextTimeUs));
         int64_t delayUs = nextTimeUs - ts->getRealTimeUs() + mTimeSourceDeltaUs;
-        postVideoEvent_l(delayUs > 10000 ? 10000 : delayUs < 0 ? 0 : delayUs);
+        postVideoEvent_l(delayUs > mPollThreshold ? mPollThreshold : delayUs < 0 ? 0 : delayUs);
         return;
     }
 
@@ -2689,7 +2699,7 @@ void AwesomePlayer::postVideoEvent_l(int64_t delayUs) {
     }
 
     mVideoEventPending = true;
-    mQueue.postEventWithDelay(mVideoEvent, delayUs < 0 ? 8000 : delayUs);
+    mQueue.postEventWithDelay(mVideoEvent, delayUs < 0 ? 10000 : delayUs);
 }
 
 void AwesomePlayer::postStreamDoneEvent_l(status_t status) {
