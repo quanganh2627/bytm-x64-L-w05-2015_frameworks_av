@@ -88,7 +88,8 @@ status_t MPEG2TSSource::read(
     int64_t seekTimeUs;
     ReadOptions::SeekMode seekMode;
     if (mSeekable && options && options->getSeekTo(&seekTimeUs, &seekMode)) {
-        return ERROR_UNSUPPORTED;
+        LOGW("Seek may not be supported here!");
+        //return ERROR_UNSUPPORTED;
     }
 
     status_t finalResult;
