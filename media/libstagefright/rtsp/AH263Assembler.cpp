@@ -108,6 +108,9 @@ ARTPAssembler::AssemblyStatus AH263Assembler::addPacket(
     unsigned PLEN = (payloadHeader >> 3) & 0x3f;
     unsigned PEBIT = payloadHeader & 7;
 
+    // V, PLEN and PEBIT could be non-zero value according to rfc4629
+    // The packet should not be dropped in the non-zero cases.
+#if 0
     // V=0
     if (V != 0u) {
         queue->erase(queue->begin());
@@ -131,6 +134,7 @@ ARTPAssembler::AssemblyStatus AH263Assembler::addPacket(
         ALOGW("Packet discarded (PEBIT != 0)");
         return MALFORMED_PACKET;
     }
+#endif
 
     size_t skip = V + PLEN + (P ? 0 : 2);
 
