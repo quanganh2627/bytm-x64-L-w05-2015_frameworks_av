@@ -64,6 +64,10 @@ public:
 
     virtual status_t dump(int fd, const Vector<String16> &args) const;
 
+#ifdef TARGET_HAS_FRC_SLOW_MOTION
+    virtual status_t attachAuxEffect(int effectId);
+#endif
+
 private:
     AwesomePlayer *mPlayer;
 
