@@ -22,10 +22,6 @@
 #include <media/IAudioRecord.h>
 #include <utils/threads.h>
 
-#ifdef INTEL_FEATURE_ASF
-#include "AsfVersionAosp.h"
-#endif
-
 namespace android {
 
 // ----------------------------------------------------------------------------
@@ -275,7 +271,7 @@ public:
             status_t    setPositionUpdatePeriod(uint32_t updatePeriod);
             status_t    getPositionUpdatePeriod(uint32_t *updatePeriod) const;
 
-#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
+#if PLATFORM_ASF_VERSION >= 2
     /* Function notifyMicrophoneAccess : This function acts a hook point,
      * that sends notification to ASF client by binding to native service security device
      */
