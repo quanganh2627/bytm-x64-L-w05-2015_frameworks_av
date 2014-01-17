@@ -1513,14 +1513,14 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
             mLastTrack->meta->setInt32(kKeySampleRate, sample_rate);
 
             off64_t stop_offset = *offset + chunk_size;
+            *offset = data_offset + sizeof(buffer);
+
             if (chunk_type == FOURCC('m', 'p', '4', 'a')) {
                 int32_t next_chunk;
                 mDataSource->readAt(data_offset + 48, &next_chunk, 4);
                 next_chunk = ntohl(next_chunk);
                 if (next_chunk == FOURCC('w', 'a', 'v', 'e'))
                     *offset = data_offset + 44;
-                else
-                    *offset = data_offset + 28;
             }
 
             while (*offset < stop_offset) {
