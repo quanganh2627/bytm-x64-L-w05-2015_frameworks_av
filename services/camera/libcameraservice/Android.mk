@@ -7,7 +7,6 @@ LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
 ifeq ($(strip $(INTEL_FEATURE_ASF)),true)
-  LOCAL_CPPFLAGS += -DINTEL_FEATURE_ASF
   LOCAL_CPPFLAGS += -DPLATFORM_ASF_VERSION=$(PLATFORM_ASF_VERSION)
 else
   LOCAL_CPPFLAGS += -DPLATFORM_ASF_VERSION=0
@@ -63,7 +62,6 @@ LOCAL_C_INCLUDES += \
     external/jpeg
 
 ifeq ($(strip $(INTEL_FEATURE_ASF)),true)
-LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/asfaosp
 ifneq ($(strip $(PLATFORM_ASF_VERSION)),1)
 ifneq ($(strip $(PLATFORM_ASF_VERSION)),0)
     LOCAL_SHARED_LIBRARIES += libsecuritydeviceserviceclient
