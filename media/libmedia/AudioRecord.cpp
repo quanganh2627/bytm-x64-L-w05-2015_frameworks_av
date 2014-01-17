@@ -27,12 +27,9 @@
 
 #define WAIT_PERIOD_MS          10
 
-#ifdef INTEL_FEATURE_ASF
-#include "AsfVersionAosp.h"
-#if PLATFORM_ASF_VERSION >= ASF_VERSION_2
+#if PLATFORM_ASF_VERSION >= 2
 // The interface file for inserting hooks to communicate with native service securitydevice
 #include "AsfDeviceAosp.h"
-#endif
 #endif
 
 namespace android {
@@ -78,7 +75,7 @@ status_t AudioRecord::getMinFrameCount(
 
 // ---------------------------------------------------------------------------
 
-#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
+#if PLATFORM_ASF_VERSION >= 2
 bool AudioRecord::notifyMicrophoneAccess() {
     // Adding hook to call security device service
     int pid = IPCThreadState::self()->getCallingPid();
@@ -192,7 +189,7 @@ status_t AudioRecord::set(
         ALOGE("Track already in use");
         return INVALID_OPERATION;
     }
-#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
+#if PLATFORM_ASF_VERSION >= 2
     // Place call to function that acts as a hook point for microphone events
     bool response = notifyMicrophoneAccess();
     // If response is false, deny access to requested application and return NULL
