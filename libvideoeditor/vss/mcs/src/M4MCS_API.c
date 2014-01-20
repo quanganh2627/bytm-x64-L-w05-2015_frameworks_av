@@ -735,6 +735,179 @@ M4OSA_ERR NSWAVCMCS_sExpVLC( NSWAVC_bitStream_t_MCS *bS, M4OSA_Int32 codeNum )
     return M4NO_ERROR;
 }
 
+#ifdef NEED_REMOVE_PADDING_BYTE
+M4OSA_Int32 UpdateSPSMCS( ComBitStreamMCS_t *p_bs, NSWAVC_bitStream_t_MCS *bS,
+                         M4OSA_UInt32 spsSize, ComSequenceParameterSet_t_MCS *encodeSps,
+                         ComSequenceParameterSet_t_MCS *clipSps)
+{
+    M4OSA_UInt32 cnt, temp;
+    M4OSA_Int32 temp_max_dpb_size;
+    M4OSA_Int32 nb_ignore_bits;
+    M4OSA_Int32 error;
+    M4OSA_UInt8 profile_idc, level_idc, reserved_zero_2bits,
+        seq_parameter_set_id;
+    M4OSA_UInt8 constraint_set0_flag, constraint_set1_flag,
+        constraint_set2_flag, constraint_set3_flag,
+        constraint_set4_flag, constraint_set5_flag;
+
+    profile_idc = (M4OSA_UInt8)H264MCS_getBits(p_bs, 8);
+    constraint_set0_flag = (M4OSA_Bool)H264MCS_getBits(p_bs, 1);
+    constraint_set1_flag = (M4OSA_Bool)H264MCS_getBits(p_bs, 1);
+    constraint_set2_flag = (M4OSA_Bool)H264MCS_getBits(p_bs, 1);
+    constraint_set3_flag = (M4OSA_Bool)H264MCS_getBits(p_bs, 1);
+    constraint_set4_flag = (M4OSA_Bool)H264MCS_getBits(p_bs, 1);
+    constraint_set5_flag = (M4OSA_Bool)H264MCS_getBits(p_bs, 1);
+    reserved_zero_2bits = (M4OSA_UInt8)H264MCS_getBits(p_bs, 2);
+    level_idc = (M4OSA_UInt8)H264MCS_getBits(p_bs, 8);
+    NSWAVCMCS_putBits(bS,profile_idc,8);
+    NSWAVCMCS_putBit(bS,constraint_set0_flag);
+    NSWAVCMCS_putBit(bS,constraint_set1_flag);
+    NSWAVCMCS_putBit(bS,constraint_set2_flag);
+    NSWAVCMCS_putBit(bS,constraint_set3_flag);
+    NSWAVCMCS_putBit(bS,constraint_set4_flag);
+    NSWAVCMCS_putBit(bS,constraint_set5_flag);
+    NSWAVCMCS_putBits(bS,reserved_zero_2bits,2);
+    NSWAVCMCS_putBits(bS,level_idc,8);
+    seq_parameter_set_id =
+        (M4OSA_UInt8)H264MCS_DecVLCReadExpGolombCode(p_bs);
+    NSWAVCMCS_uExpVLC(bS, clipSps->seq_parameter_set_id + 1);
+    encodeSps->seq_parameter_set_id = clipSps->seq_parameter_set_id + 1;
+
+    cnt = p_bs->bitPos & 0x7;
+
+    if( cnt )
+    {
+        cnt = 8 - cnt;
+        temp = H264MCS_getBits(p_bs, cnt);
+        NSWAVCMCS_putBits(bS, temp, cnt);
+    }
+
+    cnt = p_bs->bitPos >> 3;
+
+    while( cnt < (spsSize - 2) )
+    {
+        temp = H264MCS_getBits(p_bs, 8);
+        NSWAVCMCS_putBits(bS, temp, 8);
+        cnt = p_bs->bitPos >> 3;
+    }
+
+    temp = H264MCS_getBits(p_bs, 8);
+
+    if( temp != 0 )
+    {
+        cnt = 0;
+
+        while( ( temp & 0x1) == 0 )
+        {
+            cnt++;
+            temp = temp >> 1;
+        }
+        cnt++;
+        temp = temp >> 1;
+
+        if( 8 - cnt )
+        {
+            NSWAVCMCS_putBits(bS, temp, (8 - cnt));
+        }
+
+        NSWAVCMCS_putRbspTbits(bS);
+    }
+    else
+    {
+
+        M4OSA_TRACE1_1(
+            "UpdateSPSMCS : 13 temp = 0 trailing bits = %d",
+            bS->bitPos % 8);
+
+        if( bS->bitPos % 8 )
+        {
+            NSWAVCMCS_putBits(bS, 0,
+                (8 - bS->bitPos % 8));
+        }
+
+    }
+
+    return M4NO_ERROR;
+}
+
+
+M4OSA_Int32 UpdatePPSMCS( ComBitStreamMCS_t *p_bs, NSWAVC_bitStream_t_MCS *bS,
+                         M4OSA_UInt32 ppsSize, ComSequenceParameterSet_t_MCS *encodeSps,
+                         ComPictureParameterSet_t_MCS *encodePps)
+{
+    M4OSA_UInt32 cnt, temp;
+    M4OSA_Int32 error;
+    M4OSA_UInt8 pic_parameter_set_id, seq_parameter_set_id;
+
+    M4OSA_Int32 nb_ignore_bits;
+
+    pic_parameter_set_id = (M4OSA_UInt8)H264MCS_DecVLCReadExpGolombCode(p_bs);
+    NSWAVCMCS_uExpVLC(bS, pic_parameter_set_id + 1);
+    encodePps->pic_parameter_set_id = pic_parameter_set_id + 1;
+
+    seq_parameter_set_id =
+        (M4OSA_UInt8)H264MCS_DecVLCReadExpGolombCode(p_bs);
+    NSWAVCMCS_uExpVLC(bS, encodeSps->seq_parameter_set_id);
+    encodePps->seq_parameter_set_id = encodeSps->seq_parameter_set_id;
+
+    cnt = p_bs->bitPos & 0x7;
+
+    if( cnt )
+    {
+        cnt = 8 - cnt;
+        temp = H264MCS_getBits(p_bs, cnt);
+        NSWAVCMCS_putBits(bS, temp, cnt);
+    }
+
+    cnt = p_bs->bitPos >> 3;
+
+    while( cnt < (ppsSize - 2) )
+    {
+        temp = H264MCS_getBits(p_bs, 8);
+        NSWAVCMCS_putBits(bS, temp, 8);
+        cnt = p_bs->bitPos >> 3;
+    }
+
+    temp = H264MCS_getBits(p_bs, 8);
+
+    if( temp != 0 )
+    {
+        cnt = 0;
+
+        while( ( temp & 0x1) == 0 )
+        {
+            cnt++;
+            temp = temp >> 1;
+        }
+        cnt++;
+        temp = temp >> 1;
+
+        if( 8 - cnt )
+        {
+            NSWAVCMCS_putBits(bS, temp, (8 - cnt));
+        }
+
+        NSWAVCMCS_putRbspTbits(bS);
+    }
+    else
+    {
+
+        M4OSA_TRACE1_1(
+            "UpdatePPSMCS : 13 temp = 0 trailing bits = %d",
+            bS->bitPos % 8);
+
+        if( bS->bitPos % 8 )
+        {
+            NSWAVCMCS_putBits(bS, 0,
+                (8 - bS->bitPos % 8));
+        }
+
+    }
+
+    return M4NO_ERROR;
+}
+#endif
+
 M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
                                         M4OSA_UInt8 *inbuff,
                                         M4OSA_Int32 inbuf_size,
@@ -757,7 +930,7 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
     M4OSA_UInt32 outbuffpos = 0;
     M4OSA_UInt32 nal_size_low16, nal_size_high16;
     M4OSA_UInt32 frame_size = 0;
-    M4OSA_UInt32 temp = 0;
+    M4OSA_UInt32 temp = 0, pad_zero = 0;
     M4OSA_UInt8 *buff;
 
     // StageFright encoder does not provide the size in the first 4 bytes of the AU, add it
@@ -826,7 +999,7 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
         outbuff[outbuffpos] = p_bs->Buffer[4];
 
         p_bs->Buffer = p_bs->Buffer + 5;
-
+#ifndef NEED_REMOVE_PADDING_BYTE
         p_bs->bitPos = 0;
         p_bs->lastTotalBits = 0;
         p_bs->numBitsInBuffer = ( inbuf_size - frame_size - 5) << 3;
@@ -838,7 +1011,7 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
         p_bs->ui32LastTwoBytes = 0xFFFFFFFF;
 
         H264MCS_getBits(p_bs, 0);
-
+#endif
         nal_size = inbuf_size - frame_size - 4;
         buff = inbuff + frame_size + 4;
 
@@ -864,21 +1037,48 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
         forbidden_bit = ( nalu_info >> 7) & 1;
         nal_ref_idc = ( nalu_info >> 5) & 3;
         nal_unit_type = (nalu_info) &0x1f;
-
+#ifdef NEED_REMOVE_PADDING_BYTE
+        if( nal_unit_type == 1 || nal_unit_type == 5 )
+        {
+            temp = frame_size - 1;
+            while(temp > 0 && inbuff[temp] == 0x00)
+            {
+                  pad_zero++;
+                  temp--;
+            }
+        }
+        nal_size -= pad_zero;
+        pad_zero = 0;
+#endif
         NSWAVCMCS_initBitstream(&instance->encbs);
 
         instance->encbs.streamBuffer = outbuff + outbuffpos + 1;
-
+#ifdef NEED_REMOVE_PADDING_BYTE
+        DecBitStreamReset_MCS(p_bs, nal_size - 1);
+#endif
         if( nal_unit_type == 8 )
         {
-            M4OSA_TRACE1_0("Error : PPS");
+            /*PPS Packet */
+#ifdef NEED_REMOVE_PADDING_BYTE
+            UpdatePPSMCS(p_bs, &instance->encbs, nal_size, &instance->encoder_sps, &instance->encoder_pps);
+            temp = instance->encbs.byteCnt;
+            temp = temp + 1;
+            outbuffpos = outbuffpos + temp;
+#endif
+            M4OSA_TRACE1_2("PPS nal_size = %d, outbuffpos = %d",nal_size, outbuffpos);
             continue;
         }
 
         if( nal_unit_type == 7 )
         {
             /*SPS Packet */
-            M4OSA_TRACE1_0("Error : SPS");
+#ifdef NEED_REMOVE_PADDING_BYTE
+            UpdateSPSMCS(p_bs, &instance->encbs, nal_size, &instance->encoder_sps, &instance->clip_sps);
+            temp = instance->encbs.byteCnt;
+            temp = temp + 1;
+            outbuffpos = outbuffpos + temp;
+#endif
+            M4OSA_TRACE1_2("SPS nal_size = %d, outbuffpos = %d",nal_size, outbuffpos);
             continue;
         }
 
@@ -904,6 +1104,7 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
             pic_parameter_set_id = instance->encoder_pps.pic_parameter_set_id;
             NSWAVCMCS_uExpVLC(&instance->encbs, pic_parameter_set_id);
 
+#ifndef NEED_REMOVE_PADDING_BYTE
             temp = H264MCS_getBits(p_bs,
                 instance->encoder_sps.log2_max_frame_num_minus4 + 4);
             NSWAVCMCS_putBits(&instance->encbs, instance->frame_count,
@@ -964,7 +1165,7 @@ M4OSA_ERR H264MCS_ProcessEncodedNALU(   M4OSA_Void *ainstance,
                     NSWAVCMCS_sExpVLC(&instance->encbs, 0);
                 }
             }
-
+#endif
             cnt = p_bs->bitPos & 0x7;
 
             if( cnt )
@@ -1494,6 +1695,10 @@ M4OSA_ERR H264MCS_ProcessSPS_PPS( NSWAVC_MCS_t *instance, M4OSA_UInt8 *inbuff,
     instance->final_SPS_ID = lActiveSPSID_Clip;
     /* Do we need to add encoder PPS to clip PPS */
 
+#ifdef NEED_REMOVE_PADDING_BYTE
+    // Add the SPS and PPS in  H264MCS_ProcessEncodedNALU
+    lFound = 1;
+#else
     lClipDSI = lClipDSI_PPS_start;
 
     for ( cnt = 0; cnt < instance->m_encoder_PPS_Cnt; cnt++ )
@@ -1586,6 +1791,7 @@ M4OSA_ERR H264MCS_ProcessSPS_PPS( NSWAVC_MCS_t *instance, M4OSA_UInt8 *inbuff,
 
         lClipDSI = lClipDSI + lSize;
     }
+#endif
 
     /* Form the final SPS and PPS data */
 
