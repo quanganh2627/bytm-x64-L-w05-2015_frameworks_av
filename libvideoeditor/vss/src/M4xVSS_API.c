@@ -2498,7 +2498,11 @@ M4OSA_ERR M4xVSS_SendCommand( M4OSA_Context pContext,
                      xVSS_context->pSettings->xVSS.outputVideoProfile) ||
                 (fileProperties.uiVideoLevel >
                      xVSS_context->pSettings->xVSS.outputVideoLevel) ||
+#ifdef VIDEOEDITOR_INTEL_NV12_VERSION
                 (fileProperties.VideoStreamType == M4VIDEOEDITING_kMPEG4)) {
+#else
+                (fileProperties.VideoStreamType != M4VIDEOEDITING_kH264)) {
+#endif
                /* Set bTranscodingRequired to TRUE to indicate the video will be
                 * transcoded in MCS. */
                xVSS_context->pSettings->pClipList[i]->bTranscodingRequired =
