@@ -35,6 +35,10 @@
 
 #include <camera/ICameraServiceListener.h>
 
+#ifdef INTEL_FEATURE_ASF
+#include "AsfVersionAosp.h"
+#endif
+
 /* This needs to be increased if we can have more cameras */
 #define MAX_CAMERAS 2
 
@@ -330,7 +334,7 @@ private:
     // Delay-load the Camera HAL module
     virtual void onFirstRef();
 
-#if PLATFORM_ASF_VERSION >= 2
+#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
     /**
      * Function notifyCameraAccess : This function acts a hook point,
      * that sends notification to ASF client by binding to native service security device.
