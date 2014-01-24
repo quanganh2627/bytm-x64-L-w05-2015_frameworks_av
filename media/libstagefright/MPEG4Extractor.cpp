@@ -992,25 +992,23 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
                 track->meta->setCString(kKeyMIMEType, "application/octet-stream");
             }
 
-            off64_t stop_offset = *offset + chunk_size;
-
             if (chunk_type == FOURCC('u', 'd', 't', 'a')) {
                 parseUdtaMetaData(data_offset, chunk_data_size);
-                *offset += chunk_size;
-            } else {
-                *offset = data_offset;
-                while (*offset < stop_offset) {
-                    status_t err = parseChunk(offset, depth + 1);
-                    if (err != OK) {
-                        if (chunk_type == FOURCC('t', 'r', 'a', 'k')){
-                            // If one 'trak' box contains error, we can skip it to keep parsing,
-                            // which make sure we can parse out following valid 'trak' in the clip
-                            ALOGE("invalid track, skip it and keep parsing");
-                            mLastTrack->skipTrack = true;
-                            *offset = stop_offset;
-                        } else {
-                            return err;
-                        }
+            }
+
+            off64_t stop_offset = *offset + chunk_size;
+            *offset = data_offset;
+            while (*offset < stop_offset) {
+                status_t err = parseChunk(offset, depth + 1);
+                if (err != OK) {
+                    if (chunk_type == FOURCC('t', 'r', 'a', 'k')){
+                        // If one 'trak' box contains error, we can skip it to keep parsing,
+                        // which make sure we can parse out following valid 'trak' in the clip
+                        ALOGE("invalid track, skip it and keep parsing");
+                        mLastTrack->skipTrack = true;
+                        *offset = stop_offset;
+                    } else {
+                        return err;
                     }
                 }
             }
@@ -1507,14 +1505,14 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
             mLastTrack->meta->setInt32(kKeySampleRate, sample_rate);
 
             off64_t stop_offset = *offset + chunk_size;
+            *offset = data_offset + sizeof(buffer);
+
             if (chunk_type == FOURCC('m', 'p', '4', 'a')) {
                 int32_t next_chunk;
                 mDataSource->readAt(data_offset + 48, &next_chunk, 4);
                 next_chunk = ntohl(next_chunk);
                 if (next_chunk == FOURCC('w', 'a', 'v', 'e'))
                     *offset = data_offset + 44;
-                else
-                    *offset = data_offset + 28;
             }
 
             while (*offset < stop_offset) {

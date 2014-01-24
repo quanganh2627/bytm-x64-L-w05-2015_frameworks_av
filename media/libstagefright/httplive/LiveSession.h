@@ -137,6 +137,7 @@ private:
     int64_t mRealTimeBaseUs;
 
     bool mReconfigurationInProgress;
+    bool mReadInProgress;
     uint32_t mDisconnectReplyID;
 
     sp<PlaylistFetcher> addFetcher(const char *uri);

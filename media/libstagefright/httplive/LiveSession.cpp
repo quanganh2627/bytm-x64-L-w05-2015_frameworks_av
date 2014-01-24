@@ -50,6 +50,7 @@ LiveSession::LiveSession(
       mUIDValid(uidValid),
       mUID(uid),
       mInPreparationPhase(true),
+      mReadInProgress(false),
       mHTTPDataSource(
               HTTPBase::Create(
                   (mFlags & kFlagIncognito)
@@ -201,6 +202,9 @@ void LiveSession::connectAsync(
 }
 
 status_t LiveSession::disconnect() {
+    if (mReadInProgress) {
+        mHTTPDataSource->disconnect();
+    }
     sp<AMessage> msg = new AMessage(kWhatDisconnect, id());
 
     sp<AMessage> response;
@@ -553,6 +557,7 @@ status_t LiveSession::fetchFile(
             && strncasecmp(url, "https://", 8)) {
         return ERROR_UNSUPPORTED;
     } else {
+        mReadInProgress = true;
         KeyedVector<String8, String8> headers = mExtraHeaders;
         if (range_offset > 0 || range_length >= 0) {
             headers.add(
@@ -567,6 +572,7 @@ status_t LiveSession::fetchFile(
         status_t err = mHTTPDataSource->connect(url, &headers);
 
         if (err != OK) {
+            mReadInProgress = false;
             return err;
         }
 
@@ -619,6 +625,7 @@ status_t LiveSession::fetchFile(
             if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
                 source.clear();
             }
+            mReadInProgress = false;
             return n;
         }
 
@@ -634,6 +641,7 @@ status_t LiveSession::fetchFile(
     if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
         source.clear();
     }
+    mReadInProgress = false;
     return OK;
 }
 
@@ -974,7 +982,7 @@ void LiveSession::onChangeConfiguration2(const sp<AMessage> &msg) {
         changedMask |= STREAMTYPE_VIDEO;
     }
 
-    if (changedMask == 0) {
+    if (changedMask == 0 || mDisconnectReplyID) {
         // If nothing changed as far as the audio/video decoders
         // are concerned we can proceed.
         onChangeConfiguration3(msg);

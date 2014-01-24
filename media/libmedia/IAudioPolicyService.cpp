@@ -57,7 +57,8 @@ enum {
     QUERY_DEFAULT_PRE_PROCESSING,
     SET_EFFECT_ENABLED,
     IS_STREAM_ACTIVE_REMOTELY,
-    IS_OFFLOAD_SUPPORTED
+    IS_OFFLOAD_SUPPORTED,
+    SET_PARAMETERS
 };
 
 class BpAudioPolicyService : public BpInterface<IAudioPolicyService>
@@ -389,7 +390,17 @@ public:
         data.writeInterfaceToken(IAudioPolicyService::getInterfaceDescriptor());
         data.write(&info, sizeof(audio_offload_info_t));
         remote()->transact(IS_OFFLOAD_SUPPORTED, data, &reply);
-        return reply.readInt32();    }
+        return reply.readInt32();
+    }
+
+    virtual status_t setParameters(const String8& keyValuePairs)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioPolicyService::getInterfaceDescriptor());
+        data.writeString8(keyValuePairs);
+        remote()->transact(SET_PARAMETERS, data, &reply);
+        return static_cast <status_t> (reply.readInt32());
+    }
 };
 
 IMPLEMENT_META_INTERFACE(AudioPolicyService, "android.media.IAudioPolicyService");
@@ -682,7 +693,14 @@ status_t BnAudioPolicyService::onTransact(
             bool isSupported = isOffloadSupported(info);
             reply->writeInt32(isSupported);
             return NO_ERROR;
-        }
+        } break;
+
+        case SET_PARAMETERS: {
+            CHECK_INTERFACE(IAudioPolicyService, data, reply);
+            String8 keyValuePairs(data.readString8());
+            reply->writeInt32(static_cast <uint32_t>(setParameters(keyValuePairs)));
+            return NO_ERROR;
+        } break;
 
         default:
             return BBinder::onTransact(code, data, reply, flags);

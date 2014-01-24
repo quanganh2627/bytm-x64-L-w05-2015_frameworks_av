@@ -1171,6 +1171,14 @@ bool AudioPolicyService::isOffloadSupported(const audio_offload_info_t& info)
     return mpAudioPolicy->is_offload_supported(mpAudioPolicy, &info);
 }
 
+status_t AudioPolicyService::setParameters(const String8& keyValuePairs)
+{
+    if (mpAudioPolicy == NULL) {
+        return NO_INIT;
+    }
+    return mpAudioPolicy->set_parameters(mpAudioPolicy, keyValuePairs);
+}
+
 // ----------------------------------------------------------------------------
 // Audio pre-processing configuration
 // ----------------------------------------------------------------------------
