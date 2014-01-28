@@ -193,7 +193,7 @@ MatroskaSource::MatroskaSource(
 #ifdef DOLBY_MKV
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AC3)) {
         mType = AC3;
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_EC3)) {
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_EAC3)) {
         mType = EAC3;
 #endif // DOLBY_MKV
     }
@@ -1018,7 +1018,7 @@ int MatroskaExtractor::addTracks() {
                 } else if (!strcmp("A_AC3", codecID)) {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AC3);
                 } else if (!strcmp("A_EAC3", codecID)) {
-                    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_EC3);
+                    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_EAC3);
 #endif // DOLBY_MKV
                 } else {
                     ALOGW("%s is not supported.", codecID);

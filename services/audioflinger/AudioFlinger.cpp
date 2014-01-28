@@ -88,10 +88,20 @@
 
 #if defined(DOLBY_DAP_OPENSLES)
 #include "effect_ds.h"
-#elif defined(DOLBY_DAP_DSP)
-#include "DsNative.h"
 #endif // DOLBY_END
-
+#if defined(DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER)
+#if (DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER >= 2)
+#define DS_LOG2(...) ALOGD(__VA_ARGS__)
+#if (DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER >= 3)
+#define DS_LOG3(...) ALOGD(__VA_ARGS__)
+#else
+#define DS_LOG3(...)
+#endif
+#else
+#define DS_LOG2(...)
+#define DS_LOG3(...)
+#endif
+#endif // DOLBY_END
 // ----------------------------------------------------------------------------
 
 // Note: the following macro is used for extremely verbose logging message.  In
@@ -525,16 +535,16 @@ sp<IAudioTrack> AudioFlinger::createTrack(
             // Licensees have to call sendBroadcastMessage() in relevant section to create track based Dolby Effect
             #define LPA_INVALID_SESSION_ID -2
             static int lastLpaSessionId = LPA_INVALID_SESSION_ID;
-            char lpaEnabled[10];
+            char lpaEnabled[PROPERTY_VALUE_MAX];
             property_get("dolby.ds.lpa.test", lpaEnabled, "off");
-            ALOGV("System Property, dolby.ds.lpa.test == %s.", lpaEnabled);
+            DS_LOG3("System Property, dolby.ds.lpa.test == %s.", lpaEnabled);
             if ((streamType == AUDIO_STREAM_MUSIC) && (strcmp(lpaEnabled, "on") == 0)) {
-                ALOGV("LPA_SESSION_ID_CHANGED_ACTION Broadcast!! LPA Track Effects in play!");
-                ALOGV("DOLBY_DAP_OPENSLES_LPA: createTrack(), nextSessionId = %d is LPA with sample rate(%d) and channelMask(0x%X)", *sessionId, sampleRate, channelMask);
+                DS_LOG3("LPA_SESSION_ID_CHANGED_ACTION Broadcast!! LPA Track Effects in play!");
+                DS_LOG3("DOLBY_DAP_OPENSLES_LPA: createTrack(), nextSessionId = %d is LPA with sample rate(%d) and channelMask(0x%X)", *sessionId, sampleRate, channelMask);
                 sendBroadcastMessage(String16("LPA_SESSION_ID_CHANGED_ACTION"), *sessionId);
                 lastLpaSessionId = *sessionId;
             } else {
-                ALOGV("LPA_SESSION_ID_REMOVED_ACTION Broadcast!! Global Effects in play!");
+                DS_LOG3("LPA_SESSION_ID_REMOVED_ACTION Broadcast!! Global Effects in play!");
                 // Avoid sending the broadcast if the lastLpaSessionId is LPA_INVALID_SESSION_ID
                 if (lastLpaSessionId != LPA_INVALID_SESSION_ID) {
                     sendBroadcastMessage(String16("LPA_SESSION_ID_REMOVED_ACTION"), lastLpaSessionId);
@@ -1220,7 +1230,7 @@ bool AudioFlinger::sendBroadcastMessage(String16 action, int value)
             int exceptionCode = reply.readExceptionCode();
             if (exceptionCode) {
                 ALOGE("sendBroadcastMessage(%s) caught exception %d\n",
-                        action.string(), exceptionCode);
+                        (char *)action.string(), exceptionCode);
                 return false;
             }
         } else {
@@ -2187,6 +2197,47 @@ status_t AudioFlinger::getEffectDescriptor(const effect_uuid_t *pUuid,
 }
 
 
+#ifdef DOLBY_DAP_OPENSLES_MOVE_EFFECT
+status_t AudioFlinger::moveDolbyEffect(int sessionId, PlaybackThread *srcThread,
+        PlaybackThread *dstThread)
+{
+    ALOGV("moveDolbyEffect() session %d, srcOutput %d, dstOutput %d",
+            sessionId, srcThread->id(), dstThread->id());
+    // Move DS from a specific effect chain
+
+    sp<EffectChain> chain = srcThread->getEffectChain_l(sessionId);
+    if (chain == 0) {
+        ALOGW("moveDolbyEffect() effect chain for session %d not on source thread %p",
+                sessionId, srcThread);
+        return INVALID_OPERATION;
+    }
+
+    sp<EffectChain> dstChain;
+    sp<EffectModule> effect = chain->getEffectFromType_l(EFFECT_SL_IID_DS);
+    if (effect != 0) {
+        srcThread->removeEffect_l(effect);
+        status_t status = dstThread->addEffect_l(effect);
+        if (status != NO_ERROR) {
+            ALOGV("%s addEffect failed %d, moving back to srcThread", __FUNCTION__, status);
+            srcThread->addEffect_l(effect);
+            return NO_INIT;
+        }
+
+        // removeEffect_l() has stopped the effect if it was active so it must be restarted
+        if (effect->state() == EffectModule::ACTIVE ||
+                effect->state() == EffectModule::STOPPING) {
+            effect->start();
+        }
+        dstChain = effect->chain().promote();
+        if (dstChain == 0) {
+            ALOGV("moveDolbyEffect() cannot get chain from effect %p", effect.get());
+            srcThread->addEffect_l(effect);
+            return NO_INIT;
+        }
+    }
+    return NO_ERROR;
+}
+#endif // DOLBY_END
 sp<IEffect> AudioFlinger::createEffect(
         effect_descriptor_t *pDesc,
         const sp<IEffectClient>& effectClient,
@@ -2391,6 +2442,11 @@ status_t AudioFlinger::moveEffects(int sessionId, audio_io_handle_t srcOutput,
 
     Mutex::Autolock _dl(dstThread->mLock);
     Mutex::Autolock _sl(srcThread->mLock);
+#ifdef DOLBY_DAP_OPENSLES_MOVE_EFFECT
+    if (sessionId == DOLBY_MOVE_EFFECT_SIGNAL) {
+        return moveDolbyEffect(AUDIO_SESSION_OUTPUT_MIX, srcThread, dstThread);
+    }
+#endif // DOLBY_END
     return moveEffectChain_l(sessionId, srcThread, dstThread, false);
 }
 

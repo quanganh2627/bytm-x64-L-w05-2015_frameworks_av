@@ -93,8 +93,6 @@
 
 #if defined(DOLBY_DAP_OPENSLES)
 #include "effect_ds.h"
-#elif defined(DOLBY_DAP_DSP)
-#include "DsNative.h"
 #endif // DOLBY_END
 #if defined(DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER)
 #if (DOLBY_DAP_LOG_LEVEL_AUDIOFLINGER >= 2)
@@ -187,6 +185,20 @@ static const int kPriorityFastMixer = 3;
 // so AudioFlinger could allocate the right amount of memory.
 // See the client's minBufCount and mNotificationFramesAct calculations for details.
 static const int kFastTrackMultiplier = 2;
+
+#ifdef DOLBY_AUDIOFLINGER_AUDIODUMP
+//
+// Usage: Un-comment the line above to activate the audio dump.
+// Change the volume down to 0 to end the current audio dump session while music is playing.
+// And then change the volume 2 clicks up to launch the new audio dump session during music
+// playback. As a result, the previous dumped audio will be overwritten.
+// The retrieved audio dump will be under /data folder, so first ensure /data folder is
+// writable.
+//
+#define AUDIO_DUMP_VOL_MIN 0xC000
+static FILE*     pFileAudioDump = NULL;
+static uint32_t  audioDumpCurVolume = 0;
+#endif // DOLBY_END
 
 // ----------------------------------------------------------------------------
 
@@ -1981,6 +1993,12 @@ ssize_t AudioFlinger::PlaybackThread::threadLoop_write()
         } else {
             bytesWritten = framesWritten;
         }
+#ifdef DOLBY_AUDIOFLINGER_AUDIODUMP
+        if (pFileAudioDump != NULL)
+        {
+            fwrite(mMixBuffer + offset, 1, bytesWritten, pFileAudioDump);
+        }
+#endif // DOLBY_END
         status_t status = mNormalSink->getTimestamp(mLatchD.mTimestamp);
         if (status == NO_ERROR) {
             size_t totalFramesWritten = mNormalSink->framesWritten();
@@ -2912,14 +2930,14 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
     float masterVolume = mMasterVolume;
     bool masterMute = mMasterMute;
 
-#if (defined(DOLBY_DAP_OPENSLES_PREGAIN)) || (defined(DOLBY_DAP_DSP_PREGAIN))
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
     // The DS pregain for the left channel.
     uint32_t vl_ds_pregain = 0;
     // The DS pregain for the right channel.
     uint32_t vr_ds_pregain = 0;
     // The number of pausing tracks.
     size_t   pausingTracks = 0;
-#endif // (DOLBY_DAP_OPENSLES_PREGAIN) || (DOLBY_DAP_DSP_PREGAIN)
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
     if (masterMute) {
         masterVolume = 0;
     }
@@ -3182,9 +3200,9 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
             if (track->isPausing() || mStreamTypes[track->streamType()].mute) {
                 vl = vr = va = 0;
                 if (track->isPausing()) {
-#if (defined(DOLBY_DAP_OPENSLES_PREGAIN)) || (defined(DOLBY_DAP_DSP))
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
                     pausingTracks++;
-#endif // (DOLBY_DAP_OPENSLES_PREGAIN) || (DOLBY_DAP_DSP_PREGAIN)
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
                     track->setPaused();
                 }
             } else {
@@ -3233,11 +3251,14 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
                 }
                 track->mHasVolumeController = false;
             }
-#if (defined(DOLBY_DAP_OPENSLES_PREGAIN)) || (defined(DOLBY_DAP_DSP_PREGAIN))
+#if defined(DOLBY_DAP_OPENSLES_PREGAIN)
             // Select the maximum volume as the pregain by scanning all the active audio tracks.
             vl_ds_pregain = (vl_ds_pregain >= vl) ? vl_ds_pregain : vl;
             vr_ds_pregain = (vr_ds_pregain >= vr) ? vr_ds_pregain : vr;
-#endif // (DOLBY_DAP_OPENSLES_PREGAIN) || (DOLBY_DAP_DSP_PREGAIN)
+#endif // DOLBY_DAP_OPENSLES_PREGAIN
+#ifdef DOLBY_AUDIOFLINGER_AUDIODUMP
+            audioDumpCurVolume = (audioDumpCurVolume >= vl) ? audioDumpCurVolume : vl;
+#endif // DOLBY_END
 
             // Convert volumes from 8.24 to 4.12 format
             // This additional clamping is needed in case chain->setVolume_l() overshot
@@ -3453,7 +3474,6 @@ track_is_ready: ;
                     numOtherTracks++;
                 }
             }
-#if defined(DOLBY_DAP_OPENSLES)
             if (numSystemTracks > 0  && numOtherTracks == 0 && !dsEffectBypassed && dsEffect->isEnabled()) {
                 ALOGI("Bypass DS effect");
                 // Bypass the effect with cross-fading enabled only if there is a sudden change in buffer.
@@ -3463,7 +3483,6 @@ track_is_ready: ;
                 // Enable the effect; Crossfade only if there is a sudden change in buffer..
                 dsEffect->setBypass(false, (sleepTime == 0));
             }
-#endif
 #endif
 #if defined(DOLBY_DAP_OPENSLES_PREGAIN)
             // Skip the DS pregain setting if there're no active tracks, or all the active tracks are pausing ones,
@@ -3476,14 +3495,21 @@ track_is_ready: ;
         }
     }
 #endif // DOLBY_END
-#if defined(DOLBY_DAP_DSP_PREGAIN)
-    if (mixedTracks != 0 && mixedTracks != pausingTracks) {
-        uint32_t volume[2];
-        volume[0] = vl_ds_pregain;
-        volume[1] = vr_ds_pregain;
-        DsNative::setParameter(DsNative::DS_PARAM_PREGAIN, volume);
+#ifdef DOLBY_AUDIOFLINGER_AUDIODUMP
+    if (mixedTracks != 0 && pFileAudioDump == NULL && audioDumpCurVolume >= AUDIO_DUMP_VOL_MIN)
+    {
+        ALOGD("DOLBY_AUDIOFLINGER_AUDIO_DUMP: Open the file for PCM dump");
+        pFileAudioDump = fopen("/data/mixerOutput.pcm", "wb");
+        if (pFileAudioDump == NULL)
+            ALOGE("DOLBY_AUDIOFLINGER_AUDIO_DUMP: Failed to open the wav file");
     }
-#endif //DOLBY_DAP_DSP_PREGAIN
+    if (pFileAudioDump != NULL && audioDumpCurVolume < AUDIO_DUMP_VOL_MIN)
+    {
+            ALOGD("DOLBY_AUDIOFLINGER_AUDIO_DUMP: Close the wav file for PCM dump");
+            fclose(pFileAudioDump);
+            pFileAudioDump = NULL;
+    }
+#endif // DOLBY_END
     return mixerStatus;
 }
 

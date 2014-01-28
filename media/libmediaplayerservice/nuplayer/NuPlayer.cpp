@@ -12,25 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * This file was modified by Dolby Laboratories, Inc. The portions of the
- * code that are surrounded by "DOLBY..." are copyrighted and
- * licensed separately, as follows:
- *
- *  (C) 2011-2013 Dolby Laboratories, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  */
 
 //#define LOG_NDEBUG 0
@@ -646,13 +627,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     // Current code will just make that we select deep buffer
                     // with video which should not be a problem as it should
                     // not prevent from keeping A/V sync.
-#ifdef DOLBY_DAP_OPENSLES
-                    // DS Effect is attached only to the Non-Deep Buffered
-                    // Output and we want all audio to flow through DS Effect.
-                    // As such, we force both Music and Movie Playbacks to take
-                    // the Non-Deep Buffered Output
-                    flags = AUDIO_OUTPUT_FLAG_NONE;
-#else   // DOLBY_END
                     if (mVideoDecoder == NULL &&
                             mSource->getDuration(&durationUs) == OK &&
                             durationUs
@@ -661,7 +635,6 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                     } else {
                         flags = AUDIO_OUTPUT_FLAG_NONE;
                     }
-#endif  // LINE_ADDED_BY_DOLBY
 
                     int32_t channelMask;
                     if (!codecRequest->findInt32("channel-mask", &channelMask)) {

@@ -107,6 +107,7 @@ ifdef DOLBY_DAP_BYPASS_SOUND_TYPES
 endif
 ifdef DOLBY_DAP_OPENSLES
     LOCAL_CFLAGS += -DDOLBY_DAP_OPENSLES
+    LOCAL_CFLAGS += -DDOLBY_DAP_OPENSLES_MOVE_EFFECT
     # DAP compilation switch for applying the pregain
     # Note: Keep this definition consistent with Android.mk in DS effect
     LOCAL_CFLAGS += -DDOLBY_DAP_OPENSLES_PREGAIN
