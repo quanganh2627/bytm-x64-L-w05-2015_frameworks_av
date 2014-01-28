@@ -963,8 +963,12 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
         }
 
         int64_t durationUs;
-        CHECK_EQ((status_t)OK,
-                 getSampleTime(i, track->mSamples.size() - 1, &durationUs));
+        status_t err = OK;
+
+        err = getSampleTime(i, track->mSamples.size() - 1, &durationUs);
+        if (err != OK) {
+            return err;
+        }
 
         ALOGV("track %d duration = %.2f secs", i, durationUs / 1E6);
 
@@ -986,14 +990,14 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
             }
             if (track->mThumbnailSampleIndex >= 0) {
                 int64_t thumbnailTimeUs;
-                CHECK_EQ((status_t)OK,
-                         getSampleTime(i, track->mThumbnailSampleIndex,
-                                       &thumbnailTimeUs));
 
+                err = getSampleTime(i, track->mThumbnailSampleIndex,
+                                       &thumbnailTimeUs);
+                if (err != OK) {
+                    return err;
+                }
                 track->mMeta->setInt64(kKeyThumbnailTime, thumbnailTimeUs);
             }
-
-            status_t err = OK;
 
             if (!strcasecmp(mime.c_str(), MEDIA_MIMETYPE_VIDEO_MPEG4)) {
                 err = addMPEG4CodecSpecificData(i);
@@ -1232,7 +1236,10 @@ status_t AVIExtractor::getSampleInfo(
         sampleIndex = sampleStartInBytes / track.mBytesPerSample;
     }
 
-    *sampleTimeUs = (sampleIndex * 1000000ll * track.mRate) / track.mScale;
+    if (track.mScale)
+        *sampleTimeUs = (sampleIndex * 1000000ll * track.mRate) / track.mScale;
+    else
+        return ERROR_MALFORMED;
 
     return OK;
 }
