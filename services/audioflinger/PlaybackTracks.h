@@ -141,7 +141,9 @@ public:
                 (mStreamType == AUDIO_STREAM_RING) ||
                 (mStreamType == AUDIO_STREAM_ALARM) ||
                 (mStreamType == AUDIO_STREAM_NOTIFICATION) ||
-                (mStreamType == AUDIO_STREAM_DTMF));
+                (mStreamType == AUDIO_STREAM_DTMF) ||
+                (mStreamType == AUDIO_STREAM_CNT)); // Special stream type used for
+                                                    // duplicating threads.
     }
 #endif // DOLBY_DAP_BYPASS_SOUND_TYPES
 protected:

@@ -476,6 +476,10 @@ private:
 #ifdef DOLBY_DAP_OPENSLES
               static bool sendBroadcastMessage(String16 action, int value);
 #endif //DOLBY_DAP_OPENSLES
+#ifdef DOLBY_DAP_OPENSLES_MOVE_EFFECT
+              static status_t moveDolbyEffect(int sessionId, PlaybackThread *srcThread,
+                      PlaybackThread *dstThread);
+#endif // DOLBY_END
               // allocate an audio_io_handle_t, session ID, or effect ID
               uint32_t nextUniqueId();
 

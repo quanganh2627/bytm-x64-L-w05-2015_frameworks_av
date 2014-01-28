@@ -18,7 +18,7 @@
 ** code that are surrounded by "DOLBY..." are copyrighted and
 ** licensed separately, as follows:
 **
-**  (C) 2011-2013 Dolby Laboratories, Inc.
+**  (C) 2011-2014 Dolby Laboratories, Inc.
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -51,8 +51,6 @@
 #if defined(DOLBY_DAP_OPENSLES)
 #include "AudioParameter.h"
 #include "effect_ds.h"
-#elif defined(DOLBY_DAP_DSP)
-#include "DsNative.h"
 #endif // DOLBY_END
 
 // ----------------------------------------------------------------------------
@@ -96,6 +94,9 @@ AudioFlinger::EffectModule::EffectModule(ThreadBase *thread,
 #if defined(DOLBY_DAP_OPENSLES_PREGAIN)
       , mDsLeftVolume(UINT_MAX), mDsRightVolume(UINT_MAX)
 #endif // DOLBY_DAP_OPENSLES_PREGAIN
+#if defined(DOLBY_DAP_BYPASS_SOUND_TYPES)
+      , mBypassed(false)
+#endif // DOLBY_END
 {
     ALOGV("Constructor %p", this);
     int lStatus;
@@ -854,7 +855,7 @@ void AudioFlinger::EffectModule::setSuspended(bool suspended)
 status_t AudioFlinger::EffectModule::setBypass(bool bypass, bool crossFade)
 {
     Mutex::Autolock _l(mLock);
-    status_t  status = NO_ERROR;
+    status_t  status;
     uint32_t  size   = sizeof(status_t);
     uint32_t  bypassParams[2];
 
@@ -1574,8 +1575,12 @@ status_t AudioFlinger::EffectChain::addEffect_l(const sp<EffectModule>& effect)
         ALOGV("addEffect_l() effect %p, added in chain %p at rank %d", effect.get(), this,
                 idx_insert);
     }
+#ifdef DOLBY_DAP_OPENSLES
+    return effect->configure();
+#else // DOLBY_END
     effect->configure();
     return NO_ERROR;
+#endif // LINE_ADDED_BY_DOLBY
 }
 
 // removeEffect_l() must be called with PlaybackThread::mLock held

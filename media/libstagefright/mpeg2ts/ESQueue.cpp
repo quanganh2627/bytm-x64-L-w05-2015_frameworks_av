@@ -17,7 +17,7 @@
  * code that are surrounded by "DOLBY..." are copyrighted and
  * licensed separately, as follows:
  *
- *  (C) 2011-2012 Dolby Laboratories, Inc.
+ *  (C) 2011-2013 Dolby Laboratories, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -577,7 +577,6 @@ calc_dd_frame_size(int code)
 sp<ABuffer> ElementaryStreamQueue::dequeueAccessUnitDDP() {
     unsigned int size;
     unsigned char* ptr;
-    unsigned int i;
     int bsid;
     size_t frame_size = 0;
     size_t auSize = 0;
@@ -595,7 +594,7 @@ sp<ABuffer> ElementaryStreamQueue::dequeueAccessUnitDDP() {
     {
         sp<MetaData> meta = new MetaData;
         //TODO: Shoud this be EC3 or AC3 or if statement?
-        meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_EC3);
+        meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_EAC3);
 
         // Zero values entered to prevent crash
         int32_t sampleRate = 0;
