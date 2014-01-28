@@ -2042,13 +2042,15 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
                 mDropThreshold = 1200000ll/framerate;
                 mEarlyThreshold = 300000ll/framerate;
             }
+            if (framerate) {
 #ifdef TARGET_HAS_VPP
-            if (mVPPProcessor == NULL) {
-                mPollThreshold = 1000000ll/framerate;
-            }
+                if (mVPPProcessor == NULL) {
+                    mPollThreshold = 1000000ll/framerate;
+                }
 #else
-            mPollThreshold = 1000000ll/framerate;
+                mPollThreshold = 1000000ll/framerate;
 #endif
+            }
         }
 
         static const char *kPrefix = "OMX.Nvidia.";
