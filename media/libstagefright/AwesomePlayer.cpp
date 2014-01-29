@@ -316,6 +316,7 @@ AwesomePlayer::AwesomePlayer()
     mAudioTearDownEvent = new AwesomeEvent(this,
                               &AwesomePlayer::onAudioTearDownEvent);
     mAudioTearDownEventPending = false;
+    mAudioTearDownWasPlaying = false;
 #ifdef BGM_ENABLED
     if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
@@ -1011,6 +1012,12 @@ status_t AwesomePlayer::play() {
         postAudioTearDownEvent(0);
         mAudioTearDown = false;
     }
+
+    if (mAudioTearDown) {
+        ALOGW("not response to play when audio is tear down");
+        mAudioTearDownWasPlaying = true;
+        return OK;
+    }
 #ifdef BGM_ENABLED
     if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
@@ -1453,13 +1460,15 @@ status_t AwesomePlayer::pause_l(bool at_eos) {
     if (!(mFlags & PLAYING)) {
         if (mAudioTearDown && mAudioTearDownWasPlaying) {
             ALOGV("pause_l() during teardown and finishSetDataSource_l() mFlags %x" , mFlags);
-            mAudioTearDownWasPlaying = false;
             notifyListener_l(MEDIA_PAUSED);
             mMediaRenderingStartGeneration = ++mStartGeneration;
         }
+        // make sure mediaplayer get the right status when in pause status
+        mAudioTearDownWasPlaying = false;
         return OK;
     }
 
+    mAudioTearDownWasPlaying = false;
     notifyListener_l(MEDIA_PAUSED);
     mMediaRenderingStartGeneration = ++mStartGeneration;
 
@@ -1532,7 +1541,7 @@ status_t AwesomePlayer::pause_l(bool at_eos) {
 }
 
 bool AwesomePlayer::isPlaying() const {
-    return (mFlags & PLAYING) || (mFlags & CACHE_UNDERRUN);
+    return (mFlags & PLAYING) || (mFlags & CACHE_UNDERRUN) || mAudioTearDownWasPlaying;
 }
 
 status_t AwesomePlayer::setSurfaceTexture(const sp<IGraphicBufferProducer> &bufferProducer) {
