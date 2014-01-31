@@ -38,6 +38,10 @@ endif
 
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(USE_INTEL_LVSE)),true)
+       LOCAL_CFLAGS += -DLVSE
+endif
+
 include frameworks/av/media/libstagefright/codecs/common/Config.mk
 
 LOCAL_SRC_FILES:=                         \
@@ -246,6 +250,13 @@ ifeq ($(USE_MDS_LEGACY),true)
     LOCAL_CFLAGS += -DUSE_MDS_LEGACY
 endif
     LOCAL_SHARED_LIBRARIES += libmultidisplay
+endif
+
+ifeq ($(strip $(USE_INTEL_LVSE)),true)
+
+LOCAL_STATIC_LIBRARIES += \
+       libLVAudioSource \
+       libmusicbundle
 endif
 
 ifeq ($(AUDIO_DUMP_ENABLE),true)

@@ -21,6 +21,10 @@
 #include "HTTPBase.h"
 #include "TimedEventQueue.h"
 
+#ifdef LVSE
+#include "LVAudioSource.h"
+#endif
+
 #ifdef TARGET_HAS_VPP
 #include "VPPProcessor.h"
 #include <media/stagefright/OMXCodec.h>
@@ -416,6 +420,10 @@ private:
     // for video slow motion playback
     bool mIsSlowMotionMode;
     int  mSlowMotionFactor;
+#endif
+
+#ifdef LVSE
+        sp<LVAudioSource> mLVAudioSource;
 #endif
 };
 
