@@ -1371,6 +1371,15 @@ sp<AudioFlinger::PlaybackThread::Track> AudioFlinger::PlaybackThread::createTrac
         uint32_t strategy = AudioSystem::getStrategyForStream(streamType);
         for (size_t i = 0; i < mTracks.size(); ++i) {
             sp<Track> t = mTracks[i];
+            if (t != 0 && t->isOffloaded()) {
+                /* offload track found */
+                if (sessionId != t->sessionId()) {
+                    ALOGV("Already offload in progress, "
+                            "use non offload decoding");
+                    lStatus = BAD_VALUE;
+                    goto Exit;
+                }
+            }
             if (t != 0 && !t->isOutputTrack()) {
                 uint32_t actual = AudioSystem::getStrategyForStream(t->streamType());
                 if (sessionId == t->sessionId() && strategy != actual) {
