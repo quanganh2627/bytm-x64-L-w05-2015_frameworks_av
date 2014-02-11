@@ -58,6 +58,11 @@ ifeq ($(USE_MDS_LEGACY),true)
 endif
 endif
 
+#slow motion support
+ifeq ($(TARGET_HAS_FRC_SLOW_MOTION), true)
+    LOCAL_CFLAGS += -DTARGET_HAS_FRC_SLOW_MOTION
+endif
+
 LOCAL_SHARED_LIBRARIES += libstagefright
 
 ifdef DOLBY_DAP
