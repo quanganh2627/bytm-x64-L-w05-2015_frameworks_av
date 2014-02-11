@@ -1675,6 +1675,12 @@ status_t AwesomePlayer::getPosition(int64_t *positionUs) {
 status_t AwesomePlayer::seekTo(int64_t timeUs) {
     ATRACE_CALL();
 
+    if (mSeekTimeUs > 0 && timeUs == mSeekTimeUs && timeUs >= mLastVideoTimeUs) {
+        ALOGW("ignore this seek operation for its seek time (%lld us) "
+              "is same as last time",timeUs);
+        notifyListener_l(MEDIA_SEEK_COMPLETE);
+        return OK;
+    }
     if (mExtractorFlags & MediaExtractor::CAN_SEEK) {
         Mutex::Autolock autoLock(mLock);
         return seekTo_l(timeUs);
