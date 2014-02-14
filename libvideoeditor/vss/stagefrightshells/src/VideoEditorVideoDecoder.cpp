@@ -1724,6 +1724,22 @@ M4OSA_ERR VideoEditorVideoDecoder_render(M4OSA_Context context,
         M4OSA_UInt32 tempHeight =
             pDecShellContext->m_pVideoStreamhandler->m_videoHeight;
 
+        if (tempWidth != pOutputPlane[0].u_width) {
+            ALOGW("Src/Dst buffer width is not the same: src = %d, dst = %d",
+                tempWidth, pOutputPlane[0].u_width);
+            pOutputPlane[0].u_width = tempWidth;
+            pOutputPlane[1].u_width = tempWidth/2;
+            pOutputPlane[2].u_width = tempWidth/2;
+        }
+
+        if (tempHeight != pOutputPlane[0].u_height) {
+            ALOGW("Src/Dst buffer height is not the same: src = %d, dst = %d",
+                tempHeight, pOutputPlane[0].u_height);
+            pOutputPlane[0].u_height = tempHeight;
+            pOutputPlane[1].u_height = tempHeight/2;
+            pOutputPlane[2].u_height = tempHeight/2;
+        }
+
         memcpy((void *) pOutputPlane[0].pac_data, (void *)tempBuffPtr,
             tempWidth * tempHeight);
         tempBuffPtr += (tempWidth * tempHeight);
