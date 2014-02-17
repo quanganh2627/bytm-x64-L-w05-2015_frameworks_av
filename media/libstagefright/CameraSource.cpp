@@ -304,7 +304,7 @@ status_t CameraSource::isCameraColorFormatSupported(
 status_t CameraSource::configureCamera(
         CameraParameters* params,
         int32_t width, int32_t height,
-        int32_t frameRate) {
+        int32_t &frameRate) {
     ALOGV("configureCamera");
     Vector<Size> sizes;
     bool isSetVideoSizeSupportedByCamera = true;
@@ -341,9 +341,14 @@ status_t CameraSource::configureCamera(
         char buf[4];
         snprintf(buf, 4, "%d", frameRate);
         if (strstr(supportedFrameRates, buf) == NULL) {
-            ALOGE("Requested frame rate (%d) is not supported: %s",
-                frameRate, supportedFrameRates);
-            return BAD_VALUE;
+            if (frameRate > 30) {
+                //reset to safe fps 30 if target fps > 30 is not supported
+                frameRate = 30;
+            } else {
+                ALOGE("Requested frame rate (%d) is not supported: %s",
+                    frameRate, supportedFrameRates);
+                return BAD_VALUE;
+            }
         }
 
         // The frame rate is supported, set the camera to the requested value.
