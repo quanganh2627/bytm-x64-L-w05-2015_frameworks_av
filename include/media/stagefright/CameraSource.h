@@ -224,7 +224,7 @@ private:
     status_t isCameraColorFormatSupported(const CameraParameters& params);
     status_t configureCamera(CameraParameters* params,
                     int32_t width, int32_t height,
-                    int32_t frameRate);
+                    int32_t &frameRate);
 
     status_t checkVideoSize(const CameraParameters& params,
                     int32_t width, int32_t height);
