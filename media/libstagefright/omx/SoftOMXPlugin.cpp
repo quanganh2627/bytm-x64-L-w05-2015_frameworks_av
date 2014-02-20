@@ -81,6 +81,7 @@ static const struct {
     { "OMX.Intel.amrwb.decoder", "amrdec_mdp", "audio_decoder.amrwb" },
     { "OMX.Intel.amrnb.encoder", "amrenc_mdp", "audio_encoder.amrnb" },
     { "OMX.Intel.amrwb.encoder", "amrenc_mdp", "audio_encoder.amrwb" },
+    { "OMX.Intel.vorbis.decoder", "vorbisdec_mdp", "audio_decoder.vorbis" },
 #endif
     { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" },
     { "OMX.google.gsm.decoder", "gsmdec", "audio_decoder.gsm" },
