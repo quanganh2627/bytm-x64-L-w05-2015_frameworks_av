@@ -4304,9 +4304,6 @@ void ACodec::LoadedState::stateEntered() {
 }
 
 void ACodec::LoadedState::onShutdown(bool keepComponentAllocated) {
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-    mCodec->setMDSVideoState_l((int)MDS_VIDEO_UNPREPARING, NULL);
-#endif
     if (!keepComponentAllocated) {
         CHECK_EQ(mCodec->mOMX->freeNode(mCodec->mNode), (status_t)OK);
 
@@ -4743,6 +4740,9 @@ bool ACodec::ExecutingState::onMessageReceived(const sp<AMessage> &msg) {
             mCodec->mKeepComponentAllocated = keepComponentAllocated;
 
             mActive = false;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+           mCodec->setMDSVideoState_l((int)MDS_VIDEO_UNPREPARING, NULL);
+#endif
 
             CHECK_EQ(mCodec->mOMX->sendCommand(
                         mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),
