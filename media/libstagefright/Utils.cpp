@@ -769,14 +769,18 @@ status_t setAACParameters(sp<MetaData> meta, audio_offload_info_t *info) {
                                        32000, 24000, 22050, 16000, 12000,
                                        11025, 8000, 7350, 0, 0, 0};
 
-    AudioParameter param = AudioParameter();
-    param.addInt(String8(AUDIO_OFFLOAD_CODEC_ID), AOT);
-    param.addInt(String8(AUDIO_OFFLOAD_CODEC_DOWN_SAMPLING), downSamplingSBR);
 
     ALOGV("setAACParameters: avgBitRate %d, sampleRate %d, AOT %d,"
           "numChannels %d, downSamplingSBR %d", info->bit_rate,
            kSamplingRate[freqIndex], AOT, numChannels, downSamplingSBR);
 
+    if (AOT != AOT_AAC_LC) {
+        ALOGD("setAACParameters: Offload unsupported AAC format");
+        return BAD_VALUE;
+    }
+
+    AudioParameter param = AudioParameter();
+    param.addInt(String8(AUDIO_OFFLOAD_CODEC_ID), AOT);
     status_t status = NO_ERROR;
     status = AudioSystem::setParameters(0, param.toString());
 
@@ -784,15 +788,9 @@ status_t setAACParameters(sp<MetaData> meta, audio_offload_info_t *info) {
         ALOGE("error in setting offload AAC parameters");
         return status;
     }
-    if ((AOT != AOT_SBR) && (AOT != AOT_PS) && (AOT != AOT_AAC_LC)) {
-        ALOGV("Unsupported AAC format");
-        return BAD_VALUE;
-    }
-
     info->format = AUDIO_FORMAT_AAC;
     return OK;
 
-    return OK;
 }
 }  // namespace android
 
