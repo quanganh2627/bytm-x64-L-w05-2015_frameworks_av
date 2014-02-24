@@ -735,20 +735,19 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                 // init VPP
                 if (!audio) {
                     if (!mIsVppInit && mVideoDecoder != NULL && mVPPProcessor != NULL) {
-                        mIsVppInit = true;
                         sp<ACodec> codec = mVideoDecoder->mCodec;
                         bool success = codec->isVppBufferAvail();
                         if (success) {
-                            if(mVPPProcessor->init(codec) != VPP_OK){
-                                mRenderer->releaseVppProcessor();
-                                mVPPProcessor.clear();
+                            if(mVPPProcessor->init(codec) == VPP_OK) {
+                                mIsVppInit = true;
                             }
-                        } else {
+                        }
+                        if (mIsVppInit != true) {
                             mRenderer->releaseVppProcessor();
                             mVPPProcessor.clear();
                         }
                     }
-                }
+               }
 #endif
                 renderBuffer(audio, codecRequest);
             } else if (what != ACodec::kWhatComponentAllocated
@@ -993,6 +992,11 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
                 LOGE("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
                         mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
                 codec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+                int frameRate = mVPPProcessor->getVppOutputFps();
+                ALOGI("VPP set New frame rate: %d\n", frameRate);
+                if (!codec->setVppFrameRate(frameRate)) {
+                    ALOGW("VPP faield to SET New frame rate: %d\n", frameRate);
+                }
             }
         }
     }

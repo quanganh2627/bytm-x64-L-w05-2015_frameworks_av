@@ -1616,6 +1616,7 @@ OMXCodec::OMXCodec(
       mVppInBufNum(0),
       mVppOutBufNum(0),
       mVppBufAvail(false),
+      mVppOutputFps(0),
 #endif
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDClient(NULL),
@@ -2057,6 +2058,16 @@ void OMXCodec::setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum) {
 
 bool OMXCodec::isVppBufferAvail() {
     return mVppBufAvail && (mVppInBufNum != 0) && (mVppOutBufNum != 0);
+}
+
+bool OMXCodec::setVppFrameRate(uint32_t frameRate) {
+    if (frameRate > 60) {
+        ALOGW("Failed: VPP set invlalid frame frate %d.(expect <=60)", frameRate);
+        return false;
+    } else {
+        mVppOutputFps = frameRate;
+        return true;
+    }
 }
 #endif
 
@@ -5154,21 +5165,21 @@ void OMXCodec::setMDSVideoState_l(int state) {
         if (!meta->findInt32(kKeyFrameRate, &info.frameRate)) {
             info.frameRate = 0;
         }
+#ifdef TARGET_HAS_VPP
+        if (mVppOutputFps) {
+            info.frameRate = mVppOutputFps;
+        }
+#endif
         if (!meta->findInt32(kKeyDisplayWidth, &info.displayW)) {
             info.displayW = 0;
         }
         if (!meta->findInt32(kKeyDisplayHeight, &info.displayH)) {
             info.displayH = 0;
         }
-#if 0
-#ifdef TARGET_HAS_VPP
-        // mVPPProcessor is NULL in case of  VPP is off
-        if (mVPPProcessor) {
-            info.frameRate = mVPPProcessor->getVppOutputFps();
-        }
-#endif
-#endif
+
         mMDClient->updateVideoSourceInfo(mMDSVideoSessionId, info);
+        ALOGI("%s: MDS set video source Info %d x %d @ %d fps", __func__,
+               info.displayW, info.displayH, info.frameRate);
     }
     mMDClient->updateVideoState(mMDSVideoSessionId, (MDS_VIDEO_STATE)state);
     if (state == MDS_VIDEO_UNPREPARED) {

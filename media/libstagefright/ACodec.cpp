@@ -400,6 +400,7 @@ ACodec::ACodec()
 #ifdef TARGET_HAS_VPP
       mVppInBufNum(0),
       mVppOutBufNum(0),
+      mVppOutputFps(0),
 #endif
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDSVideoSessionId(-1),
@@ -612,6 +613,16 @@ void ACodec::setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum) {
 bool ACodec::isVppBufferAvail() {
     return (mVppInBufNum != 0);
 }
+
+bool ACodec::setVppFrameRate(uint32_t frameRate) {
+    if (frameRate > 60) {
+        ALOGW("Failed: VPP set invlalid frame frate %d.(expect <=60)", frameRate);
+        return false;
+    } else {
+        mVppOutputFps = frameRate;
+        return true;
+    }
+}
 #endif
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
@@ -682,6 +693,11 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
             bool success = msg->findInt32("frame-rate", &info.frameRate);
             if (!success)
                 info.frameRate = 0;
+#ifdef TARGET_HAS_VPP
+        if (mVppOutputFps) {
+            info.frameRate = mVppOutputFps;
+        }
+#endif
             success = msg->findInt32("width", &info.displayW);
             if (!success)
                 info.displayW = 0;
@@ -689,6 +705,8 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
             if (!success)
                 info.displayH = 0;
             mMDClient->updateVideoSourceInfo(mMDSVideoSessionId, info);
+            ALOGI("%s: MDS set video source Info %d x %d @ %d fps ", __func__,
+                     info.displayW, info.displayH, info.frameRate);
         }
     }
     mMDClient->updateVideoState(mMDSVideoSessionId, (MDS_VIDEO_STATE)state);
