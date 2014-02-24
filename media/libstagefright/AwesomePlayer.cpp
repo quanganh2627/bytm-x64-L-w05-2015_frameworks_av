@@ -2008,8 +2008,14 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         }
         mVPPProcessor = createVppProcessor_l(omxCodec);
 
-        if (mVPPProcessor != NULL)
+        if (mVPPProcessor != NULL) {
             omxCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+            int frameRate = mVPPProcessor->getVppOutputFps();
+            ALOGI("VPP SET New frame rate: %d\n", frameRate);
+            if (!omxCodec->setVppFrameRate(frameRate)) {
+                ALOGW("VPP faield to SET New frame rate: %d\n", frameRate);
+            }
+        }
 #endif
         status_t err = mVideoSource->start();
 
@@ -2419,14 +2425,14 @@ void AwesomePlayer::onVideoEvent() {
         }
 
         if (!mVPPInit) {
-            if (mVPPProcessor->init() == VPP_OK)
+            if (mVPPProcessor->init() == VPP_OK) {
                 mVPPInit = true;
-            else {
+            } else {
                 delete mVPPProcessor;
                 mVPPProcessor = NULL;
                 postVideoEvent_l(100);
                 return;
-             }
+            }
         }
         ALOGV("SET DATA %p\n", mVideoBuffer);
 #ifdef TARGET_HAS_FRC_SLOW_MOTION

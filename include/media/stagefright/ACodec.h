@@ -83,6 +83,7 @@ struct ACodec : public AHierarchicalStateMachine {
 #ifdef TARGET_HAS_VPP
     void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
     bool isVppBufferAvail();
+    bool setVppFrameRate(uint32_t frameRate);
 #endif
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
@@ -176,6 +177,7 @@ private:
     friend struct NuPlayerVPPProcessor;
     uint32_t mVppInBufNum;
     uint32_t mVppOutBufNum;
+    uint32_t mVppOutputFps;
 #endif
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY

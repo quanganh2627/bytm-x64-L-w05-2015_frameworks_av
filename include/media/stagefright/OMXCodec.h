@@ -139,6 +139,7 @@ struct OMXCodec : public MediaSource,
 #ifdef TARGET_HAS_VPP
     void setVppBufferNum(uint32_t inBufNum, uint32_t outBufNum);
     bool isVppBufferAvail();
+    bool setVppFrameRate(uint32_t frameRate);
 #endif
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     void setMDSVideoState_l(int status);
@@ -159,6 +160,7 @@ private:
     uint32_t mVppInBufNum;
     uint32_t mVppOutBufNum;
     bool mVppBufAvail;
+    uint32_t mVppOutputFps;
 #endif
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     int mMDSVideoSessionId;
