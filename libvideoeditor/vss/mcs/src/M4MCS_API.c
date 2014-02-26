@@ -4000,7 +4000,7 @@ M4OSA_ERR M4MCS_setOutputParams( M4MCS_Context pContext,
                     }
                     uiFrameWidth = pC->EncodingWidth;
                 }
-
+#ifndef NEED_REMOVE_PADDING_BYTE
                 remainder = pC->EncodingHeight % 16;
                 if (remainder != 0) {
                     if (remainder >= 8) {
@@ -4014,6 +4014,7 @@ M4OSA_ERR M4MCS_setOutputParams( M4MCS_Context pContext,
                     }
                     uiFrameHeight = pC->EncodingHeight;
                 }
+#endif
             }
         }
         else
