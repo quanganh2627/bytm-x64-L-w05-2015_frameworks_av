@@ -216,7 +216,8 @@ struct MyHandler : public AHandler {
             sp<AMessage> timeout = new AMessage('tdto', id());
             timeout->post(kTearDownTimeoutUs);
         } else {
-            (new AMessage('disc', id()))->post();
+            sp<AMessage> reply = new AMessage('disc', id());
+            mConn->disconnect(reply);
         }
     }
 
