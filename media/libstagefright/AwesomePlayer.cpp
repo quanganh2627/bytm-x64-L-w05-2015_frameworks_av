@@ -2165,6 +2165,27 @@ void AwesomePlayer::onVideoEvent() {
         return;
     }
     mVideoEventPending = false;
+    if (mCachedSource != NULL) {
+        // if cache is low, post another video event to avoid blocked in omxcodec
+        // function
+        int64_t cachedDurationUs;
+        bool eos;
+        if (getCachedDuration_l(&cachedDurationUs, &eos)) {
+            if (!eos && (cachedDurationUs < 500000ll)) {
+                ALOGW("cache %lld us is too low to play", cachedDurationUs);
+                postVideoEvent_l(10000);
+                return;
+            }
+        } else {
+            status_t finalStatus;
+            size_t cachedDataRemaining = mCachedSource->approxDataRemaining(&finalStatus);
+            if (finalStatus == OK && cachedDataRemaining < kLowWaterMarkBytes) {
+                ALOGW("cache %d is too low to play", cachedDataRemaining);
+                postVideoEvent_l(10000);
+                return;
+            }
+        }
+   }
 #ifdef TARGET_HAS_VPP
     if (mVPPProcessor == NULL) {
 #endif
