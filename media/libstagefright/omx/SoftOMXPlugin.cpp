@@ -79,6 +79,8 @@ static const struct {
     { "OMX.Intel.aac.decoder", "aacdec_mdp", "audio_decoder.aac" },
     { "OMX.Intel.amrnb.decoder", "amrdec_mdp", "audio_decoder.amrnb" },
     { "OMX.Intel.amrwb.decoder", "amrdec_mdp", "audio_decoder.amrwb" },
+    { "OMX.Intel.amrnb.encoder", "amrenc_mdp", "audio_encoder.amrnb" },
+    { "OMX.Intel.amrwb.encoder", "amrenc_mdp", "audio_encoder.amrwb" },
 #endif
     { "OMX.google.flac.encoder", "flacenc", "audio_encoder.flac" },
     { "OMX.google.gsm.decoder", "gsmdec", "audio_decoder.gsm" },
