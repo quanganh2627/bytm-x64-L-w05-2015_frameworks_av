@@ -70,7 +70,9 @@
 
 #ifdef USE_INTEL_MDP
 #include "UMCMacro.h"
+#ifdef USE_INTEL_MULT_THREAD
 #include "include/ThreadedSource.h"
+#endif
 #endif
 
 
@@ -443,7 +445,7 @@ sp<MediaSource> OMXCodec::Create(
             componentName = tmp.c_str();
         }
 
-#if USE_INTEL_MDP
+#if defined(USE_INTEL_MDP) && defined(USE_INTEL_MULT_THREAD)
         if (!strncmp(componentName, "CIPVP8Decoder", 13)) {
             ALOGI("Loading CIPVP8Decoder");
             return new ThreadedSource(MakeCIPVP8Decoder(source));

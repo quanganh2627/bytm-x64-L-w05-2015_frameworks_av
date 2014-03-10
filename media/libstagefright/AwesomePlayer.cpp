@@ -36,8 +36,9 @@
 #include "include/ThrottledSource.h"
 #include "include/MPEG2TSExtractor.h"
 #include "include/WVMExtractor.h"
+#ifdef USE_INTEL_MULT_THREAD
 #include "include/ThreadedSource.h"
-
+#endif
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
 #include <media/IMediaPlayerService.h>
@@ -1965,6 +1966,7 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         sp<MetaData> meta = mExtractor->getMetaData();
         const char *mime;
         CHECK(meta->findCString(kKeyMIMEType, &mime));
+#ifdef USE_INTEL_MULT_THREAD
         bool isPrefetchSupported = false;
         if (!strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MPEG4)
             || !strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_MATROSKA)
@@ -1980,6 +1982,13 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
                 false, // createEncoder
                 isPrefetchSupported ? new ThreadedSource(mVideoTrack, MediaSource::kMaxMediaBufferSize) : mVideoTrack,
                 NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+#else
+        mVideoSource = OMXCodec::Create(
+                mClient.interface(), mVideoTrack->getFormat(),
+                false,
+                mVideoTrack,
+                NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+#endif
     }
 
     if (mVideoSource != NULL) {

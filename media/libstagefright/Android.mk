@@ -99,8 +99,12 @@ LOCAL_SRC_FILES:=                         \
         XINGSeeker.cpp                    \
         avc_utils.cpp                     \
         mp4/FragmentedMP4Parser.cpp       \
-        mp4/TrackFragment.cpp             \
-        ThreadedSource.cpp                \
+        mp4/TrackFragment.cpp
+
+ifeq ($(USE_INTEL_MULT_THREAD),true)
+LOCAL_SRC_FILES += ThreadedSource.cpp
+LOCAL_CFLAGS += -DUSE_INTEL_MULT_THREAD
+endif
 
 LOCAL_C_INCLUDES:= \
         $(TOP)/frameworks/av/include/media/stagefright/timedtext \
