@@ -726,6 +726,8 @@ status_t AVIExtractor::parseStreamFormat(off64_t offset, size_t size) {
 
         track->mMeta->setInt32(kKeyWidth, width);
         track->mMeta->setInt32(kKeyHeight, height);
+        track->mMeta->setInt32(kKeyDisplayWidth, width);
+        track->mMeta->setInt32(kKeyDisplayHeight, height);
     } else {
         uint32_t format = U16LE_AT(data);
 
@@ -1177,6 +1179,8 @@ status_t AVIExtractor::addH264CodecSpecificData(size_t trackIndex) {
 
     track->mMeta->setInt32(kKeyWidth, width);
     track->mMeta->setInt32(kKeyHeight, height);
+    track->mMeta->setInt32(kKeyDisplayWidth, width);
+    track->mMeta->setInt32(kKeyDisplayHeight, height);
     track->mMeta->setData(kKeyAVCC, type, csd, csdSize);
 
     return OK;

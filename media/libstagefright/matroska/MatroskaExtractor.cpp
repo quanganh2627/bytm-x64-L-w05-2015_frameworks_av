@@ -988,6 +988,8 @@ int MatroskaExtractor::addTracks() {
 
                 meta->setInt32(kKeyWidth, vtrack->GetWidth());
                 meta->setInt32(kKeyHeight, vtrack->GetHeight());
+                meta->setInt32(kKeyDisplayWidth, vtrack->GetWidth());
+                meta->setInt32(kKeyDisplayHeight, vtrack->GetHeight());
                 break;
             }
 
