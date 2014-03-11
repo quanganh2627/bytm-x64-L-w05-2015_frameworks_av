@@ -56,6 +56,11 @@ ssize_t MonoPipeReader::read(void *buffer, size_t count, int64_t readPTS)
     int64_t nextReadPTS;
     nextReadPTS = mPipe->offsetTimestampByAudioFrames(readPTS, count);
 
+#ifdef SURROUND_SUBMIX
+    uint32_t mChannels = Format_channelCount(mPipe->mFormat);
+    uint32_t frameSize = mChannels * sizeof(short);
+#endif
+
     // count == 0 is unlikely and not worth checking for explicitly; will be handled automatically
     ssize_t red = availableToRead();
     if (CC_UNLIKELY(red <= 0)) {
@@ -72,12 +77,33 @@ ssize_t MonoPipeReader::read(void *buffer, size_t count, int64_t readPTS)
     if (part1 > (size_t) red) {
         part1 = red;
     }
+
     if (CC_LIKELY(part1 > 0)) {
+#ifdef SURROUND_SUBMIX
+        // FIX ME : Pipe supports only multiples of 2
+        // we compute the pointer based on frame_size
+        if (mChannels == 6) {
+            memcpy(buffer, (char *) mPipe->mBuffer + (front * frameSize), part1 * frameSize);
+        } else {
+            memcpy(buffer, (char *) mPipe->mBuffer + (front << mBitShift), part1 << mBitShift);
+        }
+#else
         memcpy(buffer, (char *) mPipe->mBuffer + (front << mBitShift), part1 << mBitShift);
+#endif
         if (CC_UNLIKELY(front + part1 == mPipe->mMaxFrames)) {
             size_t part2 = red - part1;
             if (CC_LIKELY(part2 > 0)) {
-                memcpy((char *) buffer + (part1 << mBitShift), mPipe->mBuffer, part2 << mBitShift);
+#ifdef SURROUND_SUBMIX
+               if (mChannels == 6) {
+                   memcpy((char *) buffer + (part1 * frameSize), mPipe->mBuffer,
+                           part2 * frameSize);
+               } else {
+                   memcpy((char *) buffer + (part1 << mBitShift), mPipe->mBuffer,
+                           part2 << mBitShift);
+               }
+#else
+               memcpy((char *) buffer + (part1 << mBitShift), mPipe->mBuffer, part2 << mBitShift);
+#endif
             }
         }
         mPipe->updateFrontAndNRPTS(red + mPipe->mFront, nextReadPTS);

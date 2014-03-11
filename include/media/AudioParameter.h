@@ -42,6 +42,12 @@ public:
     //     (defined in media/mediarecorder.h)
     //  keyScreenState: either "on" or "off"
     //  keyStreamFlags: to give additional information to Audio HAL e.g. direct stream, offload
+    //  keyBGMState: tracks bgm state sent from the application (true/false)
+    //  keyBGMAudio: tracks audio availability in the played track (true/false)
+    //  keyBGMSession: tracks bgm audio session when the bgm app is started and used to
+    //                        differentiate across player sessions
+    //  keyDirectprofileSupported: tracks whether the audio HAL supports direct stream over submix
+    //                        eg: multichannel, hifi stream
     static const char * const keyRouting;
     static const char * const keySamplingRate;
     static const char * const keyFormat;
@@ -53,6 +59,7 @@ public:
     static const char * const keyBGMState;
     static const char * const keyBGMAudio;
     static const char * const keyBGMSession;
+    static const char * const keyDirectprofileSupported;
 
     String8 toString();
 

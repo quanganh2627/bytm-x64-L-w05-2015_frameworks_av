@@ -102,6 +102,11 @@ ssize_t MonoPipe::write(const void *buffer, size_t count)
         return NEGOTIATE;
     }
     size_t totalFramesWritten = 0;
+#ifdef SURROUND_SUBMIX
+    uint32_t mChannels = Format_channelCount(mFormat);
+    uint32_t frameSize = mChannels * sizeof(short);
+#endif
+
     while (count > 0) {
         // can't return a negative value, as we already checked for !mNegotiated
         size_t avail = availableToWrite();
@@ -115,11 +120,29 @@ ssize_t MonoPipe::write(const void *buffer, size_t count)
             part1 = written;
         }
         if (CC_LIKELY(part1 > 0)) {
+#ifdef SURROUND_SUBMIX
+            if (mChannels == 6) {
+                // FIX ME : Pipe supports only multiples of 2
+                // we compute the pointer based on frame_size
+                memcpy((char *) mBuffer + (rear * frameSize), buffer, part1 * frameSize);
+            } else {
+                memcpy((char *) mBuffer + (rear << mBitShift), buffer, part1 << mBitShift);
+            }
+#else
             memcpy((char *) mBuffer + (rear << mBitShift), buffer, part1 << mBitShift);
+#endif
             if (CC_UNLIKELY(rear + part1 == mMaxFrames)) {
                 size_t part2 = written - part1;
                 if (CC_LIKELY(part2 > 0)) {
-                    memcpy(mBuffer, (char *) buffer + (part1 << mBitShift), part2 << mBitShift);
+#ifdef SURROUND_SUBMIX
+                  if (mChannels == 6) {
+                      memcpy(mBuffer, (char *) buffer + (part1 * frameSize), part2 * frameSize);
+                  } else {
+                      memcpy(mBuffer, (char *) buffer + (part1 << mBitShift), part2 << mBitShift);
+                  }
+#else
+                  memcpy(mBuffer, (char *) buffer + (part1 << mBitShift), part2 << mBitShift);
+#endif
                 }
             }
             android_atomic_release_store(written + mRear, &mRear);
@@ -129,7 +152,15 @@ ssize_t MonoPipe::write(const void *buffer, size_t count)
             break;
         }
         count -= written;
+#ifdef SURROUND_SUBMIX
+        if (mChannels == 6) {
+            buffer = (char *) buffer + (written * frameSize);
+        } else {
+            buffer = (char *) buffer + (written << mBitShift);
+        }
+#else
         buffer = (char *) buffer + (written << mBitShift);
+#endif
         // Simulate blocking I/O by sleeping at different rates, depending on a throttle.
         // The throttle tries to keep the mean pipe depth near the setpoint, with a slight jitter.
         uint32_t ns;

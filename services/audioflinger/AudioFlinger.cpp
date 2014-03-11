@@ -1838,7 +1838,11 @@ audio_io_handle_t AudioFlinger::openInput(audio_module_handle_t module,
         AudioResamplerIA::sampleRateSupported(config.sample_rate, reqSamplingRate) ||
 #endif
         (config.sample_rate <= 2 * reqSamplingRate) ) &&
+#ifdef SURROUND_SUBMIX
+        (popcount(config.channel_mask) <= FCC_2)) {
+#else
         (popcount(config.channel_mask) <= FCC_2) && (popcount(reqChannels) <= FCC_2)) {
+#endif
         ALOGV("openInput() reopening with proposed sampling rate and channel mask");
         inStream = NULL;
         status = inHwHal->open_input_stream(inHwHal, id, *pDevices, &config, &inStream);
