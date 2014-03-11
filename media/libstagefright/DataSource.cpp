@@ -172,12 +172,13 @@ void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer_l(SniffMP3);
     RegisterSniffer_l(SniffAAC);
     RegisterSniffer_l(SniffMPEG2PS);
-    RegisterSniffer_l(SniffWVM);
     RegisterSniffer_l(SniffAVI);
 
 #ifdef USE_INTEL_ASF_EXTRACTOR
     RegisterSniffer_l(SniffAsf);
 #endif
+    RegisterSniffer_l(SniffWVM);
+
     char value[PROPERTY_VALUE_MAX];
     if (property_get("drm.service.enabled", value, NULL)
             && (!strcmp(value, "1") || !strcasecmp(value, "true"))) {
