@@ -36,6 +36,7 @@ const char * const AudioParameter::keyStreamFlags = AUDIO_PARAMETER_KEY_STREAM_F
 const char * const AudioParameter::keyBGMState = AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE;
 const char * const AudioParameter::keyBGMAudio = AUDIO_PARAMETER_VALUE_REMOTE_BGM_AUDIO;
 const char * const AudioParameter::keyBGMSession = AUDIO_PARAMETER_VALUE_REMOTE_BGM_SESSION_ID;
+const char * const AudioParameter::keyDirectprofileSupported = AUDIO_PARAMETER_KEY_DIRECT_PROFILE_SUPPORTED;
 
 AudioParameter::AudioParameter(const String8& keyValuePairs)
 {

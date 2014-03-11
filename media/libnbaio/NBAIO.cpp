@@ -48,7 +48,13 @@ enum {
 enum {
     Format_C_1 = 0x08,
     Format_C_2 = 0x10,
+#ifdef SURROUND_SUBMIX
+    Format_C_6 = 0x20,
+    Format_C_8 = 0x40,
+    Format_C_Mask = 0x78
+#else
     Format_C_Mask = 0x18
+#endif
 };
 
 unsigned Format_sampleRate(NBAIO_Format format)
@@ -88,6 +94,12 @@ unsigned Format_channelCount(NBAIO_Format format)
         return 1;
     case Format_C_2:
         return 2;
+#ifdef SURROUND_SUBMIX
+    case Format_C_6:
+        return 6; //it must be 1<<2 for 6 and 1<<3 for 8
+    case Format_C_8:
+        return 8;
+#endif
     default:
         return 0;
     }
@@ -131,6 +143,14 @@ NBAIO_Format Format_from_SR_C(unsigned sampleRate, unsigned channelCount)
     case 2:
         format |= Format_C_2;
         break;
+#ifdef SURROUND_SUBMIX
+    case 6:
+        format |= Format_C_6;
+        break;
+    case 8:
+        format |= Format_C_8;
+        break;
+#endif
     default:
         return Format_Invalid;
     }
