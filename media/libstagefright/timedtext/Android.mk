@@ -14,6 +14,11 @@ LOCAL_C_INCLUDES:= \
         $(TOP)/frameworks/av/include/media/stagefright/timedtext \
         $(TOP)/frameworks/av/media/libstagefright
 
+#slow motion support
+ifeq ($(TARGET_HAS_FRC_SLOW_MOTION), true)
+LOCAL_CFLAGS += -DTARGET_HAS_FRC_SLOW_MOTION
+endif
+
 LOCAL_MODULE:= libstagefright_timedtext
 
 include $(BUILD_STATIC_LIBRARY)
