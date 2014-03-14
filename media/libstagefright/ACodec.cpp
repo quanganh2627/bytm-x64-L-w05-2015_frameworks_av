@@ -662,9 +662,6 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
         }
     }
     if (mMDClient == NULL) {
-#ifdef USE_MDS_LEGACY
-        mMDClient = new MultiDisplayClient();
-#else
         sp<IServiceManager> sm = defaultServiceManager();
         if (sm == NULL) {
             ALOGW("%s: Failed to get service manager", __func__);
@@ -677,7 +674,6 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
             return;
         }
         mMDClient = mds->getVideoControl();
-#endif
     }
     if (mMDSVideoSessionId < 0) {
         mMDSVideoSessionId = mMDClient->allocateVideoSessionId();
@@ -686,9 +682,6 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
         if (msg != NULL && msg.get() != NULL) {
             MDSVideoSourceInfo info;
             memset(&info, 0, sizeof(MDSVideoSourceInfo));
-#ifdef USE_MDS_LEGACY
-            info.isPlaying = true;
-#endif
             info.isProtected = ((mFlags & kFlagIsSecure) != 0);
             bool success = msg->findInt32("frame-rate", &info.frameRate);
             if (!success)
@@ -712,15 +705,8 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
     mMDClient->updateVideoState(mMDSVideoSessionId, (MDS_VIDEO_STATE)state);
     if (state == MDS_VIDEO_UNPREPARED) {
         mMDSVideoSessionId = -1;
-#ifdef USE_MDS_LEGACY
-        delete mMDClient;
-#endif
         mMDClient = NULL;
     }
-}
-
-int ACodec::getMDSVideoSessionId() {
-    return mMDSVideoSessionId;
 }
 
 #endif

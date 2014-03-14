@@ -5102,20 +5102,20 @@ status_t OMXCodec::pause() {
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
 
 void OMXCodec::setMDSVideoState_l(int state) {
-    ALOGV("Update Video State: %d, %d, %d, %p",
+    ALOGI("Update Video State: %d, %d, %d, %p",
             state, mMDSVideoSessionId, (mFlags & kEnableGrallocUsageProtected), this);
     if (mIsEncoder) {
         //ALOGW("Encoder is %d, Native window is invalid", mIsEncoder);
         return;
     }
     if (state >= MDS_VIDEO_UNPREPARING && mMDSVideoSessionId < 0) {
-        //ALOGW("Invalid unprepared state");
+        ALOGW("Invalid unprepared state");
         return;
     }
     if (!(mFlags & kEnableGrallocUsageProtected) &&
             (state == MDS_VIDEO_PREPARING || state == MDS_VIDEO_UNPREPARING)) {
         // ignore preparing and unpreparing state if video is not protected
-        //ALOGW("Ignore MDS preparing and unpreparing for clear content");
+        ALOGW("Ignore MDS preparing and unpreparing for clear content");
         return;
     }
     if (state == MDS_VIDEO_PREPARED) {
@@ -5131,14 +5131,11 @@ void OMXCodec::setMDSVideoState_l(int state) {
                     NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
         }
         if (wcom == 0) {
-            //ALOGW("MDS's wcom flag is 0");
+            ALOGW("MDS's wcom flag is 0");
             return;
         }
     }
     if (mMDClient == NULL) {
-#ifdef USE_MDS_LEGACY
-        mMDClient = new MultiDisplayClient();
-#else
         sp<IServiceManager> sm = defaultServiceManager();
         if (sm == NULL) {
             ALOGW("%s: Failed to get service manager", __func__);
@@ -5151,7 +5148,6 @@ void OMXCodec::setMDSVideoState_l(int state) {
             return;
         }
         mMDClient = mds->getVideoControl();
-#endif
     }
     if (mMDSVideoSessionId < 0) {
         mMDSVideoSessionId = mMDClient->allocateVideoSessionId();
@@ -5159,9 +5155,6 @@ void OMXCodec::setMDSVideoState_l(int state) {
     if (state == MDS_VIDEO_PREPARED) {
         MDSVideoSourceInfo info;
         memset(&info, 0, sizeof(MDSVideoSourceInfo));
-#ifdef USE_MDS_LEGACY
-        info.isPlaying = true;
-#endif
         info.isProtected = ((mFlags & kEnableGrallocUsageProtected) != 0);
         sp<MetaData> meta = mSource->getFormat();
         if (!meta->findInt32(kKeyFrameRate, &info.frameRate)) {
@@ -5186,16 +5179,8 @@ void OMXCodec::setMDSVideoState_l(int state) {
     mMDClient->updateVideoState(mMDSVideoSessionId, (MDS_VIDEO_STATE)state);
     if (state == MDS_VIDEO_UNPREPARED) {
         mMDSVideoSessionId = -1;
-#ifdef USE_MDS_LEGACY
-        delete mMDClient;
-#endif
         mMDClient = NULL;
     }
-}
-
-int OMXCodec::getMDSVideoSessionId() {
-    Mutex::Autolock autoLock(mLock);
-    return mMDSVideoSessionId;
 }
 
 #endif
