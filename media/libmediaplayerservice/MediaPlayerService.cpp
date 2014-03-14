@@ -85,12 +85,8 @@
 #include "RemoteDisplay.h"
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifdef USE_MDS_LEGACY
-#include <display/MultiDisplayClient.h>
-#else
 #include <display/MultiDisplayService.h>
 #include <display/IMultiDisplayVideoControl.h>
-#endif
 #endif
 
 #ifdef TARGET_HAS_FRC_SLOW_MOTION
@@ -105,9 +101,7 @@ using android::BAD_VALUE;
 using android::NOT_ENOUGH_DATA;
 using android::Parcel;
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
-#ifndef USE_MDS_LEGACY
 using namespace android::intel;
-#endif
 #endif
 
 // Max number of entries in the filter.
@@ -247,9 +241,6 @@ MediaPlayerService::MediaPlayerService()
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     // Reset video playback status in case media server crashes.
-#ifdef USE_MDS_LEGACY
-    MultiDisplayClient* mdsclient = new MultiDisplayClient();
-#else
     sp<IServiceManager> sm = defaultServiceManager();
     if (sm == NULL) {
         LOGE("%s: Fail to get service manager", __func__);
@@ -262,12 +253,8 @@ MediaPlayerService::MediaPlayerService()
         return;
     }
     sp<IMultiDisplayVideoControl> mdsclient = mds->getVideoControl();
-#endif
     if (mdsclient != NULL) {
         mdsclient->resetVideoPlayback();
-#ifdef USE_MDS_LEGACY
-        delete mdsclient;
-#endif
         mdsclient = NULL;
     }
 #endif

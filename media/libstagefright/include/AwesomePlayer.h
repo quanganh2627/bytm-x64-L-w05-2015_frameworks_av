@@ -58,18 +58,12 @@ struct WVMExtractor;
 struct AwesomeRenderer : public RefBase {
     AwesomeRenderer() {}
 
-    virtual void render(MediaBuffer *buffer, void *platformPrivate = NULL) = 0;
+    virtual void render(MediaBuffer *buffer) = 0;
 
 private:
     AwesomeRenderer(const AwesomeRenderer &);
     AwesomeRenderer &operator=(const AwesomeRenderer &);
 };
-
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-struct IntelPlatformPrivate {
-    int usage;
-};
-#endif
 
 
 

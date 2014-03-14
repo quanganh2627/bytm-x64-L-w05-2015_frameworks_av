@@ -16,7 +16,7 @@
 
 #undef DEBUG_HDCP
 
-//#define LOG_NDEBUG 0
+#define LOG_NDEBUG 0
 #define DUMP_DECODE_INFO
 #ifdef DUMP_DECODE_INFO
 #define LOG_NIDEBUG 0
@@ -157,13 +157,13 @@ struct AwesomeLocalRenderer : public AwesomeRenderer {
         : mTarget(new SoftwareRenderer(nativeWindow, meta)) {
     }
 
-    virtual void render(MediaBuffer *buffer, void *platformPrivate) {
+    virtual void render(MediaBuffer *buffer) {
         render((const uint8_t *)buffer->data() + buffer->range_offset(),
-               buffer->range_length(), platformPrivate);
+               buffer->range_length());
     }
 
-    void render(const void *data, size_t size, void *platformPrivate) {
-        mTarget->render(data, size, platformPrivate);
+    void render(const void *data, size_t size) {
+        mTarget->render(data, size, NULL);
     }
 
 protected:
@@ -187,7 +187,7 @@ struct AwesomeNativeWindowRenderer : public AwesomeRenderer {
         applyRotation(rotationDegrees);
     }
 
-    virtual void render(MediaBuffer *buffer, void *platformPrivate) {
+    virtual void render(MediaBuffer *buffer) {
         ATRACE_CALL();
         int64_t timeUs;
         CHECK(buffer->meta_data()->findInt64(kKeyTime, &timeUs));
@@ -2141,56 +2141,6 @@ void AwesomePlayer::finishSeekIfNecessary(int64_t videoTimeUs) {
     }
 }
 
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-
-// set mds video session ID
-// Limitation: support upto 16 concurrent video sessions
-// native_window usage, bit 24 ~ bit 27 is used to maintain mds video session id
-void AwesomePlayer::updateMDSVideoSessionId_l(struct IntelPlatformPrivate* param) {
-    if (param == NULL)
-        return;
-
-#ifdef USE_MDS_LEGACY
-    // HACK:XXX
-    // BZ#161189, VP8 SW decoder on CTP is implemented as a MediaSource
-    // object. So we cannot access it as an OMXCodec object.
-    sp<MetaData> meta = mVideoSource->getFormat();
-    const char *component;
-
-    CHECK(meta->findCString(kKeyDecoderComponent, &component));
-    if (!strncmp(component, "CPIVP8Decoder", 13) ||
-            !strncmp(component, "CIPVP8Decoder", 13)) {
-        ALOGV("decoder name: %s", component);
-        return;
-    }
-#endif
-
-    struct ANativeWindowBuffer *anwBuff = mVideoBuffer->graphicBuffer().get();
-    OMXCodec* omxCodec = NULL;
-    if (mCachedSource != NULL) {
-        AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
-        omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
-    } else
-        omxCodec = (OMXCodec*) (mVideoSource.get());
-    if (omxCodec == NULL)
-        return;
-    int mdSessionId = omxCodec->getMDSVideoSessionId();
-    if (mdSessionId >= 0) {
-        ALOGV("MDS Video session ID is %d, Gfx buffer is %s",
-                mdSessionId, (anwBuff == NULL? "null" : "not null"));
-        if (anwBuff != NULL) {
-            anwBuff->usage |= ((mdSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
-            anwBuff->usage |= GRALLOC_USAGE_PRIVATE_3;
-        } else {
-            param->usage = GRALLOC_USAGE_PRIVATE_3;
-            param->usage |= ((mdSessionId << 24) & GRALLOC_USAGE_MDS_SESSION_ID_MASK);
-        }
-    }
-    return;
-}
-
-#endif
-
 void AwesomePlayer::onVideoEvent() {
     ATRACE_CALL();
     Mutex::Autolock autoLock(mLock);
@@ -2645,14 +2595,7 @@ void AwesomePlayer::onVideoEvent() {
 
     if (mVideoRenderer != NULL) {
         mSinceLastDropped++;
-#ifdef TARGET_HAS_MULTIPLE_DISPLAY
-        struct IntelPlatformPrivate platformPrivate;
-        memset(&platformPrivate, 0, sizeof(struct IntelPlatformPrivate));
-        updateMDSVideoSessionId_l(&platformPrivate);
-        mVideoRenderer->render(mVideoBuffer, &platformPrivate);
-#else
         mVideoRenderer->render(mVideoBuffer);
-#endif
         if (!mVideoRenderingStarted) {
             mVideoRenderingStarted = true;
             notifyListener_l(MEDIA_INFO, MEDIA_INFO_RENDERING_START);
