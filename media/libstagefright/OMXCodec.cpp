@@ -3879,6 +3879,7 @@ void OMXCodec::setAMRFormat(bool isWAMR, int32_t bitRate) {
     CHECK_EQ(err, (status_t)OK);
 
     def.eAMRFrameFormat = OMX_AUDIO_AMRFrameFormatFSF;
+    def.nBitRate = bitRate;
 
     def.eAMRBandMode = pickModeFromBitRate(isWAMR, bitRate);
     err = mOMX->setParameter(mNode, OMX_IndexParamAudioAmr, &def, sizeof(def));
