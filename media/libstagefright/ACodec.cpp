@@ -1794,6 +1794,7 @@ status_t ACodec::setupAMRCodec(bool encoder, bool isWAMR, int32_t bitrate) {
     }
 
     def.eAMRFrameFormat = OMX_AUDIO_AMRFrameFormatFSF;
+    def.nBitRate = bitrate;
     def.eAMRBandMode = pickModeFromBitRate(isWAMR, bitrate);
 
     err = mOMX->setParameter(
