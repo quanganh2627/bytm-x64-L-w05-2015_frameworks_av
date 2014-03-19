@@ -1785,7 +1785,8 @@ status_t AwesomePlayer::initAudioDecoder() {
     }
 
     mOffloadAudio = canOffloadStream(meta, (mVideoSource != NULL),
-                                     isStreamingHTTP(), streamType);
+                                     isStreamingHTTP(), streamType,
+                                     mAudioSink->getSessionId());
 
     if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_RAW)) {
         ALOGV("createAudioPlayer: bypass OMX (raw)");

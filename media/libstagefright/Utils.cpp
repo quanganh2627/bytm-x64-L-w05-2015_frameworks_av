@@ -575,7 +575,8 @@ const struct mime_conv_t* p = &mimeLookup[0];
 }
 
 bool canOffloadStream(const sp<MetaData>& meta, bool hasVideo,
-                      bool isStreaming, audio_stream_type_t streamType)
+                      bool isStreaming, audio_stream_type_t streamType,
+                      uint32_t sessionId)
 {
     const char *mime;
     CHECK(meta->findCString(kKeyMIMEType, &mime));
@@ -650,6 +651,7 @@ bool canOffloadStream(const sp<MetaData>& meta, bool hasVideo,
     info.stream_type = streamType;
     info.has_video = hasVideo;
     info.is_streaming = isStreaming;
+    info.sessionId = sessionId;
 
     // Check if offload is possible for given format, stream type, sample rate,
     // bit rate, duration, video and streaming
