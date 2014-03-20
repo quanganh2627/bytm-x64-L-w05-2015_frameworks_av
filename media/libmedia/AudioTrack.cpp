@@ -862,11 +862,13 @@ status_t AudioTrack::createTrack_l(
     // Client decides whether the track is TIMED (see below), but can only express a preference
     // for FAST.  Server will perform additional tests.
     if ((flags & AUDIO_OUTPUT_FLAG_FAST) && !(
+            //denied when resampling needed
+            (sampleRate == afSampleRate) &&
             // either of these use cases:
             // use case 1: shared buffer
-            (sharedBuffer != 0) ||
+            ((sharedBuffer != 0) ||
             // use case 2: callback handler
-            (mCbf != NULL))) {
+            (mCbf != NULL)))) {
         ALOGW("AUDIO_OUTPUT_FLAG_FAST denied by client");
         // once denied, do not request again if IAudioTrack is re-created
         flags = (audio_output_flags_t) (flags & ~AUDIO_OUTPUT_FLAG_FAST);
@@ -1474,14 +1476,17 @@ nsecs_t AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
 
         mLock.unlock();
         status_t status = mProxy->waitStreamEndDone(&timeout);
+        // staus returns DEAD_OBJECT because of cbkl flag set to CBLK_INVALID.
+        // This is because of invalidating the tracks because of HDMI connected
+        // or effects getting enabled. In this case Don't post EVENT_STREAM_END.
         mLock.lock();
         switch (status) {
         case NO_ERROR:
-        case DEAD_OBJECT:
         case TIMED_OUT:
             mLock.unlock();
             mCbf(EVENT_STREAM_END, mUserData, NULL);
             mLock.lock();
+        case DEAD_OBJECT:
             if (mState == STATE_STOPPING) {
                 mState = STATE_STOPPED;
                 if (status != DEAD_OBJECT) {
