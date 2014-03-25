@@ -403,6 +403,7 @@ ACodec::ACodec()
 #endif
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
       mMDSVideoSessionId(-1),
+      mIsMDSVideo(false),
       mMDClient(NULL),
 #endif
       mChannelMaskPresent(false),
@@ -628,36 +629,19 @@ bool ACodec::setVppFrameRate(uint32_t frameRate) {
 void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
     ALOGV("Update Video State: %d, %d, %d, %p",
             state, mMDSVideoSessionId, (mFlags & kFlagIsSecure), this);
-    if (mIsEncoder) {
-        //ALOGW("Encoder is %d or Native window is invalid", mIsEncoder);
+    if (mIsEncoder || !mIsMDSVideo) {
+        // ALOGW("Not a valid video playback %d, %d", mIsEncoder, mIsMDSVideo);
         return;
     }
     if (state >= MDS_VIDEO_UNPREPARING && mMDSVideoSessionId < 0) {
-        //ALOGW("Invalid unprepared or unpreparing state");
+        // ALOGW("Invalid unprepared or unpreparing state");
         return;
     }
     if (!(mFlags & kFlagIsSecure) &&
             (state == MDS_VIDEO_PREPARING || state == MDS_VIDEO_UNPREPARING)) {
         // ignore preparing and unpreparing state if video is not protected
-        //ALOGW("Ignore MDS preparing and unpreparing for clear content");
+        // ALOGW("Ignore MDS preparing and unpreparing for clear content");
         return;
-    }
-    if (state == MDS_VIDEO_PREPARED) {
-        int wcom = 0;
-        /*
-         * 0 means the buffers do not go directly to the window compositor;
-         * 1 means the ANativeWindow DOES send queued buffers
-         * directly to the window compositor;
-         * For more info, refer system/core/include/system/window.h
-         */
-        if (mNativeWindow != NULL) {
-            mNativeWindow->query(mNativeWindow.get(),
-                    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-        }
-        if (wcom == 0) {
-            //ALOGW("MDS's wcom flag is 0");
-            return;
-        }
     }
     if (mMDClient == NULL) {
         sp<IServiceManager> sm = defaultServiceManager();
@@ -1440,6 +1424,10 @@ status_t ACodec::configureCodec(
                 err = INVALID_OPERATION;
             } else {
                 err = setupVideoDecoder(mime, width, height);
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+                if (err == OK)
+                    mIsMDSVideo = true;
+#endif
             }
         }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG)) {

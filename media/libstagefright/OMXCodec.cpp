@@ -5104,8 +5104,8 @@ status_t OMXCodec::pause() {
 void OMXCodec::setMDSVideoState_l(int state) {
     ALOGI("Update Video State: %d, %d, %d, %p",
             state, mMDSVideoSessionId, (mFlags & kEnableGrallocUsageProtected), this);
-    if (mIsEncoder) {
-        //ALOGW("Encoder is %d, Native window is invalid", mIsEncoder);
+    if (mIsEncoder || !mIsVideo) {
+        ALOGW("Not a valid video playback %d, %d", mIsEncoder, mIsVideo);
         return;
     }
     if (state >= MDS_VIDEO_UNPREPARING && mMDSVideoSessionId < 0) {
@@ -5117,23 +5117,6 @@ void OMXCodec::setMDSVideoState_l(int state) {
         // ignore preparing and unpreparing state if video is not protected
         ALOGW("Ignore MDS preparing and unpreparing for clear content");
         return;
-    }
-    if (state == MDS_VIDEO_PREPARED) {
-        int wcom = 0;
-        /*
-         * 0 means the buffers do not go directly to the window compositor;
-         * 1 means the ANativeWindow DOES send queued buffers
-         * directly to the window compositor;
-         * For more info, refer system/core/include/system/window.h
-         */
-        if (mNativeWindow != NULL) {
-            mNativeWindow->query(mNativeWindow.get(),
-                    NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER, &wcom);
-        }
-        if (wcom == 0) {
-            ALOGW("MDS's wcom flag is 0");
-            return;
-        }
     }
     if (mMDClient == NULL) {
         sp<IServiceManager> sm = defaultServiceManager();

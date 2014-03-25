@@ -177,6 +177,7 @@ private:
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     int mMDSVideoSessionId;
+    bool mIsMDSVideo;
     sp<IMultiDisplayVideoControl> mMDClient;
 #endif
 
