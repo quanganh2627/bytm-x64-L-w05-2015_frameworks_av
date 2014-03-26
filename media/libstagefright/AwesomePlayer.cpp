@@ -52,7 +52,9 @@
 #include <media/stagefright/MediaDefs.h>
 #include <media/stagefright/MediaExtractor.h>
 #include <media/stagefright/MediaSource.h>
+#ifdef USE_ASYNC_OMX_CLIENT
 #include "include/AsyncOMXCodecWrapper.h"
+#endif
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/OMXCodec.h>
 #include <media/stagefright/Utils.h>
@@ -1957,11 +1959,19 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
 #endif
     ALOGV("initVideoDecoder flags=0x%x", flags);
     if (mCachedSource != NULL) {
+#ifdef USE_ASYNC_OMX_CLIENT
         mVideoSource = AsyncOMXCodecWrapper::Create(
                 mClient.interface(), mVideoTrack->getFormat(),
                 false, // createEncoder
                 mVideoTrack,
                 NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+#else
+        mVideoSource = OMXCodec::Create(
+                mClient.interface(), mVideoTrack->getFormat(),
+                false,
+                mVideoTrack,
+                NULL, flags, USE_SURFACE_ALLOC ? mNativeWindow : NULL);
+#endif
     } else {
         sp<MetaData> meta = mExtractor->getMetaData();
         const char *mime;
@@ -2005,10 +2015,12 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         }
 #ifdef TARGET_HAS_VPP
         OMXCodec* omxCodec;
+#ifdef USE_ASYNC_OMX_CLIENT
         if (mCachedSource != NULL) {
             AsyncOMXCodecWrapper* wrapper = ((AsyncOMXCodecWrapper*) (mVideoSource.get()));
             omxCodec = (OMXCodec*) ((wrapper->getOMXCodec()).get());
         } else
+#endif
             omxCodec = (OMXCodec*) (mVideoSource.get());
 
         if (mVPPProcessor != NULL) {
