@@ -1174,16 +1174,23 @@ void AudioFlinger::EffectHandle::disconnect(bool unpinIfLast)
     if (mEffect == 0) {
         return;
     }
-    // restore suspended effects if the disconnected handle was enabled and the last one.
-    if ((mEffect->disconnect(this, unpinIfLast) == 0) && mEnabled) {
+
+    {
+        // keep strong reference on the record thread so that
+        // it is not destroyed while its effects are removed
         sp<ThreadBase> thread = mEffect->thread().promote();
         if (thread != 0) {
-            thread->checkSuspendOnEffectEnabled(mEffect, false, mEffect->sessionId());
-        }
-    }
 
-    // release sp on module => module destructor can be called now
-    mEffect.clear();
+            // restore suspended effects if the disconnected handle was enabled and the last one.
+            if ((mEffect->disconnect(this, unpinIfLast) == 0) && mEnabled) {
+                    thread->checkSuspendOnEffectEnabled(mEffect, false, mEffect->sessionId());
+            }
+
+            Mutex::Autolock _l (thread->mLock);
+            mEffect.clear();
+        }
+    }// scope for promoted thread
+
     if (mClient != 0) {
         if (mCblk != NULL) {
             // unlike ~TrackBase(), mCblk is never a local new, so don't delete
