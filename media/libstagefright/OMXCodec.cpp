@@ -52,6 +52,14 @@
 #include <OMX_Component.h>
 #include <OMX_IndexExt.h>
 
+#include <system/graphics.h>   /* custom HAL formats */
+//#include <gralloc_priv.h>
+
+
+enum{
+    HAL_PIXEL_FORMAT_YCbCr_420_SP = 0x12, //NV12
+};
+
 #include "include/avc_utils.h"
 
 namespace android {
@@ -1806,6 +1814,79 @@ status_t OMXCodec::applyRotation() {
     return err;
 }
 
+int convertColorFormatOmxToHal(int omxFormat) {
+
+    int halFormat = HAL_PIXEL_FORMAT_YV12;
+
+    switch(omxFormat)
+    {
+    case OMX_COLOR_FormatYUV420SemiPlanar:
+        halFormat = HAL_PIXEL_FORMAT_YCbCr_420_SP;
+        break;
+    case OMX_COLOR_FormatYUV420Planar:
+#if 1
+        halFormat = HAL_PIXEL_FORMAT_YV12;
+#else
+        halFormat = HAL_PIXEL_FORMAT_CUSTOM_YCbCr_420_P;
+#endif
+        break;
+
+    case OMX_COLOR_Format32bitARGB8888:
+        halFormat = HAL_PIXEL_FORMAT_BGRA_8888;
+        break;
+
+    case OMX_COLOR_Format32bitBGRA8888:
+        halFormat = HAL_PIXEL_FORMAT_RGBA_8888;
+        break;
+
+    case OMX_COLOR_Format16bitRGB565:
+        halFormat = HAL_PIXEL_FORMAT_RGB_565;
+        break;
+
+    case OMX_COLOR_Format16bitBGR565:
+        halFormat = HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED;
+        break;
+
+    case OMX_COLOR_Format24bitRGB888:
+        halFormat = HAL_PIXEL_FORMAT_RGB_888;
+        break;
+
+    case OMX_COLOR_FormatRawBayer8bit:
+    case OMX_COLOR_FormatRawBayer10bit:
+    case OMX_COLOR_FormatRawBayer8bitcompressed:
+        halFormat = HAL_PIXEL_FORMAT_RAW_SENSOR;
+        break;
+
+    case OMX_COLOR_FormatYUV422SemiPlanar:
+        halFormat = HAL_PIXEL_FORMAT_YCbCr_422_SP;
+        break;
+    case OMX_COLOR_FormatYCbYCr:
+        halFormat = HAL_PIXEL_FORMAT_YCbCr_422_I;
+        break;
+
+
+    /*
+     * no mapping found in  android/system/core/include/system/graphics.h
+     * TODO: adapt these later; extension to gralloc required.
+     */
+    case OMX_COLOR_FormatYUV420PackedSemiPlanar:
+    case OMX_COLOR_FormatYUV420PackedPlanar:
+    case OMX_COLOR_FormatYCrYCb:
+    case OMX_COLOR_FormatCbYCrY:
+    case OMX_COLOR_FormatCrYCbY:
+        halFormat = HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED;
+        break;
+
+    default:
+        ALOGW("no HAL mapping for OMX color format 0x%08x - use OMX format", omxFormat);
+        halFormat = omxFormat;
+        break;
+    }
+
+    ALOGV("color format OMX 0x%08x -> HAL 0x%08x", omxFormat, halFormat);
+    return halFormat;
+}
+
 status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
     // Get the number of buffers needed.
     OMX_PARAM_PORTDEFINITIONTYPE def;
@@ -1823,7 +1904,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
             mNativeWindow.get(),
             def.format.video.nFrameWidth,
             def.format.video.nFrameHeight,
-            def.format.video.eColorFormat);
+            convertColorFormatOmxToHal(def.format.video.eColorFormat));
 
     if (err != 0) {
         ALOGE("native_window_set_buffers_geometry failed: %s (%d)",
