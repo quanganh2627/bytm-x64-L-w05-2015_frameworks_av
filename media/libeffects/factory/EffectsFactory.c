@@ -474,6 +474,11 @@ int init() {
         } else if (access(AUDIO_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
             loadEffectConfigFile(AUDIO_EFFECT_DEFAULT_CONFIG_FILE);
         }
+        if (access(AUDIO_PRE_EFFECT_VENDOR_CONFIG_FILE, R_OK) == 0) {
+            loadEffectConfigFile(AUDIO_PRE_EFFECT_VENDOR_CONFIG_FILE);
+        } else if (access(AUDIO_PRE_EFFECT_DEFAULT_CONFIG_FILE, R_OK) == 0) {
+            loadEffectConfigFile(AUDIO_PRE_EFFECT_DEFAULT_CONFIG_FILE);
+        }
     }
     updateNumEffects();
     gInitDone = 1;
