@@ -76,7 +76,6 @@ LOCAL_SRC_FILES:=                         \
         MediaExtractor.cpp                \
         MediaMuxer.cpp                    \
         MediaSource.cpp                   \
-        AsyncOMXCodecWrapper.cpp          \
         MetaData.cpp                      \
         NuCachedSource2.cpp               \
         NuMediaExtractor.cpp              \
@@ -104,6 +103,11 @@ LOCAL_SRC_FILES:=                         \
 ifeq ($(USE_INTEL_MULT_THREAD),true)
 LOCAL_SRC_FILES += ThreadedSource.cpp
 LOCAL_CFLAGS += -DUSE_INTEL_MULT_THREAD
+endif
+
+ifeq ($(USE_ASYNC_OMX_CLIENT),true)
+LOCAL_SRC_FILES += AsyncOMXCodecWrapper.cpp
+LOCAL_CFLAGS += -DUSE_ASYNC_OMX_CLIENT
 endif
 
 LOCAL_C_INCLUDES:= \
