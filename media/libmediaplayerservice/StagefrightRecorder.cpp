@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * Notes:
+ * Apr  3 2014: Intel: re-enable storeMetaDataInVideoBuffers
+ * Apr  3 2014: Intel: verify result of dup(output file descriptor)
+ */
+
+/*
  * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -256,6 +264,12 @@ status_t StagefrightRecorder::setOutputFile(int fd, int64_t offset, int64_t leng
         ::close(mOutputFd);
     }
     mOutputFd = dup(fd);
+
+    if (mOutputFd < 0) {
+        ALOGE("Error duplicating output file descriptor %d, errno %d",
+            fd, errno);
+        return -EBADF;
+    }
 
     return OK;
 }
@@ -739,6 +753,69 @@ status_t StagefrightRecorder::setClientName(const String16& clientName) {
 }
 
 status_t StagefrightRecorder::prepare() {
+
+    ALOGV("prepare() determine profile and level:");
+    ALOGV("prepare()    w %d, h %d, bit rate %d", mVideoWidth, mVideoHeight, mVideoBitRate);
+    ALOGV("prepare()    encoder %d", mVideoEncoder);
+    ALOGV("prepare()    current profile/level %d / %d",
+        mVideoEncoderProfile, mVideoEncoderLevel);
+
+    /*
+     * TODO: this could also go in a separate function,
+     *       triggered by checkVideoEncoderCapabilities()
+     */
+
+    /*
+     * for MPEG4 encoding at 720p, the detault profile is not sufficient
+     * if not yet set by app,
+     * use OMX_VIDEO_MPEG4ProfileMain, OMX_VIDEO_MPEG4Level4
+     */
+    if(mVideoEncoder == VIDEO_ENCODER_MPEG_4_SP &&
+        mVideoHeight >= 720) {
+        if(mVideoEncoderProfile == -1) {
+            ALOGI("MPEG4 recording 720p force profile OMX_VIDEO_MPEG4ProfileMain %d",
+                OMX_VIDEO_MPEG4ProfileMain);
+
+            setParamVideoEncoderProfile(OMX_VIDEO_MPEG4ProfileMain);
+        }
+
+        if(mVideoEncoderLevel == -1) {
+            ALOGI("MPEG4 recording 720p force level OMX_VIDEO_MPEG4Level4 %d",
+                OMX_VIDEO_MPEG4Level4);
+
+            setParamVideoEncoderLevel(OMX_VIDEO_MPEG4Level4);
+        }
+    }
+
+    /*
+     * for H264/AVC encoding, various levels apply depending on resolution
+     * stick to the default profile AVCProfileBaseline
+     */
+    if(mVideoEncoder == VIDEO_ENCODER_H264 &&
+        mVideoEncoderLevel == -1) {
+        int32_t level;
+        if(mVideoHeight <= 240) {
+            level = OMX_VIDEO_AVCLevel13;
+            ALOGV("H264 recording < 480p force profile OMX_VIDEO_AVCLevel13 %d", level);
+        } else if(mVideoHeight <= 480) {
+            level = OMX_VIDEO_AVCLevel3;
+            ALOGV("H264 recording 480p force profile OMX_VIDEO_AVCLevel3 %d", level);
+        } else {
+            level = OMX_VIDEO_AVCLevel31;
+            ALOGV("H264 recording 720p force profile OMX_VIDEO_AVCLevel31 %d", level);
+        }
+
+        ALOGI("H264 recording %d x %d force profile %d", mVideoWidth, mVideoHeight, level);
+        setParamVideoEncoderLevel(level);
+    }
+
+#if 0 // H263: only one profile and level specified; stay with default
+    if(mVideoEncoder == VIDEO_ENCODER_H263 &&
+        mVideoEncoderLevel == -1) {
+        ALOGI("H263 recording ... stay with default");
+    }
+#endif
+
     return OK;
 }
 
