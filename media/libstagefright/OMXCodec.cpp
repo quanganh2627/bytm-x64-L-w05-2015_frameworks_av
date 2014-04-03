@@ -1,4 +1,14 @@
 /*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * Notes:
+ * Jun  1 2013: IMC: setVideoOutputFormat() += OMX_COLOR_FormatYUV420PackedSemiPlanar
+ * Sep 13 2013: IMC: map color format HAL_PIXEL_FORMAT_YCbCr_420_SP 
+ * Jan 14 2014: Intel: convertColorFormatOmxToHal() to be used by ACodec; 
+ *                     remove static attribute
+ */
+
+/*
  * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");

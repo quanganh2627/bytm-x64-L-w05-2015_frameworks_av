@@ -1,4 +1,12 @@
 /*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * Notes:
+ * Jan 14 2014: Intel: adapt interworking with HD decoder
+ *                     (color format conversion, 3 port decoder)
+ */
+
+/*
  * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -558,6 +566,13 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
     return OK;
 }
 
+
+/*
+ * get this from OMXCodec.cpp:
+ *
+ */
+extern int convertColorFormatOmxToHal(int omxFormat);
+
 status_t ACodec::configureOutputBuffersFromNativeWindow(
         OMX_U32 *bufferCount, OMX_U32 *bufferSize,
         OMX_U32 *minUndequeuedBuffers) {
@@ -572,11 +587,19 @@ status_t ACodec::configureOutputBuffersFromNativeWindow(
         return err;
     }
 
+    /* Convert ColorFormat from OMX to HAL */
+    int format = convertColorFormatOmxToHal(def.format.video.eColorFormat);
+
+    ALOGV("configureOutputBuffersFromNativeWindow(stride %d, height %d, format %d)",
+        def.format.video.nStride,
+        def.format.video.nSliceHeight,
+        format);
+    
     err = native_window_set_buffers_geometry(
-            mNativeWindow.get(),
-            def.format.video.nFrameWidth,
-            def.format.video.nFrameHeight,
-            def.format.video.eColorFormat);
+        mNativeWindow.get(),
+        def.format.video.nStride,
+        def.format.video.nSliceHeight,
+        format);
 
     if (err != 0) {
         ALOGE("native_window_set_buffers_geometry failed: %s (%d)",
@@ -2349,6 +2372,11 @@ status_t ACodec::setVideoFormatOnPort(
 
     OMX_VIDEO_PORTDEFINITIONTYPE *video_def = &def.format.video;
 
+    int32_t aWidth, aHeight;
+    /* aligned sizes */
+    aWidth  = (width + 15) & -16;
+    aHeight = (height + 15) & -16;
+
     status_t err = mOMX->getParameter(
             mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
 
@@ -2366,6 +2394,10 @@ status_t ACodec::setVideoFormatOnPort(
 
     video_def->nFrameWidth = width;
     video_def->nFrameHeight = height;
+
+    /* provice stride and slice height */
+    video_def->nStride      = aWidth;
+    video_def->nSliceHeight = aHeight;
 
     if (portIndex == kPortIndexInput) {
         video_def->eCompressionFormat = compressionFormat;
@@ -4649,6 +4681,10 @@ bool ACodec::FlushingState::onOMXEvent(
                         && mFlushComplete[kPortIndexOutput]) {
                     changeStateIfWeOwnAllBuffers();
                 }
+            } else if ( data2 != OMX_ALL) {
+                /* flush on neither input nor output ... must be pp port */
+                ALOGD("FlushingState::onOMXEvent() call BaseState::OnOmxEvent");
+                return BaseState::onOMXEvent(event, data1, data2);
             } else {
                 CHECK_EQ(data2, OMX_ALL);
                 CHECK(mFlushComplete[kPortIndexInput]);
