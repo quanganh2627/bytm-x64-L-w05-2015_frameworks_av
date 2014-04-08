@@ -78,18 +78,6 @@ status_t AudioRecord::getMinFrameCount(
 
 // ---------------------------------------------------------------------------
 
-#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
-bool AudioRecord::notifyMicrophoneAccess() {
-    // Adding hook to call security device service
-    int pid = IPCThreadState::self()->getCallingPid();
-    int uid = IPCThreadState::self()->getCallingUid();
-    AsfDeviceAosp asfDevice;
-    bool response = asfDevice.sendMicrophoneEvent(uid, pid);
-    return response;
-}
-#endif
-
-
 AudioRecord::AudioRecord()
     : mStatus(NO_INIT), mSessionId(0),
       mPreviousPriority(ANDROID_PRIORITY_NORMAL), mPreviousSchedulingGroup(SP_DEFAULT)
@@ -194,12 +182,14 @@ status_t AudioRecord::set(
     }
 #if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
     // Place call to function that acts as a hook point for microphone events
-    bool response = notifyMicrophoneAccess();
+    int pid = IPCThreadState::self()->getCallingPid();
+    int uid = IPCThreadState::self()->getCallingUid();
+    bool response = AsfDeviceAosp::sendMicrophoneEvent(uid, pid);
     // If response is false, deny access to requested application and return NULL
     // if response is true, either ASF allowed access to Microphone to open or
     // ASF Client is not running
     if (!response) {
-        ALOGE("ASF client denied permission for microphone, returning NULL");
+        ALOGE("ASF client denied permission for microphone, returning PERMISSION_DENIED");
         return PERMISSION_DENIED;
     }
 #endif
