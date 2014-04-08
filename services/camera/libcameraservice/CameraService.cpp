@@ -228,17 +228,6 @@ int32_t CameraService::getNumberOfCameras() {
     return mNumberOfCameras;
 }
 
-#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
-bool CameraService::notifyCameraAccess() {
-    // Adding hook to call security device service
-    const int pid = IPCThreadState::self()->getCallingPid();
-    const int uid = IPCThreadState::self()->getCallingUid();
-    AsfDeviceAosp asfDevice;
-    bool response = asfDevice.sendCameraEvent(uid, pid);
-    return response;
-}
-#endif
-
 status_t CameraService::getCameraInfo(int cameraId,
                                       struct CameraInfo* cameraInfo) {
     if (!mModule) {
@@ -488,13 +477,16 @@ status_t CameraService::connect(
 #if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
     bool response;
     // Place call to function that acts as a hook point for camera events
-    response = notifyCameraAccess();
+    // Adding hook to call security device service
+    const int pid = IPCThreadState::self()->getCallingPid();
+    const int uid = IPCThreadState::self()->getCallingUid();
+    response = AsfDeviceAosp::sendCameraEvent(uid, pid);
     // If response is false, deny access to requested application and return NULL
     // response is true, either ASF allowed access to camera to open or if
     // ASF Client is not running
     if (!response) {
         ALOGE("ASF Client denied permission, returning NULL");
-        return NULL;
+        return PERMISSION_DENIED;
     }
 #endif
 
