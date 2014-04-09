@@ -170,6 +170,9 @@ private:
 
     bool mStarted;
 
+    bool mAnchorTimeUpdate;
+    int64_t mPlayTimeUs;
+
     status_t instantiateDecoder(bool audio, sp<Decoder> *decoder);
 
     status_t feedDecoderInputData(bool audio, const sp<AMessage> &msg);
