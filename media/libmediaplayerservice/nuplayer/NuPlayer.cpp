@@ -168,7 +168,9 @@ NuPlayer::NuPlayer()
       mIsVppInit(false),
 #endif
       mVideoScalingMode(NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW),
-      mStarted(false) {
+      mStarted(false),
+      mAnchorTimeUpdate(false),
+      mPlayTimeUs(-1ll) {
 }
 
 NuPlayer::~NuPlayer() {
@@ -1048,6 +1050,19 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
         status_t err = mSource->dequeueAccessUnit(audio, &accessUnit);
 
         if (err == -EWOULDBLOCK) {
+            // For video only stream, the timebase is based on system time.
+            // When long time buffering finish, the timebase is out of sync with the
+            // media time stamp. The decoded data will be abandoned for delay
+            // too much. So we need to update the timebase.
+            if (!audio
+                    && mAnchorTimeUpdate == false
+                    && mPlayTimeUs != -1ll
+                    && (ALooper::GetNowUs() - mPlayTimeUs) > 500000ll ) {
+                sp<NuPlayerDriver> driver = mDriver.promote();
+                if (driver->isPlaying() == true) {
+                    mAnchorTimeUpdate = true;
+                }
+            }
             return err;
         } else if (err != OK) {
             if (err == INFO_DISCONTINUITY) {
@@ -1136,6 +1151,15 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
 
         if (!audio) {
             ++mNumFramesTotal;
+            mPlayTimeUs = ALooper::GetNowUs();
+            if (mAnchorTimeUpdate == true) {
+                sp<NuPlayerDriver> driver = mDriver.promote();
+                if (driver->isPlaying() == true) {
+                    mRenderer->pause();
+                    mRenderer->resume();
+                    mAnchorTimeUpdate = false;
+                }
+            }
         }
 
         dropAccessUnit = false;
