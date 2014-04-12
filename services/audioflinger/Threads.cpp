@@ -4063,7 +4063,11 @@ bool AudioFlinger::AsyncCallbackThread::threadLoop()
 
         {
             Mutex::Autolock _l(mLock);
-            mWaitWorkCV.wait(mLock);
+            while (!((mWriteAckSequence & 1) ||
+                     (mDrainSequence & 1) ||
+                     exitPending())) {
+                mWaitWorkCV.wait(mLock);
+            }
             if (exitPending()) {
                 break;
             }
