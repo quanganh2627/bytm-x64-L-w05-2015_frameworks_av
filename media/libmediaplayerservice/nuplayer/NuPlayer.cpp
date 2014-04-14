@@ -989,7 +989,7 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
             if(mVPPProcessor != NULL) {
                 sp<ACodec> codec = (*decoder)->mCodec;
                 looper()->registerHandler(mVPPProcessor);
-                LOGE("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
+                ALOGI("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
                         mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
                 codec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
                 int frameRate = mVPPProcessor->getVppOutputFps();
@@ -997,6 +997,15 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
                 if (!codec->setVppFrameRate(frameRate)) {
                     ALOGW("VPP faield to SET New frame rate: %d\n", frameRate);
                 }
+#ifdef HDMI_EXTEND_MODE_VPP_FRC_ENABLE
+                /* Enable VPP FRC for HDMI feature
+                 * This feature is disabled by default
+                 */
+                if (mVPPProcessor->configFrc4Hdmi(true) != STATUS_OK) {
+                    ALOGW("Warning: VPP failed to enable VPP FRC for HDMI");
+                }
+                codec->updateMdsVideoSourceInfo(frameRate);
+#endif
             }
         }
     }

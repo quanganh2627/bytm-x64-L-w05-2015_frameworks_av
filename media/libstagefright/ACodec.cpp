@@ -658,6 +658,11 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
             return;
         }
         mMDClient = mds->getVideoControl();
+        mMDSInfoProvider = mds->getInfoProvider();
+        if (mMDSInfoProvider == NULL) {
+            ALOGW("%s: Failed to get MDS info provider", __func__);
+            return;
+        }
     }
     if (mMDSVideoSessionId < 0) {
         mMDSVideoSessionId = mMDClient->allocateVideoSessionId();
@@ -693,8 +698,26 @@ void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
     }
 }
 
-#endif
+void ACodec::updateMdsVideoSourceInfo(uint32_t frameRate) {
+    MDSVideoSourceInfo sourInfo;
+    if (mMDClient == NULL || mMDSInfoProvider == NULL) {
+        ALOGE("%s: Failed to get MDClient/MDS Info provider", __func__);
+        return;
+    }
+    if (mMDSVideoSessionId == -1) {
+        return;
 
+    }
+    mMDSInfoProvider->getVideoSourceInfo(mMDSVideoSessionId, &sourInfo);
+    ALOGI("update source info fps %d ==> %d.", sourInfo.frameRate, frameRate);
+    if (sourInfo.frameRate != frameRate && (frameRate != 0)) {
+        sourInfo.frameRate = frameRate;
+        mMDClient->updateVideoSourceInfo(mMDSVideoSessionId, sourInfo);
+    }
+
+    return;
+}
+#endif
 
 status_t ACodec::configureOutputBuffersFromNativeWindow(
         OMX_U32 *bufferCount, OMX_U32 *bufferSize,
