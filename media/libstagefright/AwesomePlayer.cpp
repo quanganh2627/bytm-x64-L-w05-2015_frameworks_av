@@ -16,7 +16,7 @@
 
 #undef DEBUG_HDCP
 
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
 #define DUMP_DECODE_INFO
 #ifdef DUMP_DECODE_INFO
 #define LOG_NIDEBUG 0

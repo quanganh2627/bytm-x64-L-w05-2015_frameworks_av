@@ -84,6 +84,7 @@ struct ACodec : public AHierarchicalStateMachine {
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY
     void setMDSVideoState_l(int status, const sp<AMessage> &msg);
+    void updateMdsVideoSourceInfo(uint32_t frameRate);
 #endif
 
     struct PortDescription : public RefBase {
@@ -179,6 +180,7 @@ private:
     int mMDSVideoSessionId;
     bool mIsMDSVideo;
     sp<IMultiDisplayVideoControl> mMDClient;
+    sp<IMultiDisplayInfoProvider> mMDSInfoProvider;
 #endif
 
 
