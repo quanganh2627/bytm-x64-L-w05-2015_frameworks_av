@@ -36,11 +36,11 @@ endif
 ##########################
 
 
-include $(CLEAR_VARS)
-
 ifeq ($(strip $(USE_INTEL_LVSE)),true)
        LOCAL_CFLAGS += -DLVSE
 endif
+
+include $(CLEAR_VARS)
 
 include frameworks/av/media/libstagefright/codecs/common/Config.mk
 
