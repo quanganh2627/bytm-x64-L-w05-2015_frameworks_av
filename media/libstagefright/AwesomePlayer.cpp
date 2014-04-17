@@ -1912,8 +1912,10 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
             /* Enable VPP FRC for HDMI feature
              * This feature is disabled by default
              */
-            if (processor->configFrc4Hdmi(true) != STATUS_OK) {
-                LOGW("Warning: VPP failed to enable VPP FRC for HDMI");
+            if (processor != NULL) {
+                if (processor->configFrc4Hdmi(true) != STATUS_OK) {
+                    LOGW("Warning: VPP failed to enable VPP FRC for HDMI");
+                }
             }
 #endif
         }
