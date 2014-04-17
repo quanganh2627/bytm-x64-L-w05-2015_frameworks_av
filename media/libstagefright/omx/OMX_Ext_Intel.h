@@ -95,6 +95,14 @@ typedef struct OMX_AUDIO_PARAM_ALACTYPE_EXT_INTEL {
     OMX_U32 nAvgBitRate;
 } OMX_AUDIO_PARAM_ALACTYPE_EXT_INTEL;
 
+#ifdef TARGET_HAS_3P
+typedef struct Intel3PParams {
+    OMX_U32 nSize;
+    OMX_VERSIONTYPE nVersion;
+    OMX_BOOL b3PEnable;
+} Intel3PParams;
+#endif
+
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

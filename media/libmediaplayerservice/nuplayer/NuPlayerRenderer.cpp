@@ -590,29 +590,26 @@ sp<NuPlayerVPPProcessor> NuPlayer::Renderer::createVppProcessor(VPPVideoInfo *in
     if (info == NULL)
         return NULL;
 
-    if (NuPlayerVPPProcessor::isVppOn()) {
-        if (mVPPProcessor == NULL) {
-            mVPPProcessor = NuPlayerVPPProcessor::getInstance(new AMessage(kWhatVPPNotify, id()), nativeWindow);
-            if (mVPPProcessor != NULL) {
-                if (mVPPProcessor->validateVideoInfo(info) != VPP_OK) {
-                    releaseVppProcessor();
-                    mVPPProcessor = NULL;
-                }
-#ifdef HDMI_EXTEND_MODE_VPP_FRC_ENABLE
-                /* Enable VPP FRC for HDMI feature
-                 * This feature is disabled by default
-                 */
-                if (mVPPProcessor != NULL) {
-                    if (mVPPProcessor->configFrc4Hdmi(true) != STATUS_OK) {
-                        ALOGW("Warning: VPP failed to enable VPP FRC for HDMI");
-                    }
-                }
-#endif
+    if (mVPPProcessor == NULL) {
+        mVPPProcessor = NuPlayerVPPProcessor::getInstance(new AMessage(kWhatVPPNotify, id()), nativeWindow);
+        if (mVPPProcessor != NULL) {
+            if (mVPPProcessor->validateVideoInfo(info) != VPP_OK) {
+                releaseVppProcessor();
+                mVPPProcessor = NULL;
             }
+#ifdef HDMI_EXTEND_MODE_VPP_FRC_ENABLE
+            /* Enable VPP FRC for HDMI feature
+             * This feature is disabled by default
+             */
+            if (mVPPProcessor != NULL) {
+                if (mVPPProcessor->configFrc4Hdmi(true) != STATUS_OK) {
+                    ALOGW("Warning: VPP failed to enable VPP FRC for HDMI");
+                }
+            }
+#endif
         }
-        return mVPPProcessor;
     }
-    return NULL;
+    return mVPPProcessor;
 }
 
 void NuPlayer::Renderer::releaseVppProcessor() {

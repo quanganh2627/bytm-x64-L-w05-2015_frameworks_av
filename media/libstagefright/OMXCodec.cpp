@@ -771,7 +771,6 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
     }
 
     if (!strncasecmp(mMIME, "video/", 6)) {
-
         if (mIsEncoder) {
             setVideoInputFormat(mMIME, meta);
         } else {
@@ -782,6 +781,28 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
                 return err;
             }
         }
+
+#ifdef TARGET_HAS_3P
+        OMX_INDEXTYPE index;
+        status_t err = mOMX->getExtensionIndex(
+                mNode,
+                "OMX.intel.android.index.3penable",
+                &index);
+        if (err == OK) {
+            Intel3PParams params;
+            InitOMXParams(&params);
+            params.b3PEnable = OMX_TRUE;
+
+            err = mOMX->setParameter(mNode, index, &params, sizeof(params));
+
+            if (err != OK) {
+                ALOGE("codec could not be configured to enable 3P err = 0x%x", err);
+                return err;
+            }
+        } else {
+            ALOGW("could not get extension 3penable index");
+        }
+#endif
     }
 
     int32_t maxInputSize;
@@ -2176,10 +2197,10 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
 
 #ifdef TARGET_HAS_VPP
     //add more buffers
-    bool isVppOn = VPPProcessor::isVppOn() && !(usage & GRALLOC_USAGE_PROTECTED);
+    bool isVppOn = !(usage & GRALLOC_USAGE_PROTECTED);
     // if mVppInBufNum > 0, then vpp/frc should be on
     // add this condition, so that we don't need to pass slow motion state separately
-    if (isVppOn || mVppInBufNum > 0) {
+    if (mVppInBufNum > 0) {
         ALOGE("def.nBufferCountActual = %d",def.nBufferCountActual);
         int totalBufferCount = def.nBufferCountActual + mVppInBufNum + mVppOutBufNum;
 

@@ -40,6 +40,9 @@ struct MemoryDealer;
 #ifdef TARGET_HAS_VPP
 struct NuPlayerVPPProcessor;
 #endif
+#ifdef TARGET_HAS_3P
+class VPP;
+#endif
 
 struct ACodec : public AHierarchicalStateMachine {
     enum {
@@ -56,6 +59,10 @@ struct ACodec : public AHierarchicalStateMachine {
         kWhatSignaledInputEOS    = 'seos',
         kWhatBuffersAllocated    = 'allc',
         kWhatOMXDied             = 'OMXd',
+#ifdef TARGET_HAS_3P
+        kWhatPortDisable         = 'ptdb',
+        kWhatPortEnable          = 'ptnb',
+#endif
     };
 
     ACodec();
@@ -94,6 +101,9 @@ struct ACodec : public AHierarchicalStateMachine {
 
     private:
         friend struct ACodec;
+#ifdef TARGET_HAS_3P
+        friend class VPP;
+#endif
 
         Vector<IOMX::buffer_id> mBufferIDs;
         Vector<sp<ABuffer> > mBuffers;
@@ -174,6 +184,9 @@ private:
     uint32_t mVppInBufNum;
     uint32_t mVppOutBufNum;
     uint32_t mVppOutputFps;
+#endif
+#ifdef TARGET_HAS_3P
+    friend class VPP;
 #endif
 
 #ifdef TARGET_HAS_MULTIPLE_DISPLAY

@@ -1868,11 +1868,6 @@ VPPProcessor* AwesomePlayer::createVppProcessor_l(OMXCodec *omxCodec) {
     if (mNativeWindow == NULL)
         return processor;
 
-#ifdef TARGET_HAS_FRC_SLOW_MOTION
-    if (mIsSlowMotionMode || VPPProcessor::isVppOn())
-#else
-    if (VPPProcessor::isVppOn())
-#endif
     {
         processor = VPPProcessor::getInstance(mNativeWindow, omxCodec);
         if (processor != NULL) {

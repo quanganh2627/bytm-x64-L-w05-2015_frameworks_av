@@ -50,6 +50,9 @@ LOCAL_SHARED_LIBRARIES += libva \
                           libva-tpi \
                           libui \
                           libvpp_setting
+ifeq ($(TARGET_VPP_USE_IVP), true)
+LOCAL_LDFLAGS += -L$(TARGET_OUT_SHARED_LIBRARIES) -livp
+endif
 LOCAL_STATIC_LIBRARIES += libvpp
 endif
 
@@ -72,6 +75,11 @@ endif
 #slow motion support
 ifeq ($(TARGET_HAS_FRC_SLOW_MOTION), true)
     LOCAL_CFLAGS += -DTARGET_HAS_FRC_SLOW_MOTION
+endif
+
+#3p
+ifeq ($(TARGET_HAS_3P), true)
+	LOCAL_CFLAGS += -DTARGET_HAS_3P
 endif
 
 
