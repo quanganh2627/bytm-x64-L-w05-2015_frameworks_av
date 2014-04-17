@@ -39,6 +39,10 @@
 
 #include "include/avc_utils.h"
 
+#ifdef TARGET_HAS_3P
+#include "include/VPP.h"
+#endif
+
 namespace android {
 
 // static
@@ -70,6 +74,9 @@ MediaCodec::MediaCodec(const sp<ALooper> &looper)
       mReplyID(0),
       mFlags(0),
       mSoftRenderer(NULL),
+#ifdef TARGET_HAS_3P
+      mVpp(NULL),
+#endif
       mDequeueInputTimeoutGeneration(0),
       mDequeueInputReplyID(0),
       mDequeueOutputTimeoutGeneration(0),
@@ -102,6 +109,13 @@ status_t MediaCodec::init(const char *name, bool nameIsType, bool encoder) {
     // quickly, violating the OpenMAX specs, until that is remedied
     // we need to invest in an extra looper to free the main event
     // queue.
+#ifdef TARGET_HAS_3P
+    // only encoder = true is valid, encoder = false might be an unused case
+    // need to check by CONFIGURE_FLAG_ENCODE flag
+    if (encoder) {
+        VPP::HasEncCtx = encoder;
+    }
+#endif
     bool needDedicatedLooper = false;
     if (nameIsType && !strncasecmp(name, "video/", 6)) {
         needDedicatedLooper = true;
@@ -137,9 +151,36 @@ status_t MediaCodec::init(const char *name, bool nameIsType, bool encoder) {
         mLooper->registerHandler(mCodec);
     }
 
+#ifdef TARGET_HAS_3P
+    if (!encoder) {
+        mVpp = new VPP(mCodec);
+            if (mVppLooper == NULL) {
+                mVppLooper = new ALooper;
+                mVppLooper->setName("VppLooper");
+                mVppLooper->start(false, false, ANDROID_PRIORITY_AUDIO);
+            }
+
+            mVppLooper->registerHandler(mVpp);
+    }
+#endif
+
     mLooper->registerHandler(this);
 
     mCodec->setNotificationMessage(new AMessage(kWhatCodecNotify, id()));
+
+#ifdef TARGET_HAS_3P
+    if (mVpp != NULL) {
+        mVpp->setNotificationMessage(new AMessage(kWhatVppNotify, id()));
+        sp<AMessage> msg = new AMessage(kWhatVppInit, id());
+        sp<AMessage> resp;
+        status_t err = PostAndAwaitResponse(msg, &resp);
+        if (err != NO_ERROR) {
+            LOGE("init vpp fails");
+            return err;
+        }
+        LOGI("VPP init");
+    }
+#endif
 
     sp<AMessage> msg = new AMessage(kWhatInit, id());
     msg->setString("name", name);
@@ -158,6 +199,27 @@ status_t MediaCodec::configure(
         const sp<Surface> &nativeWindow,
         const sp<ICrypto> &crypto,
         uint32_t flags) {
+#ifdef TARGET_HAS_3P
+    if (mVpp != NULL) {
+        sp<AMessage> vppMsg = new AMessage(kWhatVppConfigure, id());
+        vppMsg->setMessage("format", format);
+        vppMsg->setInt32("flags", flags);
+        if (nativeWindow != NULL) {
+            LOGE("set native window in message");
+            vppMsg->setObject(
+                    "native-window",
+                    new NativeWindowWrapper(nativeWindow));
+        }
+        sp<AMessage> vppResp;
+        status_t err = PostAndAwaitResponse(vppMsg, &vppResp);
+        if (err != NO_ERROR) {
+            LOGE("configure vpp fails");
+            return err;
+        }
+        LOGI("VPP configured");
+    }
+#endif
+
     sp<AMessage> msg = new AMessage(kWhatConfigure, id());
 
     msg->setMessage("format", format);
@@ -201,10 +263,40 @@ status_t MediaCodec::start() {
     sp<AMessage> msg = new AMessage(kWhatStart, id());
 
     sp<AMessage> response;
+#ifdef TARGET_HAS_3P
+    status_t err = 0;
+    err = PostAndAwaitResponse(msg, &response);
+    if (err != NO_ERROR) {
+        LOGE("start decoder error!");
+        return err;
+    }
+
+    if (mVpp != NULL) {
+        sp<AMessage> vppMsg = new AMessage(kWhatVppStart, id());
+        sp<AMessage> vppResp;
+        err = PostAndAwaitResponse(vppMsg, &vppResp);
+    }
+
+    return err;
+#else
     return PostAndAwaitResponse(msg, &response);
+#endif
 }
 
 status_t MediaCodec::stop() {
+#ifdef TARGET_HAS_3P
+    if (mVpp != NULL) {
+        sp<AMessage> vppMsg = new AMessage(kWhatVppStop, id());
+        sp<AMessage> vppResp;
+
+        status_t err = PostAndAwaitResponse(vppMsg, &vppResp);
+        if (err != NO_ERROR) {
+            LOGE("stop VPP fail");
+            return err;
+        }
+        LOGI("vpp stop complete");
+    }
+#endif
     sp<AMessage> msg = new AMessage(kWhatStop, id());
 
     sp<AMessage> response;
@@ -212,6 +304,19 @@ status_t MediaCodec::stop() {
 }
 
 status_t MediaCodec::release() {
+#ifdef TARGET_HAS_3P
+    if (mVpp != NULL) {
+        sp<AMessage> vppMsg = new AMessage(kWhatVppRelease, id());
+        sp<AMessage> vppResp;
+        status_t err = PostAndAwaitResponse(vppMsg, &vppResp);
+        if (err != NO_ERROR) {
+            LOGE("vpp release fail");
+            return err;
+        }
+        LOGI("vpp release complete");
+    }
+#endif
+
     sp<AMessage> msg = new AMessage(kWhatRelease, id());
 
     sp<AMessage> response;
@@ -386,9 +491,24 @@ status_t MediaCodec::getOutputBuffers(Vector<sp<ABuffer> > *buffers) const {
 
 status_t MediaCodec::flush() {
     sp<AMessage> msg = new AMessage(kWhatFlush, id());
-
     sp<AMessage> response;
+
+#ifdef TARGET_HAS_3P
+    status_t err = PostAndAwaitResponse(msg, &response);
+    if (err != NO_ERROR) {
+        LOGE("flush codec fails");
+        return err;
+    }
+    if (mVpp != NULL) {
+        sp<AMessage> vppMsg = new AMessage(kWhatVppFlush, id());
+
+        sp<AMessage> vppResp;
+        err = PostAndAwaitResponse(vppMsg, &vppResp);
+    }
+    return err;
+#else
     return PostAndAwaitResponse(msg, &response);
+#endif
 }
 
 status_t MediaCodec::requestIDRFrame() {
@@ -510,6 +630,140 @@ bool MediaCodec::handleDequeueOutputBuffer(uint32_t replyID, bool newRequest) {
 
 void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
     switch (msg->what()) {
+#ifdef TARGET_HAS_3P
+        case kWhatVppNotify:
+        {
+            int32_t what;
+            CHECK(msg->findInt32("what", &what));
+
+            switch (what) {
+                case VPP::kWhatComponentAllocated:
+                {
+                    int32_t inNum = 0, outNum = 0;
+                    CHECK(msg->findInt32(kKeyVppInBufNum, &inNum));
+                    CHECK(msg->findInt32(kKeyVppOutBufNum, &outNum));
+                    mCodec->setVppBufferNum(inNum, outNum);
+                    (new AMessage)->postReply(mReplyID);
+                    break;
+                }
+
+                case VPP::kWhatConfigured:
+                {
+                    (new AMessage)->postReply(mReplyID);
+                    break;
+                }
+
+                case VPP::kWhatStarted:
+                {
+                    Vector<BufferInfo> *buffers = &mPortBuffers[kPortIndexOutput];
+                    sp<RefBase> obj;
+                    CHECK(msg->findObject("portDesc", &obj));
+                    sp<ACodec::PortDescription> portDesc =
+                        static_cast<ACodec::PortDescription *> (obj.get());
+                    size_t numBuffers = portDesc->countBuffers();
+                    LOGI("there are %d vpp output buffers", numBuffers);
+                    for (size_t i = 0; i < numBuffers; i++) {
+                        void * bufId;
+                        CHECK(portDesc->bufferAt(i)->meta()->findPointer(kKeyDecodeBufID, &bufId));
+                        LOGI("this decoder buffer is invalid with id = %p", bufId);
+                        portDesc->bufferAt(i)->meta()->clear();
+                        for(size_t j = 0; j < buffers->size(); j++) {
+                            if (bufId == buffers->editItemAt(j).mBufferID) {
+                                LOGI("++++++++++++ change buffer ID");
+                                buffers->editItemAt(j).mBufferID = portDesc->bufferIDAt(i);
+                                buffers->editItemAt(j).mData = portDesc->bufferAt(i);
+                                break;
+                            }
+                        }
+                    }
+                    (new AMessage)->postReply(mReplyID);
+                    break;
+                }
+
+                case VPP::kWhatDrainBuffer:
+                {
+                    LOGV("VPP::kWhatDrainBuffer, mState = %d", mState);
+                    /* size_t index = */updateBuffers(kPortIndexOutput, msg);
+
+                    if (mState == FLUSHING
+                            || mState == STOPPING
+                            || mState == RELEASING) {
+                        //Just post reply message in this function,
+                        //so also could be used to return VPP output buffer
+                        returnBuffersToCodecOnPort(kPortIndexOutput);
+                        break;
+                    }
+
+                    sp<ABuffer> buffer;
+                    CHECK(msg->findBuffer("buffer", &buffer));
+
+                    int32_t omxFlags;
+                    CHECK(msg->findInt32("flags", &omxFlags));
+
+                    buffer->meta()->setInt32("omxFlags", omxFlags);
+
+#if 0
+                    //TODO: it is encode logic
+                    if (mFlags & kFlagGatherCodecSpecificData) {
+                        // This is the very first output buffer after a
+                        // format change was signalled, it'll either contain
+                        // the one piece of codec specific data we can expect
+                        // or there won't be codec specific data.
+                        if (omxFlags & OMX_BUFFERFLAG_CODECCONFIG) {
+                            status_t err =
+                                amendOutputFormatWithCodecSpecificData(buffer);
+
+                            if (err != OK) {
+                                ALOGE("Codec spit out malformed codec "
+                                      "specific data!");
+                            }
+                        }
+
+                        mFlags &= ~kFlagGatherCodecSpecificData;
+                        mFlags |= kFlagOutputFormatChanged;
+                    }
+#endif
+
+                    if (mFlags & kFlagDequeueOutputPending) {
+                        CHECK(handleDequeueOutputBuffer(mDequeueOutputReplyID));
+
+                        ++mDequeueOutputTimeoutGeneration;
+                        mFlags &= ~kFlagDequeueOutputPending;
+                        mDequeueOutputReplyID = 0;
+                    } else {
+                        postActivityNotificationIfPossible();
+                    }
+                    break;
+                }
+
+                case VPP::kWhatFlushCompleted:
+                {
+                    LOGI("got VPP::kWhatFlushCompleted");
+                    CHECK_EQ(mState, FLUSHING);
+                    setState(STARTED);
+
+                    //delay to resume decoder here
+                    mCodec->signalResume();
+                    mVpp->signalResume();
+
+                    (new AMessage)->postReply(mReplyID);
+                    break;
+                }
+
+                case VPP::kWhatShutdownCompleted:
+                {
+                    (new AMessage)->postReply(mReplyID);
+                    break;
+                }
+
+                default:
+                {
+                    break;
+                }
+            }
+            break;
+        }
+#endif
         case kWhatCodecNotify:
         {
             int32_t what;
@@ -823,6 +1077,26 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
 
                 case ACodec::kWhatDrainThisBuffer:
                 {
+#ifdef TARGET_HAS_3P
+                    if (mVpp != NULL) {
+                    if (mState == FLUSHING
+                            || mState == STOPPING
+                            || mState == RELEASING) {
+                        /* size_t index = */updateBuffers(kPortIndexOutput, msg);
+                        returnBuffersToCodecOnPort(kPortIndexOutput);
+                        break;
+                    }
+
+                    int32_t omxFlags;
+                    CHECK(msg->findInt32("flags", &omxFlags));
+
+                    sp<AMessage> message = new AMessage();
+                    message->setMessage(kKeyDecodeMsg, msg);
+
+                    mVpp->emptyBuffer(message);
+
+                    } else {
+#endif
                     /* size_t index = */updateBuffers(kPortIndexOutput, msg);
 
                     if (mState == FLUSHING
@@ -868,6 +1142,9 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                     } else {
                         postActivityNotificationIfPossible();
                     }
+#ifdef TARGET_HAS_3P
+                    }
+#endif
 
                     break;
                 }
@@ -895,13 +1172,54 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                 case ACodec::kWhatFlushCompleted:
                 {
                     CHECK_EQ(mState, FLUSHING);
-                    setState(STARTED);
+#ifdef TARGET_HAS_3P
+                    //do this two steps in VPP's flushCompleted.
+                    if (mVpp == NULL) {
+                        setState(STARTED);
 
+                        mCodec->signalResume();
+                    }
+#else
+                    setState(STARTED);
                     mCodec->signalResume();
+#endif
 
                     (new AMessage)->postReply(mReplyID);
                     break;
                 }
+
+#ifdef TARGET_HAS_3P
+                case ACodec::kWhatPortDisable:
+                {
+                    LOGE("got ACodec::kWhatPortDisable message");
+                    if (mVpp != NULL) {
+                        sp<AMessage> message = new AMessage;
+                        mVpp->initiateDisablePorts(message);
+                    }
+
+                    uint32_t replyId;
+                    CHECK(msg->senderAwaitsResponse(&replyId));
+                    sp<AMessage> response = new AMessage;
+                    response->postReply(replyId);
+                    break;
+                }
+
+                case ACodec::kWhatPortEnable:
+                {
+                    LOGE("got ACodec::kWhatPortEnable message");
+                    if (mVpp != NULL) {
+
+                        //allocate buffers and enable ports
+                        sp<AMessage> start = new AMessage;
+                        mVpp->initiateStart(start);
+
+                        sp<AMessage> message = new AMessage;
+                        mVpp->initiateEnablePorts(message);
+                    }
+
+                    break;
+                }
+#endif
 
                 default:
                     TRESPASS();
@@ -1059,6 +1377,22 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
             uint32_t replyID;
             CHECK(msg->senderAwaitsResponse(&replyID));
 
+#ifdef TARGET_HAS_3P
+            if (mVpp != NULL) {
+                if (((msg->what() == kWhatStop) && (mState != STOPPING))
+                        || ((msg->what() == kWhatRelease) && (mState != RELEASING))) {
+                    // Already set mState while stopping/releasing VPP,
+                    // so it should be in STOPPING/RELEASING state now
+                    sp<AMessage> response = new AMessage;
+                    response->setInt32(
+                            "err",
+                            mState == targetState ? OK : INVALID_OPERATION);
+
+                    response->postReply(replyID);
+                    break;
+                }
+            } else {
+#endif
             if (mState != INITIALIZED
                     && mState != CONFIGURED && mState != STARTED) {
                 // We may be in "UNINITIALIZED" state already without the
@@ -1076,7 +1410,9 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                 response->postReply(replyID);
                 break;
             }
-
+#ifdef TARGET_HAS_3P
+            }
+#endif
             if (mFlags & kFlagSawMediaServerDie) {
                 // It's dead, Jim. Don't expect initiateShutdown to yield
                 // any useful results now...
@@ -1396,6 +1732,162 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
             break;
         }
 
+#ifdef TARGET_HAS_3P
+        case kWhatVppInit:
+        {
+            uint32_t replyID;
+            CHECK(msg->senderAwaitsResponse(&replyID));
+
+            if (mState != UNINITIALIZED) {
+                sp<AMessage> response = new AMessage;
+                response->setInt32("err", INVALID_OPERATION);
+
+                response->postReply(replyID);
+                break;
+            }
+
+            mReplyID = replyID;
+            //set state during init codec
+            //setState(INITIALIZING);
+            sp<AMessage> message = new AMessage;
+
+            mVpp->initiateAllocateComponent(message);
+            break;
+        }
+
+        case kWhatVppConfigure:
+        {
+            uint32_t replyID;
+            CHECK(msg->senderAwaitsResponse(&replyID));
+
+            if (mState != INITIALIZED) {
+                sp<AMessage> response = new AMessage;
+                response->setInt32("err", INVALID_OPERATION);
+                response->postReply(replyID);
+                break;
+            }
+
+            bool deleteVpp = false;
+
+            sp<RefBase> obj;
+            if (!msg->findObject("native-window", &obj)) {
+                obj.clear();
+                //no native window, we could not do any type of vpp
+                LOGW("We don't support VPP if no native-window");
+                deleteVpp = true;
+            }
+
+            int32_t flags;
+            CHECK(msg->findInt32("flags", &flags));
+            if (flags & CONFIGURE_FLAG_ENCODE) {
+                VPP::HasEncCtx = true;
+                LOGW("encode path, not to do vpp");
+                deleteVpp = true;
+            }
+
+            if (deleteVpp || VPP::HasEncCtx) {
+                LOGD("going to clear VPP");
+                mVpp.clear();
+                // reply directly, but does not want to influence regular codec path
+                // so return NO_ERROR
+                sp<AMessage> response = new AMessage;
+                response->setInt32("err", NO_ERROR);
+                response->postReply(replyID);
+                break;
+            }
+
+            mReplyID = replyID;
+            sp<AMessage> format;
+            CHECK(msg->findMessage("format", &format));
+            format->setObject("native-window", obj);
+
+            mVpp->initiateConfigure(format);
+            break;
+        }
+
+        case kWhatVppStart:
+        {
+            uint32_t replyID;
+            CHECK(msg->senderAwaitsResponse(&replyID));
+
+            // after decoder started, the state is changed to STARTD,
+            // we don't want to change the original start transit logic
+            if (mState != STARTED) {
+                sp<AMessage> response = new AMessage;
+                response->setInt32("err", INVALID_OPERATION);
+
+                response->postReply(replyID);
+                break;
+            }
+
+            mReplyID = replyID;
+            sp<AMessage> message = new AMessage;
+            //LOGE("BUFFER COUNT = %d", mPortBuffers[kPortIndexOutput].size());
+            //message->setInt32(kKeyBufNumAll, mPortBuffers[kPortIndexOutput].size());
+
+            mVpp->initiateStart(message);
+            break;
+        }
+
+        case kWhatVppStop:
+        case kWhatVppRelease:
+        {
+            State targetState =
+                (msg->what() == kWhatStop) ? INITIALIZED : UNINITIALIZED;
+
+            uint32_t replyID;
+            CHECK(msg->senderAwaitsResponse(&replyID));
+
+            if (mState != INITIALIZED
+                    && mState != CONFIGURED && mState != STARTED) {
+                // We may be in "UNINITIALIZED" state already without the
+                // client being aware of this if media server died while
+                // we were being stopped. The client would assume that
+                // after stop() returned, it would be safe to call release()
+                // and it should be in this case, no harm to allow a release()
+                // if we're already uninitialized.
+                // Similarly stopping a stopped MediaCodec should be benign.
+                sp<AMessage> response = new AMessage;
+                response->setInt32(
+                        "err",
+                        mState == targetState ? OK : INVALID_OPERATION);
+
+                response->postReply(replyID);
+                break;
+            }
+
+            mReplyID = replyID;
+            setState(msg->what() == kWhatVppStop ? STOPPING : RELEASING);
+
+            mVpp->initiateShutdown(msg->what() == kWhatVppStop /* keepComponentAllocated */);
+
+            returnBuffersToCodec(); //this may return decoder buffer earlier
+            break;
+        }
+
+        case kWhatVppFlush:
+        {
+            uint32_t replyID;
+            CHECK(msg->senderAwaitsResponse(&replyID));
+
+            if (mState != FLUSHING || (mFlags & kFlagStickyError)) {
+            //if (mState != STARTED || (mFlags & kFlagStickyError)) {
+                sp<AMessage> response = new AMessage;
+                response->setInt32("err", INVALID_OPERATION);
+
+                response->postReply(replyID);
+                break;
+            }
+
+            mReplyID = replyID;
+            //setState(FLUSHING);
+
+
+            mVpp->signalFlush();
+            //returnBuffersToCodec();
+            break;
+        }
+#endif
         default:
             TRESPASS();
     }

@@ -68,6 +68,7 @@
 
 #include <OMX_IndexExt.h>
 #include <OMX_VideoExt.h>
+#include <omx/OMX_Ext_Intel.h>
 
 
 namespace android {
@@ -823,7 +824,7 @@ status_t ACodec::configureOutputBuffersFromNativeWindow(
 
 #ifdef TARGET_HAS_VPP
     //add more buffers
-    bool isVppOn = NuPlayerVPPProcessor::isVppOn();
+    bool isVppOn = ((mVppInBufNum > 0) && (mVppOutBufNum > 0));
     if (isVppOn) {
         ALOGE("def.nBufferCountActual = %d",def.nBufferCountActual);
         int totalBufferCount = def.nBufferCountActual + mVppInBufNum + mVppOutBufNum;
@@ -932,7 +933,7 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
     } else {
         // Return the required minimum undequeued buffers to the native window.
 #ifdef TARGET_HAS_VPP
-        bool isVppOn = NuPlayerVPPProcessor::isVppOn();
+        bool isVppOn = ((mVppInBufNum > 0) && (mVppOutBufNum > 0));
         if (isVppOn) {
             cancelStart = bufferCount - minUndequeuedBuffers- mVppOutBufNum;
         } else {
@@ -1461,6 +1462,28 @@ status_t ACodec::configureCodec(
                     mIsMDSVideo = true;
 #endif
             }
+
+#ifdef TARGET_HAS_3P
+            OMX_INDEXTYPE index;
+            status_t err = mOMX->getExtensionIndex(
+                    mNode,
+                    "OMX.intel.android.index.3penable",
+                    &index);
+            if (err == OK) {
+                Intel3PParams params;
+                InitOMXParams(&params);
+                params.b3PEnable = OMX_TRUE;
+
+                err = mOMX->setParameter(mNode, index, &params, sizeof(params));
+
+                if (err != OK) {
+                    ALOGE("codec could not be configured to enable 3P err = 0x%x", err);
+                    return err;
+                }
+            } else {
+                ALOGW("could not get extension 3penable index err = 0x%x", err);
+            }
+#endif
         }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG)) {
         int32_t numChannels, sampleRate;
@@ -3792,7 +3815,6 @@ void ACodec::BaseState::onOutputBufferDrained(const sp<AMessage> &msg) {
     CHECK((info->mStatus == BufferInfo::OWNED_BY_DOWNSTREAM)
             ||(info->mStatus == BufferInfo::OWNED_BY_VPP));
 
-
     android_native_rect_t crop;
     if (msg->findRect("crop",
             &crop.left, &crop.top, &crop.right, &crop.bottom)) {
@@ -4955,6 +4977,13 @@ bool ACodec::ExecutingState::onOMXEvent(
                             OMX_CommandPortDisable, kPortIndexOutput),
                          (status_t)OK);
 
+#ifdef TARGET_HAS_3P
+                sp<AMessage> msg = mCodec->mNotify->dup();
+                msg->setInt32("what", kWhatPortDisable);
+                sp<AMessage> resp;
+                msg->postAndAwaitResponse(&resp);
+                LOGE("got port disable response from MediaCodec");
+#endif
                 mCodec->freeOutputBuffersNotOwnedByComponent();
 
                 mCodec->changeState(mCodec->mOutputPortSettingsChangedState);
@@ -5045,6 +5074,7 @@ bool ACodec::OutputPortSettingsChangedState::onOMXEvent(
                             mCodec->mNode, OMX_CommandPortEnable, kPortIndexOutput),
                          (status_t)OK);
 
+
                 status_t err;
                 if ((err = mCodec->allocateBuffersOnPort(
                                 kPortIndexOutput)) != OK) {
@@ -5063,7 +5093,11 @@ bool ACodec::OutputPortSettingsChangedState::onOMXEvent(
                     mCodec->mKeepComponentAllocated = false;
                     mCodec->changeState(mCodec->mLoadedState);
                 }
-
+#ifdef TARGET_HAS_3P
+                sp<AMessage> msg = mCodec->mNotify->dup();
+                msg->setInt32("what", kWhatPortEnable);
+                msg->post();
+#endif
                 return true;
             } else if (data1 == (OMX_U32)OMX_CommandPortEnable) {
                 CHECK_EQ(data2, (OMX_U32)kPortIndexOutput);

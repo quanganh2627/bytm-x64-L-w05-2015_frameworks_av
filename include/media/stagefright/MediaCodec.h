@@ -32,6 +32,9 @@ struct AString;
 struct ICrypto;
 struct SoftwareRenderer;
 struct Surface;
+#ifdef TARGET_HAS_3P
+struct VPP;
+#endif
 
 struct MediaCodec : public AHandler {
     enum ConfigureFlags {
@@ -166,6 +169,15 @@ private:
         kWhatRequestActivityNotification    = 'racN',
         kWhatGetName                        = 'getN',
         kWhatSetParameters                  = 'setP',
+#ifdef TARGET_HAS_3P
+        kWhatVppNotify                      = 'vppN',
+        kWhatVppInit                        = 'vpiN',
+        kWhatVppConfigure                   = 'vpcO',
+        kWhatVppStart                       = 'vpsT',
+        kWhatVppStop                        = 'vpsP',
+        kWhatVppRelease                     = 'vprl',
+        kWhatVppFlush                       = 'vpfl',
+#endif
     };
 
     enum {
@@ -199,6 +211,10 @@ private:
     sp<Surface> mNativeWindow;
     SoftwareRenderer *mSoftRenderer;
     sp<AMessage> mOutputFormat;
+#ifdef TARGET_HAS_3P
+    sp<ALooper> mVppLooper;
+    sp<VPP> mVpp;
+#endif
 
     List<size_t> mAvailPortBuffers[2];
     Vector<BufferInfo> mPortBuffers[2];

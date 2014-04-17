@@ -29,6 +29,9 @@ LOCAL_SHARED_LIBRARIES += libva \
                           libva-android \
                           libva-tpi \
                           libvpp_setting
+ifeq ($(TARGET_VPP_USE_IVP), true)
+LOCAL_LDFLAGS += -L$(TARGET_OUT_SHARED_LIBRARIES) -livp
+endif
 endif
 
 ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
@@ -43,6 +46,11 @@ endif
 
 ifeq ($(HDMI_EXTEND_MODE_VPP_FRC_ENABLE),true)
   LOCAL_CFLAGS += -DHDMI_EXTEND_MODE_VPP_FRC_ENABLE
+endif
+
+#3p
+ifeq ($(TARGET_HAS_3P), true)
+	LOCAL_CFLAGS += -DTARGET_HAS_3P
 endif
 
 LOCAL_SHARED_LIBRARIES += libstagefright

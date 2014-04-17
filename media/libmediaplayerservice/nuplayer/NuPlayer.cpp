@@ -752,6 +752,15 @@ void NuPlayer::onMessageReceived(const sp<AMessage> &msg) {
                }
 #endif
                 renderBuffer(audio, codecRequest);
+#ifdef TARGET_HAS_3P
+            } else if (what == ACodec::kWhatPortDisable) {
+                //ACodec is waiting for the reply of this message
+                //so we reply here, not to block ACodec
+                uint32_t replyId;
+                CHECK(msg->senderAwaitsResponse(&replyId));
+                sp<AMessage> response = new AMessage;
+                response->postReply(replyId);
+#endif
             } else if (what != ACodec::kWhatComponentAllocated
                     && what != ACodec::kWhatComponentConfigured
                     && what != ACodec::kWhatBuffersAllocated) {
@@ -1004,24 +1013,22 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
 #ifdef TARGET_HAS_VPP
 sp<NuPlayerVPPProcessor> NuPlayer::createVppProcessor() {
     sp<NuPlayerVPPProcessor> processor = NULL;
-    if (NuPlayerVPPProcessor::isVppOn()) {
-        int32_t width = 0, height = 0, fps = 0;
-        VPPVideoInfo info;
-        memset(&info, 0, sizeof(VPPVideoInfo));
+    int32_t width = 0, height = 0, fps = 0;
+    VPPVideoInfo info;
+    memset(&info, 0, sizeof(VPPVideoInfo));
 
-        sp<AMessage> format = mSource->getFormat(false);
-        sp<MetaData> meta = new MetaData();
-        convertMessageToMetaData(format, meta);
-        CHECK(meta->findInt32(kKeyWidth, &width));
-        CHECK(meta->findInt32(kKeyHeight, &height));
-        if (!meta->findInt32(kKeyFrameRate, &fps))
-            fps = 0;
-        info.fps = fps;
-        info.width = width;
-        info.height = height;
+    sp<AMessage> format = mSource->getFormat(false);
+    sp<MetaData> meta = new MetaData();
+    convertMessageToMetaData(format, meta);
+    CHECK(meta->findInt32(kKeyWidth, &width));
+    CHECK(meta->findInt32(kKeyHeight, &height));
+    if (!meta->findInt32(kKeyFrameRate, &fps))
+        fps = 0;
+    info.fps = fps;
+    info.width = width;
+    info.height = height;
 
-        processor = mRenderer->createVppProcessor(&info, mNativeWindow);
-    }
+    processor = mRenderer->createVppProcessor(&info, mNativeWindow);
     return processor;
 }
 #endif

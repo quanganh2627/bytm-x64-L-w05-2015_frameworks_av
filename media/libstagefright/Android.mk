@@ -166,6 +166,9 @@ LOCAL_SHARED_LIBRARIES += libva \
                           libva-android \
                           libva-tpi \
                           libvpp_setting
+ifeq ($(TARGET_VPP_USE_IVP), true)
+LOCAL_LDFLAGS += -L$(TARGET_OUT_SHARED_LIBRARIES) -livp
+endif
 endif
 
 #slow motion support
@@ -175,6 +178,12 @@ endif
 
 ifeq ($(HDMI_EXTEND_MODE_VPP_FRC_ENABLE),true)
   LOCAL_CFLAGS += -DHDMI_EXTEND_MODE_VPP_FRC_ENABLE
+endif
+
+#3p
+ifeq ($(TARGET_HAS_3P), true)
+	LOCAL_CFLAGS += -DTARGET_HAS_3P -Wno-non-virtual-dtor
+	LOCAL_SRC_FILES += VPP.cpp
 endif
 
 ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
