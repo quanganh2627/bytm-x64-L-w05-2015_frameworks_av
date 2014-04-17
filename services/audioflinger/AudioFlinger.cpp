@@ -2490,7 +2490,15 @@ sp<IEffect> AudioFlinger::createEffect(
             }
             // look for the thread where the specified audio session is present
             for (size_t i = 0; i < mPlaybackThreads.size(); i++) {
-                if (mPlaybackThreads.valueAt(i)->hasAudioSession(sessionId) != 0) {
+                // Get a non offload thread on this session or an offload thread
+                // only when the effect has offload capability to create the effect.
+                // The selection of thread is done if either of the two conditions
+                // are satisfied - 1. Non offload thread which has session Id matching
+                // current session Id (OR) 2. Offload thread and the descriptor flags have
+                // offload support and the session Id matches the current session
+                if (((mPlaybackThreads.valueAt(i)->type() != ThreadBase::OFFLOAD) ||
+                        (pDesc->flags & EFFECT_FLAG_OFFLOAD_SUPPORTED)) &&
+                        (mPlaybackThreads.valueAt(i)->hasAudioSession(sessionId) != 0)) {
                     io = mPlaybackThreads.keyAt(i);
                     break;
                 }

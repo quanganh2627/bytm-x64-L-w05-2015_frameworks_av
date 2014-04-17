@@ -1110,10 +1110,25 @@ status_t AudioFlinger::EffectHandle::enable()
                 Mutex::Autolock _l(t->mLock);
                 t->broadcast_l();
             }
-            if (!mEffect->isOffloadable()) {
-                if (thread->type() == ThreadBase::OFFLOAD) {
-                    PlaybackThread *t = (PlaybackThread *)thread.get();
-                    t->invalidateTracks(AUDIO_STREAM_MUSIC);
+            // Find offload threads in the session where mEffect is created and
+            // invalidate them if the following condition satisfies:
+            // if there are no tracks of mThread in the session, but there are
+            // offload tracks in the session. Ensuring that there are no tracks
+            // of the mThread in the session makes sure that the effect is not destined
+            // for the thread, but created as we could not find any other thread in the session
+            uint32_t threadSessions = thread->hasAudioSession(mEffect->sessionId());
+            if (!mEffect->isOffloaded()) {
+                for (size_t i = 0; i < thread->mAudioFlinger->mPlaybackThreads.size(); i++) {
+                    sp<PlaybackThread> t = thread->mAudioFlinger->mPlaybackThreads.valueAt(i);
+                    uint32_t tSessions = t->hasAudioSession(mEffect->sessionId());
+                    if ((t->type() == ThreadBase::OFFLOAD) &&
+                            // mThread has no tracks in this session
+                            !(threadSessions & PlaybackThread::TRACK_SESSION) &&
+                            // Offload Thread has tracks in this session
+                            (tSessions & PlaybackThread::TRACK_SESSION)) {
+                        ALOGV("EffectHandle enable: invalidating the offload thread");
+                        t->invalidateTracks(AUDIO_STREAM_MUSIC);
+                    }
                 }
                 if (mEffect->sessionId() == AUDIO_SESSION_OUTPUT_MIX) {
                     thread->mAudioFlinger->onNonOffloadableGlobalEffectEnable();
