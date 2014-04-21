@@ -395,19 +395,14 @@ void AudioPlayer::reset() {
                                 mPlaying, mReachedEOS, useOffload() );
 #ifdef BGM_ENABLED
     updateBGMoutput();
-    if((AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_WIDI, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)||
-       (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX, "")
-         == AUDIO_POLICY_DEVICE_STATE_AVAILABLE)) {
-          int activesessionid = mAudioSink->getSessionId();
-          // if the BGM session is terminated, close the session
-          if(mBGMAudioSessionID == activesessionid) {
-              mBGMAudioSessionID = 0;
-              //update the audio session of bgm player
-              AudioParameter param = AudioParameter();
-              param.addInt(String8(AudioParameter::keyBGMSession),mBGMAudioSessionID);
-              AudioSystem::setParameters(0, param.toString());
-          }
+    int activesessionid = mAudioSink->getSessionId();
+    // if the BGM session is terminated or connection is closed, reset the session
+    if(mBGMAudioSessionID == activesessionid) {
+        mBGMAudioSessionID = 0;
+        //update the audio session of bgm player
+        AudioParameter param = AudioParameter();
+        param.addInt(String8(AudioParameter::keyBGMSession),mBGMAudioSessionID);
+        AudioSystem::setParameters(0, param.toString());
     }
 #endif //BGM_ENABLED
 
