@@ -1274,11 +1274,12 @@ AudioFlinger::Client::Client(const sp<AudioFlinger>& audioFlinger, pid_t pid)
     :   RefBase(),
         mAudioFlinger(audioFlinger),
         // FIXME should be a "k" constant not hard-coded, in .h or ro. property, see 4 lines below
-        mMemoryDealer(new MemoryDealer(1024*1024, "AudioFlinger::Client")),
+        mMemoryDealer(new MemoryDealer(4096*1024, "AudioFlinger::Client")),
         mPid(pid),
         mTimedTrackCount(0)
 {
-    // 1 MB of address space is good for 32 tracks, 8 buffers each, 4 KB/buffer
+    // 4 MB of address space is good for 32 tracks, 8 buffers each, 16 KB/buffer
+    // 16 KB/buffer = 1024 * 2 * 8(channels)
 }
 
 // Client destructor must be called with AudioFlinger::mLock held
