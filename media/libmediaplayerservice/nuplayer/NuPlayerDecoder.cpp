@@ -32,7 +32,11 @@ NuPlayer::Decoder::Decoder(
         const sp<AMessage> &notify,
         const sp<NativeWindowWrapper> &nativeWindow)
     : mNotify(notify),
-      mNativeWindow(nativeWindow) {
+      mNativeWindow(nativeWindow)
+#ifdef TARGET_HAS_VPP
+      , mVPPProcessor(NULL)
+#endif
+    {
 }
 
 NuPlayer::Decoder::~Decoder() {
@@ -73,6 +77,19 @@ void NuPlayer::Decoder::configure(const sp<AMessage> &format) {
         mCodecLooper = new ALooper;
         mCodecLooper->setName("NuPlayerDecoder");
         mCodecLooper->start(false, false, ANDROID_PRIORITY_AUDIO);
+#ifdef TARGET_HAS_VPP
+        if(mVPPProcessor != NULL) {
+            ALOGI("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
+                    mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
+            mCodec->setVppBufferNum(mVPPProcessor->mInputBufferNum,
+                    mVPPProcessor->mOutputBufferNum);
+            int frameRate = mVPPProcessor->getVppOutputFps();
+            ALOGI("VPP set New frame rate: %d\n", frameRate);
+            if (!mCodec->setVppFrameRate(frameRate)) {
+                ALOGW("VPP faield to SET New frame rate: %d\n", frameRate);
+            }
+        }
+#endif
     }
 
     (needDedicatedLooper ? mCodecLooper : looper())->registerHandler(mCodec);
