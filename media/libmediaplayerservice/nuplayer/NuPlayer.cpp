@@ -980,36 +980,21 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
                        new Decoder(notify, mNativeWindow);
     looper()->registerHandler(*decoder);
 
-    (*decoder)->configure(format);
-
 #ifdef TARGET_HAS_VPP
     if (!audio) {
         if(mVPPProcessor == NULL) {
             mVPPProcessor = createVppProcessor();
             if(mVPPProcessor != NULL) {
-                sp<ACodec> codec = (*decoder)->mCodec;
                 looper()->registerHandler(mVPPProcessor);
-                ALOGI("mVPPProcessor->mInputBufferNum = %d, mVPPProcessor->mOutputBufferNum = %d",
-                        mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
-                codec->setVppBufferNum(mVPPProcessor->mInputBufferNum, mVPPProcessor->mOutputBufferNum);
-                int frameRate = mVPPProcessor->getVppOutputFps();
-                ALOGI("VPP set New frame rate: %d\n", frameRate);
-                if (!codec->setVppFrameRate(frameRate)) {
-                    ALOGW("VPP faield to SET New frame rate: %d\n", frameRate);
+                if (decoder != NULL) {
+                    (*decoder)->setVppProcessor(mVPPProcessor);
                 }
-#ifdef HDMI_EXTEND_MODE_VPP_FRC_ENABLE
-                /* Enable VPP FRC for HDMI feature
-                 * This feature is disabled by default
-                 */
-                if (mVPPProcessor->configFrc4Hdmi(true) != STATUS_OK) {
-                    ALOGW("Warning: VPP failed to enable VPP FRC for HDMI");
-                }
-                codec->updateMdsVideoSourceInfo(frameRate);
-#endif
             }
         }
     }
 #endif
+
+    (*decoder)->configure(format);
 
     return OK;
 }

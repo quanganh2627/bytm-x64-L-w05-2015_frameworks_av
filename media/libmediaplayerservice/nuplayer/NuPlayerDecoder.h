@@ -38,6 +38,10 @@ struct NuPlayer::Decoder : public AHandler {
 
     bool supportsSeamlessFormatChange(const sp<AMessage> &to) const;
 
+#ifdef TARGET_HAS_VPP
+    void setVppProcessor(const sp<NuPlayerVPPProcessor> vppProcessor) { mVPPProcessor = vppProcessor; }
+#endif
+
 protected:
     virtual ~Decoder();
 
@@ -60,6 +64,10 @@ private:
 
     Vector<sp<ABuffer> > mCSD;
     size_t mCSDIndex;
+
+#ifdef TARGET_HAS_VPP
+    sp<NuPlayerVPPProcessor> mVPPProcessor;
+#endif
 
     sp<AMessage> makeFormat(const sp<MetaData> &meta);
 
