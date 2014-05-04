@@ -988,7 +988,7 @@ status_t NuPlayer::instantiateDecoder(bool audio, sp<Decoder> *decoder) {
             mVPPProcessor = createVppProcessor();
             if(mVPPProcessor != NULL) {
                 looper()->registerHandler(mVPPProcessor);
-                if (decoder != NULL) {
+                if (*decoder != NULL) {
                     (*decoder)->setVppProcessor(mVPPProcessor);
                 }
             }
