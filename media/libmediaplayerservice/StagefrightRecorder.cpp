@@ -797,7 +797,7 @@ status_t StagefrightRecorder::prepare() {
         if(mVideoHeight <= 240) {
             level = OMX_VIDEO_AVCLevel13;
             ALOGV("H264 recording < 480p force profile OMX_VIDEO_AVCLevel13 %d", level);
-        } else if(mVideoHeight <= 480) {
+        } else if(mVideoHeight < 480) {
             level = OMX_VIDEO_AVCLevel3;
             ALOGV("H264 recording 480p force profile OMX_VIDEO_AVCLevel3 %d", level);
         } else {
