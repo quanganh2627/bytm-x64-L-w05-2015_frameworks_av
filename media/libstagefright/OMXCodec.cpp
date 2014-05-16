@@ -3,9 +3,10 @@
  *
  * Notes:
  * Jun  1 2013: IMC: setVideoOutputFormat() += OMX_COLOR_FormatYUV420PackedSemiPlanar
- * Sep 13 2013: IMC: map color format HAL_PIXEL_FORMAT_YCbCr_420_SP 
- * Jan 14 2014: Intel: convertColorFormatOmxToHal() to be used by ACodec; 
+ * Sep 13 2013: IMC: map color format HAL_PIXEL_FORMAT_YCbCr_420_SP
+ * Jan 14 2014: Intel: convertColorFormatOmxToHal() to be used by ACodec;
  *                     remove static attribute
+ * Mar 31 2014: IMC: rescale video on demand
  */
 
 /*
@@ -1910,11 +1911,98 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
         return err;
     }
 
+    /* have to transform  OMX-?? to HAL-?? as they will be used in gralloc_alloc() */
+    int format = convertColorFormatOmxToHal(def.format.video.eColorFormat);
+
+    ALOGV("allocateOutputBuffersFromNativeWindow(stride %d, sliceheight %d, format %d)",
+         def.format.video.nStride,
+         def.format.video.nSliceHeight,
+         format);
+
+    /* Check if we can rescale the video to display size to reduce power consumption */
+    int is_native_window=0;
+    err = mNativeWindow->query(
+                mNativeWindow.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER,
+                &is_native_window);
+
+    if(err==0)
+    {
+        /* Only videos which are shown in native windows can be rescaled */
+        if(is_native_window) {
+            int window_width=0;
+            int window_height=0;
+
+            /* First get the window dimension */
+            err = mNativeWindow->query(
+                mNativeWindow.get(), NATIVE_WINDOW_WIDTH,
+                &window_width);
+
+            if(err==0)
+                err = mNativeWindow->query(
+                    mNativeWindow.get(), NATIVE_WINDOW_HEIGHT,
+                    &window_height);
+
+            if(err==0) {
+                ALOGV("allocateOutputBuffersFromNativeWindow(window.native window.width %d, window.height %d)",
+                    window_width,
+                    window_height);
+
+                int rescale_width;
+                int rescale_height;
+
+                bool isLandscapeVideo = (def.format.video.nStride>def.format.video.nSliceHeight);
+                bool isLandscapeWindow = (window_width>window_height);
+
+                /* Compare the maximum dimension of the window with the maxium dimension of the video */
+                if((isLandscapeVideo != isLandscapeWindow)) {
+                    rescale_width = window_height;
+                    rescale_height = window_width;
+                }else {
+                    rescale_width = window_width;
+                    rescale_height = window_height;
+                }
+
+                /* Only if width and height are bigger, we can rescale.
+                   In case only the height or the width is bigger, the video post proc might fail due to
+                   parallel up and downscaling */
+                if(    rescale_height < def.format.video.nFrameHeight
+                    && rescale_width < def.format.video.nFrameWidth ) {
+
+                    /* Recalc stride and sliceheight */
+                    def.format.video.nStride  = (rescale_width + 15) & -16;
+                    def.format.video.nSliceHeight = (rescale_height + 15) & -16;
+
+                    /* Trace what we have done */
+                    ALOGW("allocateOutputBuffersFromNativeWindow rescale (width %d ->%d, height %d->%d, stride %d, sliceheight %d, format %d)",
+                        def.format.video.nFrameWidth,
+                        rescale_width,
+                        def.format.video.nFrameHeight,
+                        rescale_height,
+                        def.format.video.nStride,
+                        def.format.video.nSliceHeight,
+                        format);
+
+                    def.format.video.nFrameWidth = rescale_width;
+                    def.format.video.nFrameHeight = rescale_height;
+
+                    /* Update output format */
+                    mOutputFormat->setInt32(kKeyWidth, rescale_width);
+                    mOutputFormat->setInt32(kKeyHeight, rescale_height);
+
+                    mOutputFormat->setRect(
+                        kKeyCropRect,
+                        0, 0,
+                        rescale_width - 1,
+                        rescale_height - 1);
+                }
+            }
+        }
+    }
+
     err = native_window_set_buffers_geometry(
             mNativeWindow.get(),
             def.format.video.nFrameWidth,
-            def.format.video.nFrameHeight,
-            convertColorFormatOmxToHal(def.format.video.eColorFormat));
+            def.format.video.nFrameHeight, format);
 
     if (err != 0) {
         ALOGE("native_window_set_buffers_geometry failed: %s (%d)",
@@ -4702,6 +4790,14 @@ void OMXCodec::initOutputFormat(const sp<MetaData> &inputFormat) {
                     CHECK_GE(rect.nHeight, 0u);
                     CHECK_LE(rect.nLeft + rect.nWidth - 1, video_def->nFrameWidth);
                     CHECK_LE(rect.nTop + rect.nHeight - 1, video_def->nFrameHeight);
+
+                    int rect_width = rect.nLeft + rect.nWidth - 1;
+                    int rect_height = rect.nTop + rect.nHeight - 1;
+
+                    if(rect_width >= video_def->nFrameWidth)
+                        ALOGW("initOutputFormat warning (width %d >framewidth %d)",rect_width,video_def->nFrameWidth);
+                    if(rect_height >= video_def->nFrameHeight)
+                        ALOGW("initOutputFormat warning (height %d >frameheight %d)",rect_height,video_def->nFrameHeight);
 
                     mOutputFormat->setRect(
                             kKeyCropRect,
