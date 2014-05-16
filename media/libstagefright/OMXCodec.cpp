@@ -2201,10 +2201,13 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
 
 #ifdef TARGET_HAS_VPP
     //add more buffers
-    bool isVppOn = !(usage & GRALLOC_USAGE_PROTECTED);
     // if mVppInBufNum > 0, then vpp/frc should be on
     // add this condition, so that we don't need to pass slow motion state separately
-    if (mVppInBufNum > 0) {
+#ifdef TARGET_HAS_VPP_FOR_DRM
+    if (mVppInBufNum > 0 && mVppOutBufNum > 0) {
+#else
+    if (mVppInBufNum > 0 && mVppOutBufNum > 0 && !(usage & GRALLOC_USAGE_PROTECTED)) {
+#endif
         ALOGE("def.nBufferCountActual = %d",def.nBufferCountActual);
         int totalBufferCount = def.nBufferCountActual + mVppInBufNum + mVppOutBufNum;
 
