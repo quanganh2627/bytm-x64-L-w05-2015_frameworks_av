@@ -380,6 +380,7 @@ M4OSA_ERR M4VSS3GPP_intBuildAnalysis( M4VSS3GPP_ClipContext *pClipCtxt,
     pClipProperties->bMPEG4dataPartition = M4OSA_FALSE;
     pClipProperties->bMPEG4rvlc = M4OSA_FALSE;
     pClipProperties->bMPEG4resynchMarker = M4OSA_FALSE;
+    pClipProperties->videoRotationDegrees = 0;
 
     memset((void *) &pClipProperties->ftyp,0,
         sizeof(pClipProperties->ftyp));
