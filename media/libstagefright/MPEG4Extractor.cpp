@@ -3700,6 +3700,9 @@ status_t MPEG4Source::fragmentedRead(
         mCurrentSamples.clear();
         mCurrentSampleIndex = 0;
         parseChunk(&totalOffset);
+        if (!mCurrentSamples.size()) {
+            return ERROR_END_OF_STREAM;
+        }
         mCurrentTime = totalTime * mTimescale / 1000000ll;
         }
 
