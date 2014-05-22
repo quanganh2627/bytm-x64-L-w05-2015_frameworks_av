@@ -1210,7 +1210,7 @@ status_t VPP::configComponent(int32_t *inBufNum, int32_t *outBufNum,
     err = native_window_set_buffers_geometry(mNativeWindow.get(),
                         decDef.format.video.nFrameWidth,
                         decDef.format.video.nFrameHeight,
-                        0x14);
+                        decDef.format.video.eColorFormat);
     if (err != OK) {
         signalError(OMX_ErrorUndefined);
         return err;
@@ -1253,7 +1253,7 @@ status_t VPP::configComponent(int32_t *inBufNum, int32_t *outBufNum,
     }
     vppOutDef.format.video.nFrameWidth = decDef.format.video.nFrameWidth;
     vppOutDef.format.video.nFrameHeight = decDef.format.video.nFrameHeight;
-    vppOutDef.format.video.eColorFormat = (OMX_COLOR_FORMATTYPE)0x14;
+    vppOutDef.format.video.eColorFormat = decDef.format.video.eColorFormat;
 
 
     vppOutDef.nBufferCountActual = vppOutDef.nBufferCountMin + reserve;
