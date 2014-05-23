@@ -5137,7 +5137,9 @@ status_t OMXCodec::pause() {
 void OMXCodec::setMDSVideoState_l(int state) {
     ALOGI("Update Video State: %d, %d, %d, %p",
             state, mMDSVideoSessionId, (mFlags & kEnableGrallocUsageProtected), this);
-    if (mIsEncoder || !mIsVideo) {
+    if (mIsEncoder
+            || !mIsVideo
+            || (mFlags & kClientNeedsFramebuffer)) {
         ALOGW("Not a valid video playback %d, %d", mIsEncoder, mIsVideo);
         return;
     }
