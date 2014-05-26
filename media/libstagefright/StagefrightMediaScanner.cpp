@@ -221,11 +221,15 @@ char *StagefrightMediaScanner::extractAlbumArt(int fd) {
         if (mem != NULL) {
             MediaAlbumArt *art = static_cast<MediaAlbumArt *>(mem->pointer());
 
-            char *data = (char *)malloc(art->mSize + 4);
-            *(int32_t *)data = art->mSize;
-            memcpy(&data[4], &art[1], art->mSize);
+            if (art != NULL) {
+                char *data = (char *)malloc(art->mSize + 4);
+                if (data != NULL) {
+                    *(int32_t *)data = art->mSize;
+                    memcpy(&data[4], &art[1], art->mSize);
 
-            return data;
+                    return data;
+                }
+            }
         }
     }
 
