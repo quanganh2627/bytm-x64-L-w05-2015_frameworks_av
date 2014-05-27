@@ -4,6 +4,7 @@
  * Notes:
  * Jan 14 2014: Intel: adapt interworking with HD decoder
  *                     (color format conversion, 3 port decoder)
+ * May 27 2014: IMC: h264 encoder: derive profile from resulution
  */
 
 /*
@@ -590,11 +591,11 @@ status_t ACodec::configureOutputBuffersFromNativeWindow(
     /* Convert ColorFormat from OMX to HAL */
     int format = convertColorFormatOmxToHal(def.format.video.eColorFormat);
 
-    ALOGV("configureOutputBuffersFromNativeWindow(stride %d, height %d, format %d)",
+    ALOGV("configureOutputBuffersFromNativeWindow(stride %ld, height %lu, format %d)",
         def.format.video.nStride,
         def.format.video.nSliceHeight,
         format);
-    
+
     err = native_window_set_buffers_geometry(
         mNativeWindow.get(),
         def.format.video.nStride,
@@ -715,6 +716,7 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         info.mData = new ABuffer(NULL /* data */, bufferSize /* capacity */);
         info.mGraphicBuffer = graphicBuffer;
         mBuffers[kPortIndexOutput].push(info);
+        LOGV("index = %lu, graphicBuffer = %p", i, graphicBuffer.get());
 
         IOMX::buffer_id bufferId;
         err = mOMX->useGraphicBuffer(mNode, kPortIndexOutput, graphicBuffer,
@@ -1174,7 +1176,7 @@ status_t ACodec::configureCodec(
             if (canDoAdaptivePlayback &&
                 msg->findInt32("max-width", &maxWidth) &&
                 msg->findInt32("max-height", &maxHeight)) {
-                ALOGV("[%s] prepareForAdaptivePlayback(%ldx%ld)",
+                ALOGV("[%s] prepareForAdaptivePlayback(%dx %d)",
                       mComponentName.c_str(), maxWidth, maxHeight);
 
                 err = mOMX->prepareForAdaptivePlayback(
@@ -1941,7 +1943,7 @@ status_t ACodec::setupVideoEncoder(const char *mime, const sp<AMessage> &msg) {
             break;
 
         case OMX_VIDEO_CodingAVC:
-            err = setupAVCEncoderParameters(msg);
+            err = setupAVCEncoderParameters(msg, width, height);
             break;
 
         case OMX_VIDEO_CodingVP8:
@@ -2172,7 +2174,7 @@ status_t ACodec::setupH263EncoderParameters(const sp<AMessage> &msg) {
     return setupErrorCorrectionParameters();
 }
 
-status_t ACodec::setupAVCEncoderParameters(const sp<AMessage> &msg) {
+status_t ACodec::setupAVCEncoderParameters(const sp<AMessage> &msg, int32_t width, int32_t height) {
     int32_t bitrate, iFrameInterval;
     if (!msg->findInt32("bitrate", &bitrate)
             || !msg->findInt32("i-frame-interval", &iFrameInterval)) {
@@ -2230,6 +2232,27 @@ status_t ACodec::setupAVCEncoderParameters(const sp<AMessage> &msg) {
 
         h264type.eProfile = static_cast<OMX_VIDEO_AVCPROFILETYPE>(profile);
         h264type.eLevel = static_cast<OMX_VIDEO_AVCLEVELTYPE>(level);
+    }
+    else
+    {
+        ALOGV("no profile in msg/meta data - do some magic ...");
+
+        /** from StagefrightRecorder **/
+        h264type.eProfile = OMX_VIDEO_AVCProfileBaseline;
+
+        if(height <= 240) {
+            h264type.eLevel = OMX_VIDEO_AVCLevel13;
+            ALOGV("H264 recording <= QVGA force profile OMX_VIDEO_AVCLevel13 %d", h264type.eLevel);
+        }
+        else if(height < 480) {
+            h264type.eLevel = OMX_VIDEO_AVCLevel3;
+            ALOGV("H264 recording < 480p force profile OMX_VIDEO_AVCLevel3 %d", h264type.eLevel);
+        }
+        else {
+            h264type.eLevel = OMX_VIDEO_AVCLevel31;
+            ALOGV("H264 recording >= 480p force profile OMX_VIDEO_AVCLevel31 %d", h264type.eLevel);
+        }
+        /** /from StagefrigtRecorder **/
     }
 
     // XXX

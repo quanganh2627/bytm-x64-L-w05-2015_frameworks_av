@@ -1,4 +1,11 @@
 /*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * Notes:
+ * May 20 2014: IMC: setupAVCEncoderParameters() += width & height params
+ */
+
+/*
  * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -265,7 +272,7 @@ private:
 
     status_t setupMPEG4EncoderParameters(const sp<AMessage> &msg);
     status_t setupH263EncoderParameters(const sp<AMessage> &msg);
-    status_t setupAVCEncoderParameters(const sp<AMessage> &msg);
+    status_t setupAVCEncoderParameters(const sp<AMessage> &msg, int32_t width, int32_t height);
     status_t setupVPXEncoderParameters(const sp<AMessage> &msg);
 
     status_t verifySupportForProfileAndLevel(int32_t profile, int32_t level);
