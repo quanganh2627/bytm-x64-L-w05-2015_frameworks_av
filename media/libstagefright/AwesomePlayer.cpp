@@ -813,6 +813,14 @@ void AwesomePlayer::onVideoLagUpdate() {
 
 void AwesomePlayer::onBufferingUpdate() {
     Mutex::Autolock autoLock(mLock);
+    if (mFlags & PREPARING) {
+        if (mFlags & PREPARE_CANCELLED) {
+            ALOGI("prepare was cancelled in preparing state");
+            abortPrepare(UNKNOWN_ERROR);
+            return;
+        }
+    }
+
     if (!mBufferingEventPending) {
         return;
     }
