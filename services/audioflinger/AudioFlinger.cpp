@@ -99,6 +99,8 @@ size_t AudioFlinger::mTeeSinkOutputFrames = kTeeSinkOutputFramesDefault;
 size_t AudioFlinger::mTeeSinkTrackFrames = kTeeSinkTrackFramesDefault;
 #endif
 
+static int mPreProcAudioSessionId;
+
 // In order to avoid invalidating offloaded tracks each time a Visualizer is turned on and off
 // we define a minimum time during which a global effect is considered enabled.
 static const nsecs_t kMinGlobalEffectEnabletimeNs = seconds(7200);
@@ -1419,6 +1421,8 @@ sp<IAudioRecord> AudioFlinger::openRecord(
         pid_t pid = IPCThreadState::self()->getCallingPid();
         client = registerPid(pid);
 
+        mPreProcAudioSessionId = *sessionId;
+
         if (sessionId != NULL && *sessionId != AUDIO_SESSION_ALLOCATE) {
             lSessionId = *sessionId;
         } else {
@@ -2457,6 +2461,11 @@ sp<IEffect> AudioFlinger::createEffect(
 
         // return effect descriptor
         *pDesc = desc;
+
+        if ((desc.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC) {
+            sessionId = mPreProcAudioSessionId;
+        }
+
         if (io == AUDIO_IO_HANDLE_NONE && sessionId == AUDIO_SESSION_OUTPUT_MIX) {
             // if the output returned by getOutputForEffect() is removed before we lock the
             // mutex below, the call to checkPlaybackThread_l(io) below will detect it
