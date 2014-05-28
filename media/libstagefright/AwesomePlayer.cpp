@@ -2348,6 +2348,11 @@ void AwesomePlayer::onVideoEvent() {
         for (;;) {
             status_t err = mVideoSource->read(&mVideoBuffer, &options);
             options.clearSeekTo();
+#ifdef DUMP_DECODE_INFO
+            if (g_log_level >= LOG_LEVEL_1 && err == OK ) {
+                ++tl_decodeFrameCount;
+            }
+#endif
 
             if (err != OK) {
                 CHECK(mVideoBuffer == NULL);
