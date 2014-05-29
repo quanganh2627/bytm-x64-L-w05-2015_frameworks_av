@@ -611,13 +611,43 @@ void MediaProfiles::checkAndAddRequiredProfilesIfNecessary() {
     }
 }
 
+static FILE * openMediaXml(char *value){
+    char *_pr;
+    char temp[PROPERTY_VALUE_MAX] = {0};
+    char path[PROPERTY_VALUE_MAX] = {0};
+    FILE *fp = fopen(value, "r");
+    if(fp != NULL){
+	ALOGD("Found XmlFile:%s\n",value);
+	return fp;
+    }
+
+    ALOGD("Do not found XmlFile:%s\n",value);
+
+    strtok(value,"_");
+    strtok(NULL,"_");
+    sprintf(temp,"%s",strtok(NULL,"_"));
+    _pr = strtok(NULL,"_");
+    sprintf(value,"%s_%s",strtok(_pr,"."),temp);
+    sprintf(path,"/etc/media_profiles_%s.xml",value);
+    sprintf(value,"%s",path);
+
+    fp = fopen(value, "r");
+    if(fp != NULL){
+	ALOGD("Found XmlFile:%s\n",value);
+	return fp;
+    }
+
+    ALOGD("Do not found XmlFile:%s\n",value);
+    return NULL;
+}
+
 /*static*/ MediaProfiles*
 MediaProfiles::getInstance()
 {
     ALOGV("getInstance");
     Mutex::Autolock lock(sLock);
     if (!sIsInitialized) {
-        char value[PROPERTY_VALUE_MAX];
+        char value[PROPERTY_VALUE_MAX] = {0};
         if (property_get("media.settings.xml", value, NULL) <= 0) {
             const char *defaultXmlFile = "/etc/media_profiles.xml";
             FILE *fp = fopen(defaultXmlFile, "r");
@@ -629,7 +659,15 @@ MediaProfiles::getInstance()
                 sInstance = createInstanceFromXmlFile(defaultXmlFile);
             }
         } else {
-            sInstance = createInstanceFromXmlFile(value);
+            const char *defaultXmlFile = "/etc/media_profiles.xml";
+		FILE * fp = openMediaXml(value);
+            if (fp == NULL) {
+                ALOGD("could not find XmlFile:%s\n",value);
+                sInstance = createInstanceFromXmlFile(defaultXmlFile);
+            } else {
+                fclose(fp);  // close the file first.
+		sInstance = createInstanceFromXmlFile(value);
+	    }
         }
         CHECK(sInstance != NULL);
         sInstance->checkAndAddRequiredProfilesIfNecessary();
@@ -892,6 +930,8 @@ MediaProfiles::createInstanceFromXmlFile(const char *xml)
 {
     FILE *fp = NULL;
     CHECK((fp = fopen(xml, "r")));
+
+    ALOGD("Parse Media XmlFile:%s\n",xml);
 
     XML_Parser parser = ::XML_ParserCreate(NULL);
     CHECK(parser != NULL);
