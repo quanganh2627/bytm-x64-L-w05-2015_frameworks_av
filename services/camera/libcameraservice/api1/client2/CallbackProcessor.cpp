@@ -364,9 +364,11 @@ status_t CallbackProcessor::processNewCallback(sp<Camera2Client> &client) {
             // don't care about cStride
         }
 
+        // allocte the callback buffer without stride, avoid the CTS case
+        // failed, because CTS doesn't know the stride info.
         size_t bufferSize = Camera2Client::calculateBufferSize(
                 imgBuffer.width, imgBuffer.height,
-                previewFormat, destYStride);
+                previewFormat, imgBuffer.width);
         size_t currentBufferSize = (mCallbackHeap == 0) ?
                 0 : (mCallbackHeap->mHeap->getSize() / kCallbackHeapCount);
         if (bufferSize != currentBufferSize) {
