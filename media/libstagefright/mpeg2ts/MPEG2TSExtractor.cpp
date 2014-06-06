@@ -35,6 +35,7 @@
 namespace android {
 
 static const size_t kTSPacketSize = 188;
+static const size_t kBDAVTSPacketSize = 192;
 
 struct MPEG2TSSource : public MediaSource {
     MPEG2TSSource(
@@ -112,6 +113,7 @@ status_t MPEG2TSSource::read(
 MPEG2TSExtractor::MPEG2TSExtractor(const sp<DataSource> &source)
     : mDataSource(source),
       mParser(new ATSParser),
+      mBDAVFormat(false),
       mOffset(0) {
     init();
 }
@@ -158,6 +160,10 @@ void MPEG2TSExtractor::init() {
     bool haveAudio = false;
     bool haveVideo = false;
     int numPacketsParsed = 0;
+    char header;
+    if (mDataSource->readAt(0, &header, 1) == 1 && header != 0x47) {
+        mBDAVFormat = true;
+    }
 
     while (feedMore() == OK) {
         ATSParser::SourceType type;
@@ -197,15 +203,17 @@ void MPEG2TSExtractor::init() {
 status_t MPEG2TSExtractor::feedMore() {
     Mutex::Autolock autoLock(mLock);
 
-    uint8_t packet[kTSPacketSize];
-    ssize_t n = mDataSource->readAt(mOffset, packet, kTSPacketSize);
+    uint8_t packet[kBDAVTSPacketSize];
+    ssize_t readLen = mBDAVFormat ? kBDAVTSPacketSize : kTSPacketSize;
 
-    if (n < (ssize_t)kTSPacketSize) {
+    ssize_t n = mDataSource->readAt(mOffset, packet, readLen);
+
+    if (n < readLen) {
         return (n < 0) ? (status_t)n : ERROR_END_OF_STREAM;
     }
 
     mOffset += n;
-    return mParser->feedTSPacket(packet, kTSPacketSize);
+    return mParser->feedTSPacket(packet + readLen - kTSPacketSize, kTSPacketSize);
 }
 
 uint32_t MPEG2TSExtractor::flags() const {
@@ -217,14 +225,25 @@ uint32_t MPEG2TSExtractor::flags() const {
 bool SniffMPEG2TS(
         const sp<DataSource> &source, String8 *mimeType, float *confidence,
         sp<AMessage> *) {
+    bool normalTSFormat = true;
     for (int i = 0; i < 5; ++i) {
         char header;
         if (source->readAt(kTSPacketSize * i, &header, 1) != 1
                 || header != 0x47) {
-            return false;
+            normalTSFormat = false;
+            break;
         }
     }
-
+    if (!normalTSFormat) {
+        // check if it is BDAV MPEG2 TS format if it's not normal TS Stream
+        for (int i = 0; i < 5; ++i) {
+            char header;
+            if (source->readAt(kBDAVTSPacketSize * i + 4, &header, 1) != 1
+                    || header != 0x47) {
+                return false;
+            }
+        }
+    }
     *confidence = 0.1f;
     mimeType->setTo(MEDIA_MIMETYPE_CONTAINER_MPEG2TS);
 

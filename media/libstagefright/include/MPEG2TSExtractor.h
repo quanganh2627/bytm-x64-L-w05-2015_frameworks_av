@@ -56,6 +56,8 @@ private:
 
     off64_t mOffset;
 
+    bool mBDAVFormat;
+
     void init();
     status_t feedMore();
 
