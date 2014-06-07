@@ -597,8 +597,6 @@ status_t Parameters::initialize(const CameraMetadata *info) {
                 supportedFlashModes);
     } else {
         flashMode = Parameters::FLASH_MODE_OFF;
-        params.set(CameraParameters::KEY_FLASH_MODE,
-                CameraParameters::FLASH_MODE_OFF);
         params.set(CameraParameters::KEY_SUPPORTED_FLASH_MODES,
                 CameraParameters::FLASH_MODE_OFF);
     }
@@ -2189,7 +2187,7 @@ Parameters::Parameters::flashMode_t Parameters::flashModeStringToEnum(
         const char *flashMode) {
     return
         !flashMode ?
-            Parameters::FLASH_MODE_INVALID :
+            Parameters::FLASH_MODE_OFF :
         !strcmp(flashMode, CameraParameters::FLASH_MODE_OFF) ?
             Parameters::FLASH_MODE_OFF :
         !strcmp(flashMode, CameraParameters::FLASH_MODE_AUTO) ?
