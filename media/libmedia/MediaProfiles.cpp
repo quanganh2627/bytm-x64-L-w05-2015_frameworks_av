@@ -419,6 +419,32 @@ MediaProfiles::createVideoEditorCap(const char **atts, MediaProfiles *profiles)
     return pVideoEditorCap;
 }
 
+void MediaProfiles::releaseResource(const int cameraId)
+{
+    ALOGD("%s, cameraId = %d", __func__, cameraId);
+    for (Vector<CamcorderProfile *>::iterator iter = mCamcorderProfiles.begin(); iter != mCamcorderProfiles.end(); ) {
+        if (cameraId == (*iter)->mCameraId) {
+            delete (*iter);
+            *iter = NULL;
+            iter = mCamcorderProfiles.erase(iter);
+        } else {
+            iter++;
+        }
+    }
+
+    for (Vector<ImageEncodingQualityLevels *>::iterator iter = mImageEncodingQualityLevels.begin();
+            iter != mImageEncodingQualityLevels.end(); ) {
+
+        if (cameraId == (*iter)->mCameraId) {
+            delete (*iter);
+            *iter = NULL;
+            iter = mImageEncodingQualityLevels.erase(iter);
+        } else {
+            iter++;
+        }
+    }
+}
+
 /*static*/ void
 MediaProfiles::startElementHandler(void *userData, const char *name, const char **atts)
 {
@@ -444,6 +470,8 @@ MediaProfiles::startElementHandler(void *userData, const char *name, const char 
     } else if (strcmp("CamcorderProfiles", name) == 0) {
         profiles->mCurrentCameraId = getCameraId(atts);
         profiles->addStartTimeOffset(profiles->mCurrentCameraId, atts);
+        // release resource for the cameraId
+        profiles->releaseResource(profiles->mCurrentCameraId);
     } else if (strcmp("EncoderProfile", name) == 0) {
         profiles->mCamcorderProfiles.add(
             createCamcorderProfile(profiles->mCurrentCameraId, atts, profiles->mCameraIds));
@@ -648,27 +676,34 @@ MediaProfiles::getInstance()
     Mutex::Autolock lock(sLock);
     if (!sIsInitialized) {
         char value[PROPERTY_VALUE_MAX] = {0};
+        const char *defaultXmlFile = "/etc/media_profiles.xml";
+
         if (property_get("media.settings.xml", value, NULL) <= 0) {
-            const char *defaultXmlFile = "/etc/media_profiles.xml";
             FILE *fp = fopen(defaultXmlFile, "r");
-            if (fp == NULL) {
-                ALOGW("could not find media config xml file");
-                sInstance = createDefaultInstance();
-            } else {
+            if (fp) {
                 fclose(fp);  // close the file first.
-                sInstance = createInstanceFromXmlFile(defaultXmlFile);
+                sInstance = createInstanceFromXmlFile(defaultXmlFile, sInstance);
             }
-        } else {
-            const char *defaultXmlFile = "/etc/media_profiles.xml";
-		FILE * fp = openMediaXml(value);
-            if (fp == NULL) {
-                ALOGD("could not find XmlFile:%s\n",value);
-                sInstance = createInstanceFromXmlFile(defaultXmlFile);
-            } else {
-                fclose(fp);  // close the file first.
-		sInstance = createInstanceFromXmlFile(value);
-	    }
+        } else { // specify media profiles path.
+            // read default media profiles
+            if (0 == access(defaultXmlFile, R_OK))
+                sInstance = createInstanceFromXmlFile(defaultXmlFile, sInstance);
+
+            char *cursor = strtok(value, "|");
+            while(NULL != cursor) {
+                if (0 ==  access(cursor, R_OK))
+                    sInstance = createInstanceFromXmlFile(cursor, sInstance);
+                else
+                    ALOGD("can not access %s", cursor);
+
+                cursor = strtok(NULL, "|");
+            }
         }
+
+        if (NULL == sInstance) {
+            sInstance = createDefaultInstance();
+        }
+
         CHECK(sInstance != NULL);
         sInstance->checkAndAddRequiredProfilesIfNecessary();
         sIsInitialized = true;
@@ -926,7 +961,7 @@ MediaProfiles::createDefaultInstance()
 }
 
 /*static*/ MediaProfiles*
-MediaProfiles::createInstanceFromXmlFile(const char *xml)
+MediaProfiles::createInstanceFromXmlFile(const char *xml, MediaProfiles *profiles)
 {
     FILE *fp = NULL;
     CHECK((fp = fopen(xml, "r")));
@@ -936,7 +971,9 @@ MediaProfiles::createInstanceFromXmlFile(const char *xml)
     XML_Parser parser = ::XML_ParserCreate(NULL);
     CHECK(parser != NULL);
 
-    MediaProfiles *profiles = new MediaProfiles();
+    if (NULL == profiles)
+        profiles = new MediaProfiles();
+
     ::XML_SetUserData(parser, profiles);
     ::XML_SetElementHandler(parser, startElementHandler, NULL);
 

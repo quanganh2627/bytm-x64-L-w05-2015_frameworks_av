@@ -384,6 +384,7 @@ private:
     int getCamcorderProfileIndex(int cameraId, camcorder_quality quality) const;
     void initRequiredProfileRefs(const Vector<int>& cameraIds);
     int getRequiredProfileRefIndex(int cameraId);
+    void releaseResource(const int cameraId);
 
     // Debug
     static void logVideoCodec(const VideoCodec& codec);
@@ -396,7 +397,7 @@ private:
 
     // If the xml configuration file does exist, use the settings
     // from the xml
-    static MediaProfiles* createInstanceFromXmlFile(const char *xml);
+    static MediaProfiles* createInstanceFromXmlFile(const char *xml, MediaProfiles *profiles);
     static output_format createEncoderOutputFileFormat(const char **atts);
     static VideoCodec* createVideoCodec(const char **atts, MediaProfiles *profiles);
     static AudioCodec* createAudioCodec(const char **atts, MediaProfiles *profiles);
