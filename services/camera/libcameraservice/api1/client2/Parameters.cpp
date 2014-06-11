@@ -601,8 +601,6 @@ status_t Parameters::initialize(const CameraMetadata *info) {
                 supportedFlashModes);
     } else {
         flashMode = Parameters::FLASH_MODE_OFF;
-        params.set(CameraParameters::KEY_SUPPORTED_FLASH_MODES,
-                CameraParameters::FLASH_MODE_OFF);
     }
 
     camera_metadata_ro_entry_t minFocusDistance =
