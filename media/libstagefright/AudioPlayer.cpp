@@ -1078,7 +1078,9 @@ int64_t AudioPlayer::getOutputPlayPositionUs_l()
 
     int64_t playedUs;
     if (mSampleRate != 0) {
-        playedUs = (static_cast<int64_t>(playedSamples) * 1000000 ) / mSampleRate;
+        //playedUs = (static_cast<int64_t>(playedSamples) * 1000000 ) / mSampleRate;
+        // Changed rendered Duration as per firmware sync
+        playedUs = 1000 * (int64_t) playedSamples;
     } else {
         playedUs = 0;
     }
