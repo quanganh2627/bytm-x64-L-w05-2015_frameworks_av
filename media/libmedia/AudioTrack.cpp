@@ -1505,11 +1505,14 @@ nsecs_t AudioTrack::processAudioBuffer(const sp<AudioTrackThread>& thread)
         timeout.tv_nsec = 0;
 
         status_t status = proxy->waitStreamEndDone(&timeout);
+        // staus returns DEAD_OBJECT because of cbkl flag set to CBLK_INVALID.
+        // This is because of invalidating the tracks because of HDMI connected
+        // or effects getting enabled. In this case Don't post EVENT_STREAM_END.
         switch (status) {
         case NO_ERROR:
-        case DEAD_OBJECT:
         case TIMED_OUT:
             mCbf(EVENT_STREAM_END, mUserData, NULL);
+        case DEAD_OBJECT:
             {
                 AutoMutex lock(mLock);
                 // The previously assigned value of waitStreamEnd is no longer valid,
