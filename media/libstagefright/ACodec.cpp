@@ -4191,8 +4191,14 @@ bool ACodec::UninitializedState::onAllocateComponent(const sp<AMessage> &msg) {
         OMXCodec::CodecNameAndQuirks *entry = &matchingCodecs.editItemAt(index);
         entry->mName = String8(componentName.c_str());
 
+        AString tmp = componentName;
+        if (tmp.endsWith(".secure")) {
+            size_t rm = strlen(".secure");
+            tmp.erase(tmp.size() - rm, rm);
+        }
+
         if (!OMXCodec::findCodecQuirks(
-                    componentName.c_str(), &entry->mQuirks)) {
+                    tmp.c_str(), &entry->mQuirks)) {
             entry->mQuirks = 0;
         }
     } else {
