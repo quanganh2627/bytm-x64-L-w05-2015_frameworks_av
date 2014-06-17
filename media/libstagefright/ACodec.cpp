@@ -5,6 +5,8 @@
  * Jan 14 2014: Intel: adapt interworking with HD decoder
  *                     (color format conversion, 3 port decoder)
  * May 27 2014: IMC: h264 encoder: derive profile from resulution
+ * Jun 17 2014: IMC: roll back profile calculation for h264;
+ *                   set defaults in decoder accordingly
  */
 
 /*
@@ -2233,6 +2235,7 @@ status_t ACodec::setupAVCEncoderParameters(const sp<AMessage> &msg, int32_t widt
         h264type.eProfile = static_cast<OMX_VIDEO_AVCPROFILETYPE>(profile);
         h264type.eLevel = static_cast<OMX_VIDEO_AVCLEVELTYPE>(level);
     }
+#if 0 /* no longer required after change in encoder.c:set_avc_defaults() */
     else
     {
         ALOGV("no profile in msg/meta data - do some magic ...");
@@ -2254,6 +2257,7 @@ status_t ACodec::setupAVCEncoderParameters(const sp<AMessage> &msg, int32_t widt
         }
         /** /from StagefrigtRecorder **/
     }
+#endif
 
     // XXX
     if (h264type.eProfile != OMX_VIDEO_AVCProfileBaseline) {

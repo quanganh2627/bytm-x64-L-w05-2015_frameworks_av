@@ -4,6 +4,8 @@
  * Notes:
  * Apr  3 2014: Intel: re-enable storeMetaDataInVideoBuffers
  * Apr  3 2014: Intel: verify result of dup(output file descriptor)
+ * Jun 17 2014: IMC: roll back profile calculation for h264;
+ *                   set defaults in decoder accordingly
  */
 
 /*
@@ -787,6 +789,7 @@ status_t StagefrightRecorder::prepare() {
         }
     }
 
+#if 0 /* no longer required after change in encoder.c:set_avc_defaults() */
     /*
      * for H264/AVC encoding, various levels apply depending on resolution
      * stick to the default profile AVCProfileBaseline
@@ -808,6 +811,7 @@ status_t StagefrightRecorder::prepare() {
         ALOGI("H264 recording %d x %d force profile %d", mVideoWidth, mVideoHeight, level);
         setParamVideoEncoderLevel(level);
     }
+#endif
 
 #if 0 // H263: only one profile and level specified; stay with default
     if(mVideoEncoder == VIDEO_ENCODER_H263 &&
