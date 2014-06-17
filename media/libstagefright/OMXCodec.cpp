@@ -7,6 +7,8 @@
  * Jan 14 2014: Intel: convertColorFormatOmxToHal() to be used by ACodec;
  *                     remove static attribute
  * Mar 31 2014: IMC: rescale video on demand
+ * Jun 17 2014: IMC: provide stride and slice hight to play odd sized videos correctly
+ * Jun 26 2014: IMC: remove assertions which brake rescaling
  */
 
 /*
@@ -1196,11 +1198,18 @@ status_t OMXCodec::setVideoOutputFormat(
         const char *mime, const sp<MetaData>& meta) {
 
     int32_t width, height;
+    int32_t aWidth, aHeight;
     bool success = meta->findInt32(kKeyWidth, &width);
     success = success && meta->findInt32(kKeyHeight, &height);
     CHECK(success);
 
-    CODEC_LOGV("setVideoOutputFormat width=%ld, height=%ld", width, height);
+    /* aligned sizes */
+    aWidth  = (width + 15) & -16;
+    aHeight = (height + 15) & -16;
+
+    CODEC_LOGV("setVideoOutputFormat width=%d, height=%d", width, height);
+    CODEC_LOGV("setVideoOutputFormat width=%d, height=%d - alligned 16 bytes",
+        aWidth, aHeight);
 
     OMX_VIDEO_CODINGTYPE compressionFormat = OMX_VIDEO_CodingUnused;
     if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mime)) {
@@ -1321,6 +1330,10 @@ status_t OMXCodec::setVideoOutputFormat(
 
     video_def->nFrameWidth = width;
     video_def->nFrameHeight = height;
+
+    /* provide stride and slice height */
+    video_def->nStride      = aWidth;
+    video_def->nSliceHeight = aHeight;
 
     err = mOMX->setParameter(
             mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
@@ -1808,7 +1821,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
     /* have to transform  OMX-?? to HAL-?? as they will be used in gralloc_alloc() */
     int format = convertColorFormatOmxToHal(def.format.video.eColorFormat);
 
-    ALOGV("allocateOutputBuffersFromNativeWindow(stride %d, sliceheight %d, format %d)",
+    ALOGV("allocateOutputBuffersFromNativeWindow(stride %ld, sliceheight %lu, format %d)",
          def.format.video.nStride,
          def.format.video.nSliceHeight,
          format);
@@ -1841,10 +1854,10 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                     window_width,
                     window_height);
 
-                int rescale_width;
-                int rescale_height;
+                unsigned int rescale_width;
+                unsigned int rescale_height;
 
-                bool isLandscapeVideo = (def.format.video.nStride>def.format.video.nSliceHeight);
+                bool isLandscapeVideo = (((OMX_U32)def.format.video.nStride) > def.format.video.nSliceHeight);
                 bool isLandscapeWindow = (window_width>window_height);
 
                 /* Compare the maximum dimension of the window with the maxium dimension of the video */
@@ -1867,7 +1880,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                     def.format.video.nSliceHeight = (rescale_height + 15) & -16;
 
                     /* Trace what we have done */
-                    ALOGW("allocateOutputBuffersFromNativeWindow rescale (width %d ->%d, height %d->%d, stride %d, sliceheight %d, format %d)",
+                    ALOGW("allocateOutputBuffersFromNativeWindow rescale (width %lu ->%u, height %lu->%u, stride %lu, sliceheight %lu, format %d)",
                         def.format.video.nFrameWidth,
                         rescale_width,
                         def.format.video.nFrameHeight,
@@ -1895,8 +1908,9 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
 
     err = native_window_set_buffers_geometry(
             mNativeWindow.get(),
-            def.format.video.nFrameWidth,
-            def.format.video.nFrameHeight, format);
+            def.format.video.nStride,
+            def.format.video.nSliceHeight,
+            format);
 
     if (err != 0) {
         ALOGE("native_window_set_buffers_geometry failed: %s (%d)",
@@ -4649,16 +4663,14 @@ void OMXCodec::initOutputFormat(const sp<MetaData> &inputFormat) {
                     CHECK_GE(rect.nTop, 0);
                     CHECK_GE(rect.nWidth, 0u);
                     CHECK_GE(rect.nHeight, 0u);
-                    CHECK_LE(rect.nLeft + rect.nWidth - 1, video_def->nFrameWidth);
-                    CHECK_LE(rect.nTop + rect.nHeight - 1, video_def->nFrameHeight);
 
-                    int rect_width = rect.nLeft + rect.nWidth - 1;
-                    int rect_height = rect.nTop + rect.nHeight - 1;
+                    unsigned int rect_width = rect.nLeft + rect.nWidth - 1;
+                    unsigned int rect_height = rect.nTop + rect.nHeight - 1;
 
                     if(rect_width >= video_def->nFrameWidth)
-                        ALOGW("initOutputFormat warning (width %d >framewidth %d)",rect_width,video_def->nFrameWidth);
+                        ALOGW("initOutputFormat warning (width %u >framewidth %lu)",rect_width,video_def->nFrameWidth);
                     if(rect_height >= video_def->nFrameHeight)
-                        ALOGW("initOutputFormat warning (height %d >frameheight %d)",rect_height,video_def->nFrameHeight);
+                        ALOGW("initOutputFormat warning (height %u >frameheight %lu)",rect_height,video_def->nFrameHeight);
 
                     mOutputFormat->setRect(
                             kKeyCropRect,
@@ -4669,13 +4681,21 @@ void OMXCodec::initOutputFormat(const sp<MetaData> &inputFormat) {
 
                     CODEC_LOGI(
                             "Crop rect is %ld x %ld @ (%ld, %ld)",
-                            rect.nWidth, rect.nHeight, rect.nLeft, rect.nTop);
+                            rect.nLeft + rect.nWidth - 1,
+                            rect.nTop + rect.nHeight - 1,
+                            rect.nLeft, rect.nTop);
                 } else {
                     mOutputFormat->setRect(
                             kKeyCropRect,
                             0, 0,
                             video_def->nFrameWidth - 1,
                             video_def->nFrameHeight - 1);
+
+                    CODEC_LOGI(
+                        "default Crop rect is %ld x %ld @ (null, null)",
+                        video_def->nFrameWidth - 1,
+                        video_def->nFrameHeight - 1);
+
                 }
 
                 if (mNativeWindow != NULL) {
