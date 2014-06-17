@@ -3261,8 +3261,6 @@ status_t ACodec::getPortFormat(OMX_U32 portIndex, sp<AMessage> &notify) {
                     CHECK_GE(rect.nTop, 0);
                     CHECK_GE(rect.nWidth, 0u);
                     CHECK_GE(rect.nHeight, 0u);
-                    CHECK_LE(rect.nLeft + rect.nWidth - 1, videoDef->nFrameWidth);
-                    CHECK_LE(rect.nTop + rect.nHeight - 1, videoDef->nFrameHeight);
 
                     notify->setRect(
                             "crop",
