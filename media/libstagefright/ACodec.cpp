@@ -716,7 +716,7 @@ status_t ACodec::allocateOutputBuffersFromNativeWindow() {
         info.mData = new ABuffer(NULL /* data */, bufferSize /* capacity */);
         info.mGraphicBuffer = graphicBuffer;
         mBuffers[kPortIndexOutput].push(info);
-        LOGV("index = %lu, graphicBuffer = %p", i, graphicBuffer.get());
+        ALOGV("index = %lu, graphicBuffer = %p", i, graphicBuffer.get());
 
         IOMX::buffer_id bufferId;
         err = mOMX->useGraphicBuffer(mNode, kPortIndexOutput, graphicBuffer,
