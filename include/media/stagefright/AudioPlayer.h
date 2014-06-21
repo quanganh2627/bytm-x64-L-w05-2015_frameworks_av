@@ -171,7 +171,7 @@ private:
     int reOpenSink(int numChannels, int channelMask);
 #endif // DOLBY_UDC
     uint32_t getNumFramesPendingPlayout() const;
-    int64_t getOutputPlayPositionUs_l() const;
+    int64_t getOutputPlayPositionUs_l();
 
     bool allowDeepBuffering() const { return (mCreateFlags & ALLOW_DEEP_BUFFERING) != 0; }
     bool useOffload() const { return (mCreateFlags & USE_OFFLOAD) != 0; }

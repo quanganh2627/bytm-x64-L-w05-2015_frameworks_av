@@ -399,9 +399,8 @@ int EffectIsNullUuid(const effect_uuid_t *uuid)
 // is pointed by the first argument. It searches the gSubEffectList for the
 // matching uuid and then copies the corresponding sub effect descriptors
 // to the inout param
-int EffectGetSubEffects(const effect_uuid_t *uuid,
-                        effect_descriptor_t *pDescriptors,
-                        audio_effect_library_t** pAeli, size_t size)
+int EffectGetSubEffects(const effect_uuid_t *uuid, sub_effect_entry_t **pSube,
+                        size_t size)
 {
    ALOGV("EffectGetSubEffects() UUID: %08X-%04X-%04X-%04X-%02X%02X%02X%02X%02X"
           "%02X\n",uuid->timeLow, uuid->timeMid, uuid->timeHiAndVersion,
@@ -409,8 +408,7 @@ int EffectGetSubEffects(const effect_uuid_t *uuid,
           uuid->node[3],uuid->node[4],uuid->node[5]);
 
    // Check if the size of the desc buffer is large enough for 2 subeffects
-   if ((uuid == NULL) || (pDescriptors == NULL) ||
-       (size < 2*sizeof(effect_descriptor_t))) {
+   if ((uuid == NULL) || (pSube == NULL) || (size < 2)) {
        ALOGW("NULL pointer or insufficient memory. Cannot query subeffects");
        return -EINVAL;
    }
@@ -428,12 +426,10 @@ int EffectGetSubEffects(const effect_uuid_t *uuid,
            list_elem_t *subefx = e->sub_elem;
            while (subefx != NULL) {
                subeffect = (sub_effect_entry_t*)subefx->object;
-               d = (effect_descriptor_t*)(subeffect->object);
-               pDescriptors[count] = *d;
-               pAeli[count++] = subeffect->lib->desc;
+               pSube[count++] = subeffect;
                subefx = subefx->next;
            }
-           ALOGV("EffectGetSubEffects end - copied the sub effect descriptors");
+           ALOGV("EffectGetSubEffects end - copied the sub effect structures");
            return count;
        }
        e = e->next;

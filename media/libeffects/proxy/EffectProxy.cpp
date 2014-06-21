@@ -57,6 +57,7 @@ int EffectProxyCreate(const effect_uuid_t *uuid,
 
     effect_descriptor_t* desc;
     audio_effect_library_t** aeli;
+    sub_effect_entry_t** sube;
     EffectContext* pContext;
     if (pHandle == NULL || uuid == NULL) {
         ALOGE("EffectProxyCreate() called with NULL pointer");
@@ -76,39 +77,51 @@ int EffectProxyCreate(const effect_uuid_t *uuid,
     // Get the HW and SW sub effect descriptors from the effects factory
     desc = new effect_descriptor_t[SUB_FX_COUNT];
     aeli = new audio_effect_library_t*[SUB_FX_COUNT];
+    sube = new sub_effect_entry_t*[SUB_FX_COUNT];
+    pContext->sube = new sub_effect_entry_t*[SUB_FX_COUNT];
     pContext->desc = new effect_descriptor_t[SUB_FX_COUNT];
     pContext->aeli = new audio_effect_library_t*[SUB_FX_COUNT];
-    int retValue = EffectGetSubEffects(uuid, desc, aeli,
-                                sizeof(effect_descriptor_t) * SUB_FX_COUNT);
+    int retValue = EffectGetSubEffects(uuid, sube, SUB_FX_COUNT);
     // EffectGetSubEffects returns the number of sub-effects copied.
     if (retValue != SUB_FX_COUNT) {
        ALOGE("EffectCreate() could not get the sub effects");
-       delete[] aeli;
+       delete[] sube;
        delete[] desc;
-       delete[] pContext->aeli;
+       delete[] aeli;
+       delete[] pContext->sube;
        delete[] pContext->desc;
+       delete[] pContext->aeli;
        return -EINVAL;
     }
     // Check which is the HW descriptor and copy the descriptors
     // to the Context desc array
     // Also check if there is only one HW and one SW descriptor.
     // HW descriptor alone has the HW_TUNNEL flag.
+    desc[0] = *(effect_descriptor_t*)(sube[0])->object;
+    desc[1] = *(effect_descriptor_t*)(sube[1])->object;
+    aeli[0] = sube[0]->lib->desc;
+    aeli[1] = sube[1]->lib->desc;
     if ((desc[0].flags & EFFECT_FLAG_HW_ACC_TUNNEL) &&
        !(desc[1].flags & EFFECT_FLAG_HW_ACC_TUNNEL)) {
+        pContext->sube[SUB_FX_OFFLOAD] = sube[0];
         pContext->desc[SUB_FX_OFFLOAD] = desc[0];
         pContext->aeli[SUB_FX_OFFLOAD] = aeli[0];
+        pContext->sube[SUB_FX_HOST] = sube[1];
         pContext->desc[SUB_FX_HOST] = desc[1];
         pContext->aeli[SUB_FX_HOST] = aeli[1];
     }
     else if ((desc[1].flags & EFFECT_FLAG_HW_ACC_TUNNEL) &&
              !(desc[0].flags & EFFECT_FLAG_HW_ACC_TUNNEL)) {
+        pContext->sube[SUB_FX_HOST] = sube[0];
         pContext->desc[SUB_FX_HOST] = desc[0];
         pContext->aeli[SUB_FX_HOST] = aeli[0];
+        pContext->sube[SUB_FX_OFFLOAD] = sube[1];
         pContext->desc[SUB_FX_OFFLOAD] = desc[1];
         pContext->aeli[SUB_FX_OFFLOAD] = aeli[1];
     }
     delete[] desc;
     delete[] aeli;
+    delete[] sube;
 #if (LOG_NDEBUG == 0)
     effect_uuid_t uuid_print = pContext->desc[SUB_FX_HOST].uuid;
     ALOGV("EffectCreate() UUID of HOST: %08X-%04X-%04X-%04X-%02X%02X%02X%02X"
@@ -146,6 +159,7 @@ int EffectProxyRelease(effect_handle_t handle) {
     if (pContext->eHandle[SUB_FX_OFFLOAD])
        pContext->aeli[SUB_FX_OFFLOAD]->release_effect(pContext->eHandle[SUB_FX_OFFLOAD]);
     delete[] pContext->aeli;
+    delete[] pContext->sube;
     delete pContext;
     pContext = NULL;
     return 0;
@@ -215,6 +229,7 @@ int Effect_command(effect_handle_t  self,
                               &(pContext->eHandle[SUB_FX_OFFLOAD]));
         if (status != NO_ERROR || (pContext->eHandle[SUB_FX_OFFLOAD] == NULL)) {
             ALOGV("Effect_command() Error creating HW effect");
+            pContext->eHandle[SUB_FX_OFFLOAD] = NULL;
             // Do not return error here as SW effect is created
             // Return error if the CMD_OFFLOAD sends the index as OFFLOAD
         }
@@ -252,7 +267,7 @@ int Effect_command(effect_handle_t  self,
                            pContext->eHandle[SUB_FX_OFFLOAD], cmdCode, cmdSize,
                            pCmdData, replySize, pReplyData);
         }
-         *(int*)pReplyData = NO_ERROR;
+        *(int*)pReplyData = NO_ERROR;
         ALOGV("Effect_command OFFLOAD return 0, replyData %d",
                                                 *(int*)pReplyData);
 

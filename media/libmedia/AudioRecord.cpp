@@ -578,7 +578,6 @@ status_t AudioRecord::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
 
     const struct timespec *requested;
     struct timespec timeout;
-
     if (waitCount == -1) {
         requested = &ClientProxy::kForever;
     } else if (waitCount == 0) {

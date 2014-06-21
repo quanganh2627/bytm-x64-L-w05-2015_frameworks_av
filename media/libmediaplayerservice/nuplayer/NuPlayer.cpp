@@ -1142,7 +1142,14 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
                         }
                     }
 #endif
-                    flushDecoder(audio, formatChange);
+                    sp<AMessage> newFormat = mSource->getFormat(audio);
+                    sp<Decoder> &decoder = audio ? mAudioDecoder : mVideoDecoder;
+                    if (formatChange && !decoder->supportsSeamlessFormatChange(newFormat)) {
+                        flushDecoder(audio, /* needShutdown = */ true);
+                    } else {
+                        flushDecoder(audio, /* needShutdown = */ false);
+                        err = OK;
+                    }
                 } else {
                     // This stream is unaffected by the discontinuity
 

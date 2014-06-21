@@ -37,7 +37,8 @@
 #include "net/proxy/proxy_config_service_android.h"
 
 #include "include/ChromiumHTTPDataSource.h"
-
+#include <arpa/inet.h>
+#include <binder/Parcel.h>
 #include <cutils/log.h>
 #include <cutils/properties.h>
 #include <media/stagefright/MediaErrors.h>
@@ -50,7 +51,6 @@
 #include <binder/IServiceManager.h>
 
 namespace android {
-
 
 // must be kept in sync with interface defined in IAudioService.aidl
 class IAudioService : public IInterface
@@ -449,6 +449,7 @@ bool SfDelegate::getUID(uid_t *uid) const {
 void SfDelegate::OnReceivedRedirect(
             net::URLRequest *request, const GURL &new_url, bool *defer_redirect) {
     MY_LOGV("OnReceivedRedirect");
+    mOwner->onRedirect(new_url.spec().c_str());
 }
 
 void SfDelegate::OnAuthRequired(
