@@ -751,7 +751,7 @@ ssize_t LiveSession::fetchFile(
                 maxBytesToRead);
 
         if (n < 0) {
-            if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
+            if ((!strncasecmp(url, "file://", 7))) {
                 source->clear();
             }
             mReadInProgress = false;
@@ -774,7 +774,7 @@ ssize_t LiveSession::fetchFile(
         }
     }
 
-    if ((!strncasecmp(url, "file://", 7)) && (source != NULL)) {
+    if ((!strncasecmp(url, "file://", 7))) {
         source->clear();
     }
     mReadInProgress = false;
