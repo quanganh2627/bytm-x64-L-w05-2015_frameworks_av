@@ -602,6 +602,10 @@ status_t AwesomePlayer::setDataSource_l(const sp<MediaExtractor> &extractor) {
 }
 
 void AwesomePlayer::reset() {
+	//sometime mCachedSource will block at readAt, so stop it ASAP while reset
+    if (mCachedSource != NULL) {
+        mCachedSource->interrupt(true);
+   	}
     Mutex::Autolock autoLock(mLock);
     reset_l();
 }
@@ -632,10 +636,13 @@ void AwesomePlayer::reset_l() {
         }
         addBatteryData(params);
     }
-
+	
+	/* 
+	//move it to reset() to stop read ASAP
     if (mCachedSource != NULL) {
         mCachedSource->interrupt(true);
     }
+    */
 
     if (mFlags & PREPARING) {
         modifyFlags(PREPARE_CANCELLED, SET);
