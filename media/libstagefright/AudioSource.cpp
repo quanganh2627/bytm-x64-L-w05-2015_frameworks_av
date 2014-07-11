@@ -329,6 +329,11 @@ status_t AudioSource::dataCallback(const AudioRecord::Buffer& audioBuffer) {
         ALOGW("Nothing is available from AudioRecord callback buffer");
         return OK;
     }
+    	
+    if (audioBuffer.i16 == NULL) {
+        ALOGW("audioBuffer.i16 is NULL  from AudioRecord callback buffer");
+        return OK;
+    }
 
     const size_t bufferSize = audioBuffer.size;
     MediaBuffer *buffer = new MediaBuffer(bufferSize);
