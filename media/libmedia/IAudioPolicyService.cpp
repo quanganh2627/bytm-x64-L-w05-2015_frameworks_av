@@ -26,6 +26,7 @@
 #include <media/IAudioPolicyService.h>
 
 #include <system/audio.h>
+#include <utils/String8.h>
 
 namespace android {
 
@@ -57,7 +58,10 @@ enum {
     QUERY_DEFAULT_PRE_PROCESSING,
     SET_EFFECT_ENABLED,
     IS_STREAM_ACTIVE_REMOTELY,
-    IS_OFFLOAD_SUPPORTED
+    IS_OFFLOAD_SUPPORTED,
+#ifdef DRD_FMR	
+    SET_PARAMETERS,
+#endif /* DRD_FMR */
 };
 
 class BpAudioPolicyService : public BpInterface<IAudioPolicyService>
@@ -389,7 +393,21 @@ public:
         data.writeInterfaceToken(IAudioPolicyService::getInterfaceDescriptor());
         data.write(&info, sizeof(audio_offload_info_t));
         remote()->transact(IS_OFFLOAD_SUPPORTED, data, &reply);
-        return reply.readInt32();    }
+        return reply.readInt32();
+    }
+
+#ifdef DRD_FMR
+    // INTEL FMR begin:
+    virtual status_t setParameters(const String8& keyValuePairs)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(IAudioPolicyService::getInterfaceDescriptor());
+        data.writeString8(keyValuePairs);
+        remote()->transact(SET_PARAMETERS, data, &reply);
+        return static_cast <status_t> (reply.readInt32());
+    }
+    // INTEL FMR end
+#endif /* DRD_FMR */
 };
 
 IMPLEMENT_META_INTERFACE(AudioPolicyService, "android.media.IAudioPolicyService");
@@ -682,7 +700,18 @@ status_t BnAudioPolicyService::onTransact(
             bool isSupported = isOffloadSupported(info);
             reply->writeInt32(isSupported);
             return NO_ERROR;
-        }
+        } break;
+
+#ifdef DRD_FMR
+        // INTEL FMR begin:
+        case SET_PARAMETERS: {
+            CHECK_INTERFACE(IAudioPolicyService, data, reply);
+            String8 keyValuePairs(data.readString8());
+            reply->writeInt32(static_cast <uint32_t>(setParameters(keyValuePairs)));
+            return NO_ERROR;
+        } break;
+        // INTEL FMR end
+#endif /* DRD_FMR */
 
         default:
             return BBinder::onTransact(code, data, reply, flags);

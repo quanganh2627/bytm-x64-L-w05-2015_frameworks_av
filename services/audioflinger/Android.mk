@@ -13,6 +13,10 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 
+ifeq ($(COMBO_CHIP_VENDOR),intel)
+  LOCAL_CFLAGS += -DDRD_FMR
+endif
+
 LOCAL_SRC_FILES:=               \
     AudioFlinger.cpp            \
     Threads.cpp                 \

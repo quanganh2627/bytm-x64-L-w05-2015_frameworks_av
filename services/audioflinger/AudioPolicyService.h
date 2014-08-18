@@ -139,7 +139,11 @@ public:
     virtual status_t stopTone();
     virtual status_t setVoiceVolume(float volume, int delayMs = 0);
     virtual bool isOffloadSupported(const audio_offload_info_t &config);
-
+#ifdef DRD_FMR
+    // INTEL FMR begin:
+    virtual status_t setParameters(const String8 &keyValuePairs);
+    // INTEL FMR end
+#endif /* DRD_FMR */
             status_t doStopOutput(audio_io_handle_t output,
                                   audio_stream_type_t stream,
                                   int session = 0);

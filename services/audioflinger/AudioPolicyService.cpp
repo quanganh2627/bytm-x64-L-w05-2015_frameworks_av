@@ -1193,6 +1193,18 @@ bool AudioPolicyService::isOffloadSupported(const audio_offload_info_t& info)
 
     return mpAudioPolicy->is_offload_supported(mpAudioPolicy, &info);
 }
+#ifdef DRD_FMR
+// INTEL FMR begin:
+status_t AudioPolicyService::setParameters(const String8& keyValuePairs)
+{
+    if (mpAudioPolicy == NULL) {
+        return NO_INIT;
+    }
+    ALOGE("AudioPolicyService::setParameters");
+    return mpAudioPolicy->set_parameters(mpAudioPolicy, keyValuePairs);
+}
+// INTEL FMR end
+#endif /* DRD_FMR */
 
 // PEKALL FMR begin:
 status_t AudioPolicyService::setFmVolume(float volume, int delayMs)

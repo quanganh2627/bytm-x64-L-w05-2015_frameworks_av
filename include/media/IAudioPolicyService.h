@@ -99,6 +99,9 @@ public:
    // Check if offload is possible for given format, stream type, sample rate,
     // bit rate, duration, video and streaming or offload property is enabled
     virtual bool isOffloadSupported(const audio_offload_info_t& info) = 0;
+#ifdef DRD_FMR
+    virtual status_t setParameters(const String8& keyValuePairs) = 0;
+#endif /* DRD_FMR */
 };
 
 

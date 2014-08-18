@@ -177,6 +177,17 @@ status_t AudioSystem::setMode(audio_mode_t mode)
 }
 
 status_t AudioSystem::setParameters(audio_io_handle_t ioHandle, const String8& keyValuePairs) {
+#ifdef DRD_FMR
+    // INTEL FMR begin:
+    if (ioHandle == 0) {
+        const sp<IAudioPolicyService>& aps = AudioSystem::get_audio_policy_service();
+        if(aps == 0) {
+            return PERMISSION_DENIED;
+        }
+        aps->setParameters(keyValuePairs);
+    }
+    // INTEL FMR end
+#endif /* DRD_FMR */
     const sp<IAudioFlinger>& af = AudioSystem::get_audio_flinger();
     if (af == 0) return PERMISSION_DENIED;
     return af->setParameters(ioHandle, keyValuePairs);

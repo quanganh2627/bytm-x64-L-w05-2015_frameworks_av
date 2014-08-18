@@ -10,6 +10,9 @@ LOCAL_MODULE_TAGS := optional
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+ifeq ($(COMBO_CHIP_VENDOR),intel)
+  LOCAL_CFLAGS += -DDRD_FMR
+endif
 
 LOCAL_SRC_FILES:= \
     AudioTrack.cpp \
