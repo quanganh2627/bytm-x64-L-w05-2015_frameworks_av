@@ -55,6 +55,10 @@ LOCAL_C_INCLUDES :=                                                 \
     $(TOP)/frameworks/native/include/media/openmax                  \
     $(TOP)/external/tremolo/Tremolo                                 \
 
+ifeq ($(INTEL_WIDI), true)
+LOCAL_CFLAGS += -DINTEL_WIDI
+endif
+
 LOCAL_MODULE:= libmediaplayerservice
 
 LOCAL_32_BIT_ONLY := true

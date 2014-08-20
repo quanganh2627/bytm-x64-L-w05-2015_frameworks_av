@@ -45,6 +45,7 @@
 #include <utils/SystemClock.h>
 #include <utils/Timers.h>
 #include <utils/Vector.h>
+#include <dlfcn.h>
 
 #include <media/IMediaHTTPService.h>
 #include <media/IRemoteDisplay.h>
@@ -93,6 +94,11 @@ using android::Parcel;
 
 // Max number of entries in the filter.
 const int kMaxFilterSize = 64;  // I pulled that out of thin air.
+
+#ifdef INTEL_WIDI
+// Handle to Intel's Miracast Source library
+void *gLibintelwidisource = NULL;
+#endif
 
 // FIXME: Move all the metadata related function in the Metadata.cpp
 
@@ -381,6 +387,43 @@ sp<IRemoteDisplay> MediaPlayerService::listenForRemoteDisplay(
     if (!checkPermission("android.permission.CONTROL_WIFI_DISPLAY")) {
         return NULL;
     }
+
+#ifdef INTEL_WIDI
+    char propertyVal[PROPERTY_VALUE_MAX];
+    if (property_get("widi.media.implementation", propertyVal, "intel") &&
+            strncmp(propertyVal, "intel", 5) == 0) {
+        if (gLibintelwidisource == NULL) {
+            ALOGD("libwidimedia.so not open, opening now.");
+            gLibintelwidisource = dlopen("libwidimedia.so", RTLD_NOW);
+        }
+        if (gLibintelwidisource) {
+            ALOGD("libwidimedia.so is open.");
+            dlerror(); // Clear existing errors
+            typedef sp<IRemoteDisplay> (*getRemoteDisplayFunc_t)(const String8&,
+                    const sp<IRemoteDisplayClient>&);
+            getRemoteDisplayFunc_t getRemoteDisplay = NULL;
+            getRemoteDisplay = (getRemoteDisplayFunc_t) dlsym(gLibintelwidisource, "getRemoteDisplay");
+            sp<IRemoteDisplay> rd;
+            const char* error = dlerror();
+            if((error == NULL) && (getRemoteDisplay != NULL)) {
+                rd = (*getRemoteDisplay)(iface, client);
+            }
+            else {
+                ALOGI("dlsym(getRemoteDisplay) failed with error %s."
+                        " Falling back to non-Intel version.", error);
+                dlclose(gLibintelwidisource);
+                gLibintelwidisource = NULL;
+                rd = new RemoteDisplay(client, iface.string());
+            }
+            // Do not close the library if everything succeeded.
+            return rd;
+        }
+        else {
+            ALOGE("dlopen(libwidimedia.so) failed with error: %s",dlerror());
+            ALOGI("Falling back to non-Intel version.");
+        }
+    }
+#endif
 
     return new RemoteDisplay(client, iface.string());
 }
