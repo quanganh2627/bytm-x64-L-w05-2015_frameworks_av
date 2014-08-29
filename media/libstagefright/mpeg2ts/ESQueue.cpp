@@ -408,7 +408,14 @@ sp<ABuffer> ElementaryStreamQueue::dequeueAccessUnitPCMAudio() {
     }
 
     ABitReader bits(mBuffer->data(), 4);
-    CHECK_EQ(bits.getBits(8), 0xa0);
+    //CHECK_EQ(bits.getBits(8), 0xa0);
+    int result = 0;
+    CHECK_EQ_2(bits.getBits(8), 0xa0, result);
+    if(result ==1) {
+        ALOGV("CHECK_EQ_2 faild, retrun back!");
+        return NULL;
+    }
+
     unsigned numAUs = bits.getBits(8);
     bits.skipBits(8);
     unsigned quantization_word_length = bits.getBits(2);

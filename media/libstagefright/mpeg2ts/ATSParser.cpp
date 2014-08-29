@@ -1226,8 +1226,13 @@ status_t ATSParser::parseTS(ABitReader *br) {
     ALOGV("---");
 
     unsigned sync_byte = br->getBits(8);
-    CHECK_EQ(sync_byte, 0x47u);
-
+    //CHECK_EQ(sync_byte, 0x47u);
+    int result = 0;
+    CHECK_EQ_2(sync_byte, 0x47u, result);
+    if(result ==1) {
+        ALOGV("CHECK_EQ_2 falid, retrun back!");
+        return -1;
+    }
     if (br->getBits(1)) {  // transport_error_indicator
         // silently ignore.
         return OK;

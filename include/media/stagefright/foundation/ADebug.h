@@ -68,12 +68,33 @@ MAKE_COMPARATOR(GT,>)
         }                                                               \
     } while (false)
 
+#define CHECK_OP_2(x,y,suffix,op, result)                                         \
+    do {                                                                \
+        AString ___res = Compare_##suffix(x, y);                        \
+        if (!___res.empty()) {                                          \
+            AString ___full =                                           \
+                __FILE__ ":" LITERAL_TO_STRING(__LINE__)                \
+                    " CHECK_" #suffix "( " #x "," #y ") failed: ";      \
+            ___full.append(___res);                                     \
+                                                                        \
+            LOGW("%s", ___full.c_str());                                 \
+            result = 1;                \
+        }                                                               \
+    } while (false)
+
 #define CHECK_EQ(x,y)   CHECK_OP(x,y,EQ,==)
 #define CHECK_NE(x,y)   CHECK_OP(x,y,NE,!=)
 #define CHECK_LE(x,y)   CHECK_OP(x,y,LE,<=)
 #define CHECK_LT(x,y)   CHECK_OP(x,y,LT,<)
 #define CHECK_GE(x,y)   CHECK_OP(x,y,GE,>=)
 #define CHECK_GT(x,y)   CHECK_OP(x,y,GT,>)
+
+#define  CHECK_EQ_2(x,y, result)   CHECK_OP_2(x,y,EQ,==, result)
+#define CHECK_NE_2(x,y, result)   CHECK_OP_2(x,y,NE,!=, result)
+#define CHECK_LE_2(x,y, result)   CHECK_OP_2(x,y,LE,<=, result)
+#define CHECK_LT_2(x,y, result)   CHECK_OP_2(x,y,LT,<, result)
+#define CHECK_GE_2(x,y, result)   CHECK_OP_2(x,y,GE,>=, result)
+#define CHECK_GT_2(x,y, result)   CHECK_OP_2(x,y,GT,>, result)
 
 #define TRESPASS() \
         LOG_ALWAYS_FATAL(                                       \
