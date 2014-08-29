@@ -1197,6 +1197,7 @@ void MediaPlayerService::Client::notify(
         void* cookie, int msg, int ext1, int ext2, const Parcel *obj)
 {
     Client* client = static_cast<Client*>(cookie);
+    int error = 0;
     if (client == NULL) {
         return;
     }
@@ -1208,8 +1209,9 @@ void MediaPlayerService::Client::notify(
         if ((msg == MEDIA_PLAYBACK_COMPLETE || msg == MEDIA_ERROR) && client->mNextClient != NULL) {
             if (client->mAudioOutput != NULL)
                 client->mAudioOutput->switchToNextOutput();
-            client->mNextClient->start();
-            client->mNextClient->mClient->notify(MEDIA_INFO, MEDIA_INFO_STARTED_AS_NEXT, 0, obj);
+            error = client->mNextClient->start();
+            if(error == 0 )
+                client->mNextClient->mClient->notify(MEDIA_INFO, MEDIA_INFO_STARTED_AS_NEXT, 0, obj);
         }
     }
 
@@ -1229,6 +1231,10 @@ void MediaPlayerService::Client::notify(
     if (c != NULL) {
         ALOGV("[%d] notify (%p, %d, %d, %d)", client->mConnId, cookie, msg, ext1, ext2);
         c->notify(msg, ext1, ext2, obj);
+    }
+    //if player start error , complete this player to triger next player.
+    if (error != 0) {
+        client->mNextClient->mClient->notify(MEDIA_PLAYBACK_COMPLETE, MEDIA_ERROR_UNKNOWN, 0, obj);
     }
 }
 
