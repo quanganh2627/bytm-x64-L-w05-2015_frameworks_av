@@ -25,6 +25,9 @@
 #include <utils/threads.h>
 
 #include <OMX_Audio.h>
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayVideoClient.h>
+#endif
 
 namespace android {
 
@@ -119,6 +122,10 @@ struct OMXCodec : public MediaSource,
 
     static bool findCodecQuirks(const char *componentName, uint32_t *quirks);
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    void setMDSVideoState_l(int status);
+#endif
+
 protected:
     virtual ~OMXCodec();
 
@@ -127,6 +134,9 @@ private:
     // Make sure mLock is accessible to OMXCodecObserver
     friend class OMXCodecObserver;
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    sp<MultiDisplayVideoClient> mMDClient;
+#endif
     // Call this with mLock hold
     void on_message(const omx_message &msg);
 

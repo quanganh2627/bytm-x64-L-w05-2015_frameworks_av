@@ -416,6 +416,10 @@ ACodec::ACodec()
       mEncoderDelay(0),
       mEncoderPadding(0),
       mRotationDegrees(0),
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mIsMDSVideo(false),
+      mMDClient(NULL),
+#endif
       mChannelMaskPresent(false),
       mChannelMask(0),
       mDequeueCounter(0),
@@ -447,6 +451,9 @@ ACodec::ACodec()
 }
 
 ACodec::~ACodec() {
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARED, NULL);
+#endif
 }
 
 void ACodec::setNotificationMessage(const sp<AMessage> &msg) {
@@ -617,6 +624,19 @@ status_t ACodec::allocateBuffersOnPort(OMX_U32 portIndex) {
 
     return OK;
 }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+void ACodec::setMDSVideoState_l(int state, const sp<AMessage> &msg) {
+    if (mIsEncoder || !mIsMDSVideo)
+        return;
+    if (mMDClient == NULL) {
+        mMDClient = new MultiDisplayVideoClient();
+    }
+    mMDClient->setVideoState(state, (mFlags & kFlagIsSecure), msg);
+    if (state == MDS_VIDEO_UNPREPARED)
+        mMDClient = NULL;
+}
+#endif
 
 status_t ACodec::configureOutputBuffersFromNativeWindow(
         OMX_U32 *bufferCount, OMX_U32 *bufferSize,
@@ -1376,6 +1396,10 @@ status_t ACodec::configureCodec(
             err = setupVideoEncoder(mime, msg);
         } else {
             err = setupVideoDecoder(mime, msg);
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+            if (err == OK)
+                mIsMDSVideo = true;
+#endif
         }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_MPEG)) {
         int32_t numChannels, sampleRate;
@@ -4612,6 +4636,9 @@ bool ACodec::UninitializedState::onAllocateComponent(const sp<AMessage> &msg) {
         notify->setString("componentName", mCodec->mComponentName.c_str());
         notify->post();
     }
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    mCodec->setMDSVideoState_l((int)MDS_VIDEO_PREPARING, NULL);
+#endif
 
     mCodec->changeState(mCodec->mLoadedState);
 
@@ -4761,6 +4788,9 @@ bool ACodec::LoadedState::onConfigureComponent(
         notify->setMessage("output-format", mCodec->mOutputFormat);
         notify->post();
     }
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    mCodec->setMDSVideoState_l(MDS_VIDEO_PREPARED, msg);
+#endif
 
     return true;
 }
@@ -5124,6 +5154,9 @@ bool ACodec::ExecutingState::onMessageReceived(const sp<AMessage> &msg) {
             mCodec->mKeepComponentAllocated = keepComponentAllocated;
 
             mActive = false;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+           mCodec->setMDSVideoState_l(MDS_VIDEO_UNPREPARING, NULL);
+#endif
 
             CHECK_EQ(mCodec->mOMX->sendCommand(
                         mCodec->mNode, OMX_CommandStateSet, OMX_StateIdle),

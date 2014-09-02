@@ -1434,6 +1434,9 @@ OMXCodec::OMXCodec(
         const sp<MediaSource> &source,
         const sp<ANativeWindow> &nativeWindow)
     : mOMX(omx),
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+      mMDClient(NULL),
+#endif
       mOMXLivesLocally(omx->livesLocally(node, getpid())),
       mNode(node),
       mQuirks(quirks),
@@ -1463,6 +1466,9 @@ OMXCodec::OMXCodec(
     mPortStatus[kPortIndexOutput] = ENABLED;
 
     setComponentRole();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_PREPARING);
+#endif
 }
 
 // static
@@ -3820,8 +3826,14 @@ status_t OMXCodec::start(MetaData *meta) {
 status_t OMXCodec::stop() {
     CODEC_LOGV("stop mState=%d", mState);
     Mutex::Autolock autoLock(mLock);
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARING);
+#endif
     status_t err = stopOmxComponent_l();
     mSource->stop();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_UNPREPARED);
+#endif
 
     CODEC_LOGV("stopped in state %d", mState);
     return err;
@@ -4049,6 +4061,9 @@ status_t OMXCodec::read(
         mSkipCutBuffer->submit(info->mMediaBuffer);
     }
     *buffer = info->mMediaBuffer;
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    setMDSVideoState_l(MDS_VIDEO_PREPARED);
+#endif
 
     return OK;
 }
@@ -4682,6 +4697,19 @@ status_t OMXCodec::pause() {
 
     return OK;
 }
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+void OMXCodec::setMDSVideoState_l(int state) {
+    if (mIsEncoder || !mIsVideo || (mFlags & kClientNeedsFramebuffer))
+        return;
+    if (mMDClient == NULL)
+        mMDClient = new MultiDisplayVideoClient();
+    sp<MetaData> meta = mSource->getFormat();
+    mMDClient->setVideoState((MDS_VIDEO_STATE)state, (mFlags & kEnableGrallocUsageProtected), meta);
+    if (state == MDS_VIDEO_UNPREPARED)
+        mMDClient = NULL;
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

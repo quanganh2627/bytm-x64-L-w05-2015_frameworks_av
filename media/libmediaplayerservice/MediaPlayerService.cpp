@@ -84,6 +84,10 @@
 #include "HTTPBase.h"
 #include "RemoteDisplay.h"
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayVideoClient.h>
+#endif
+
 namespace {
 using android::media::Metadata;
 using android::status_t;
@@ -302,6 +306,12 @@ MediaPlayerService::MediaPlayerService()
     }
 
     MediaPlayerFactory::registerBuiltinFactories();
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    // Reset video playback status in case media server crashes.
+    sp<MultiDisplayVideoClient> mds = new MultiDisplayVideoClient();
+    mds->reset();
+    mds = NULL;
+#endif
 }
 
 MediaPlayerService::~MediaPlayerService()
