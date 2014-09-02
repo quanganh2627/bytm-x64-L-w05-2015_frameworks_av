@@ -26,6 +26,9 @@
 #include <media/stagefright/SkipCutBuffer.h>
 #include <OMX_Audio.h>
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+#include <display/MultiDisplayVideoClient.h>
+#endif
 #define TRACK_BUFFER_TIMING     0
 
 namespace android {
@@ -53,6 +56,10 @@ struct ACodec : public AHierarchicalStateMachine, public CodecBase {
     virtual void signalSetParameters(const sp<AMessage> &msg);
     virtual void signalEndOfInputStream();
     virtual void signalRequestIDRFrame();
+
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    void setMDSVideoState_l(int status, const sp<AMessage> &msg);
+#endif
 
     // AHierarchicalStateMachine implements the message handling
     virtual void onMessageReceived(const sp<AMessage> &msg) {
@@ -150,6 +157,10 @@ private:
         sp<GraphicBuffer> mGraphicBuffer;
     };
 
+#ifdef TARGET_HAS_MULTIPLE_DISPLAY
+    bool mIsMDSVideo;
+    sp<MultiDisplayVideoClient> mMDClient;
+#endif
 #if TRACK_BUFFER_TIMING
     struct BufferStats {
         int64_t mEmptyBufferTimeUs;
