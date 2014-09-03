@@ -120,6 +120,10 @@ LOCAL_SHARED_LIBRARIES += \
 
 LOCAL_CFLAGS += -Wno-multichar
 
+ifeq ($(TARGET_HAS_ISV), true)
+LOCAL_CFLAGS +=-DTARGET_HAS_ISV
+endif
+
 LOCAL_MODULE:= libstagefright
 
 LOCAL_MODULE_TAGS := optional
