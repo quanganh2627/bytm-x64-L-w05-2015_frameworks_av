@@ -22,6 +22,10 @@ LOCAL_C_INCLUDES := \
 	$(TOP)/frameworks/av/media/libmediaplayerservice              \
 	$(TOP)/frameworks/native/include/media/openmax
 
+ifeq ($(TARGET_HAS_ISV), true)
+LOCAL_CFLAGS +=-DTARGET_HAS_ISV
+endif
+
 LOCAL_MODULE:= libstagefright_nuplayer
 
 LOCAL_MODULE_TAGS := eng
