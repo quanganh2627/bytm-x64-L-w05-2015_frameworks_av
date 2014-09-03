@@ -1644,6 +1644,11 @@ status_t AwesomePlayer::initVideoDecoder(uint32_t flags) {
         flags |= OMXCodec::kEnableGrallocUsageProtected;
     }
 #endif
+
+#ifdef TARGET_HAS_ISV
+    mVideoTrack->getFormat()->setInt32('isvM', 1);
+#endif
+
     ALOGV("initVideoDecoder flags=0x%x", flags);
     mVideoSource = OMXCodec::Create(
             mClient.interface(), mVideoTrack->getFormat(),

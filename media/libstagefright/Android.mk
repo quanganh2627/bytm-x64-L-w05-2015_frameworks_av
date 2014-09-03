@@ -134,6 +134,9 @@ ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
     LOCAL_STATIC_LIBRARIES += libmultidisplayvideoclient
     LOCAL_SHARED_LIBRARIES += libmultidisplay
 endif
+ifeq ($(TARGET_HAS_ISV), true)
+LOCAL_CFLAGS +=-DTARGET_HAS_ISV
+endif
 
 LOCAL_MODULE:= libstagefright
 

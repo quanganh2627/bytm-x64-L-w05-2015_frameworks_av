@@ -657,6 +657,22 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
         if (mIsEncoder) {
             setVideoInputFormat(mMIME, meta);
         } else {
+#ifdef TARGET_HAS_ISV
+            int32_t isvMode = 0;
+            if (meta->findInt32('isvM', &isvMode) && (isvMode != 0)) {
+                OMX_INDEXTYPE index;
+                status_t err = mOMX->getExtensionIndex(
+                        mNode,
+                        "OMX.intel.index.SetISVMode",
+                        &index);
+                if (err == OK) { //err failure means ISV is not supported. Do nothing.
+                    err = mOMX->setParameter(mNode, index, &isvMode, sizeof(isvMode));
+                    if (err != OK) {
+                        CODEC_LOGW("failed to set ISV mode, (err = %d)", err);
+                    }
+                }
+            }
+#endif
             status_t err = setVideoOutputFormat(
                     mMIME, meta);
 

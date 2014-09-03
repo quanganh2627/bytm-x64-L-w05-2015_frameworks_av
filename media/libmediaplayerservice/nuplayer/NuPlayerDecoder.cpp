@@ -124,6 +124,10 @@ void NuPlayer::Decoder::onConfigure(const sp<AMessage> &format) {
         return;
     }
 
+#ifdef TARGET_HAS_ISV
+        format->setInt32("set-isv-mode", 1);
+#endif
+
     mCodec->getName(&mComponentName);
 
     status_t err;

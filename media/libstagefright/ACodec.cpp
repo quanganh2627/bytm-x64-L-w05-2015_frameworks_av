@@ -1284,6 +1284,24 @@ status_t ACodec::configureCodec(
         }
     }
 
+#ifdef TARGET_HAS_ISV
+    int32_t isvMode = 0;
+    if (video) {
+        if (msg->findInt32("set-isv-mode", &isvMode) && (isvMode != 0)) {
+            OMX_INDEXTYPE index;
+            status_t err = mOMX->getExtensionIndex(
+                    mNode,
+                    "OMX.intel.index.SetISVMode",
+                    &index);
+            if (err == OK) {
+                err = mOMX->setParameter(mNode, index, &isvMode, sizeof(isvMode));
+                if (err != OK) {
+                    ALOGW("failed to set ISV mode, (err = %d)", err);
+                }
+            }
+        }
+    }
+#endif
     sp<RefBase> obj;
     int32_t haveNativeWindow = msg->findObject("native-window", &obj) &&
         obj != NULL;
