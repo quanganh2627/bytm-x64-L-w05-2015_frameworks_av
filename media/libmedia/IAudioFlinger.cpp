@@ -82,7 +82,7 @@ enum {
     LIST_AUDIO_PATCHES,
     SET_AUDIO_PORT_CONFIG,
 //<<<<<<< HEAD
-    GET_AUDIO_HW_SYNC
+    GET_AUDIO_HW_SYNC,
 //=======
     // PEKALL FMR begin:
     SET_FM_VOLUME,
