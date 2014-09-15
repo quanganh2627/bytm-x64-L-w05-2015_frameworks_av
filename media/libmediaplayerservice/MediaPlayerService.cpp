@@ -302,6 +302,31 @@ MediaPlayerService::MediaPlayerService()
     }
 
     MediaPlayerFactory::registerBuiltinFactories();
+
+    void *hlibintelmediasink = dlopen("libwidimediasink.so", RTLD_NOW);
+    if (hlibintelmediasink) {
+        ALOGI("Loaded libwidimediasink.so");
+        dlerror(); // Clear existing errors
+        typedef bool (*registerFunc_t)();
+        registerFunc_t registerFactory =
+        (registerFunc_t) dlsym(hlibintelmediasink, "registerWidiRtpFactory");
+        const char* error = dlerror();
+        if (error == NULL && registerFactory != NULL) {
+            bool ret = (*registerFactory)();
+            if (!ret) {
+                ALOGE("Could not invoke registerWidiRtpFactory() on libwidimediasink.so!"
+                        "RTP sink will not be available.");
+                dlclose(hlibintelmediasink);
+            }
+        }
+        else {
+            ALOGE("dlsym(registerWidiRtpFactory) failed with error %s!"
+                    "RTP sink will not be available.", error);
+            dlclose(hlibintelmediasink);
+        }
+    }
+    else
+        ALOGE("libwidimediasink.so not loaded: %s", dlerror());
 }
 
 MediaPlayerService::~MediaPlayerService()
