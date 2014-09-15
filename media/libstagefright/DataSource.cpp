@@ -17,7 +17,7 @@
 #define LOG_TAG "DataSource"
 
 #include "include/AMRExtractor.h"
-
+#include "include/AVIExtractor.h"
 #include "include/AACExtractor.h"
 #include "include/DRMExtractor.h"
 #include "include/FLACExtractor.h"
@@ -30,6 +30,9 @@
 #include "include/OggExtractor.h"
 #include "include/WAVExtractor.h"
 #include "include/WVMExtractor.h"
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#endif
 
 #include "matroska/MatroskaExtractor.h"
 
@@ -171,7 +174,11 @@ void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer_l(SniffMP3);
     RegisterSniffer_l(SniffAAC);
     RegisterSniffer_l(SniffMPEG2PS);
+    RegisterSniffer_l(SniffAVI);
     RegisterSniffer_l(SniffWVM);
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    RegisterSniffer_l(SniffAsf);
+#endif
 
     char value[PROPERTY_VALUE_MAX];
     if (property_get("drm.service.enabled", value, NULL)
