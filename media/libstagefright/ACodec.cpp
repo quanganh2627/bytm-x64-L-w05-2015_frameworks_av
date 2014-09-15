@@ -43,6 +43,10 @@
 
 #include <media/hardware/HardwareAPI.h>
 
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "MetaDataExt.h"
+#endif
+
 #include <OMX_AudioExt.h>
 #include <OMX_VideoExt.h>
 #include <OMX_Component.h>
@@ -1096,6 +1100,10 @@ status_t ACodec::setComponentRole(
             "video_decoder.vp8", "video_encoder.vp8" },
         { MEDIA_MIMETYPE_VIDEO_VP9,
             "video_decoder.vp9", "video_encoder.vp9" },
+#ifdef USE_INTEL_ASF_EXTRACTOR
+        { MEDIA_MIMETYPE_VIDEO_WMV,
+            "video_decoder.wmv", NULL },
+#endif
         { MEDIA_MIMETYPE_AUDIO_RAW,
             "audio_decoder.raw", "audio_encoder.raw" },
         { MEDIA_MIMETYPE_AUDIO_FLAC,
@@ -2056,6 +2064,9 @@ static const struct VideoCodingMapEntry {
     { MEDIA_MIMETYPE_VIDEO_MPEG2, OMX_VIDEO_CodingMPEG2 },
     { MEDIA_MIMETYPE_VIDEO_VP8, OMX_VIDEO_CodingVP8 },
     { MEDIA_MIMETYPE_VIDEO_VP9, OMX_VIDEO_CodingVP9 },
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    {MEDIA_MIMETYPE_VIDEO_WMV, OMX_VIDEO_CodingWMV},
+#endif
 };
 
 static status_t GetVideoCodingTypeFromMime(
