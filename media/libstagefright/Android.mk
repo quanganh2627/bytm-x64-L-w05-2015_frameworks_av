@@ -60,7 +60,7 @@ LOCAL_SRC_FILES:=                         \
         WAVExtractor.cpp                  \
         WVMExtractor.cpp                  \
         XINGSeeker.cpp                    \
-        avc_utils.cpp                     \
+        avc_utils.cpp
 
 LOCAL_C_INCLUDES:= \
         $(TOP)/frameworks/av/include/media/ \
@@ -125,6 +125,13 @@ LOCAL_C_INCLUDES += \
 LOCAL_STATIC_LIBRARIES += libasfextractor
 LOCAL_SHARED_LIBRARIES += libasfparser
 LOCAL_CPPFLAGS += -DUSE_INTEL_ASF_EXTRACTOR
+endif
+
+ifeq ($(USE_INTEL_MULT_THREAD),true)
+LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libthreadedsource
+LOCAL_STATIC_LIBRARIES += libthreadedsource
+LOCAL_CPPFLAGS += -DUSE_INTEL_MULT_THREAD
 endif
 
 LOCAL_CFLAGS += -Wno-multichar

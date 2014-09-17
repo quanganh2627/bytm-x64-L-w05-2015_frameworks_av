@@ -1319,7 +1319,15 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
             while (*offset < stop_offset) {
                 status_t err = parseChunk(offset, depth + 1);
                 if (err != OK) {
-                    return err;
+                    if (chunk_type == FOURCC('t', 'r', 'a', 'k')) {
+                        // If one 'trak' box contains error, we can skip it to keep parsing,
+                        // which make sure we can parse out following valid 'trak' in the clip
+                        ALOGW("invalid track, skip it and keep parsing");
+                        mLastTrack->skipTrack = true;
+                        *offset = stop_offset;
+                    } else {
+                        return err;
+                    }
                 }
             }
 
@@ -3058,7 +3066,9 @@ status_t MPEG4Source::start(MetaData *params) {
     int32_t max_size;
     CHECK(mFormat->findInt32(kKeyMaxInputSize, &max_size));
 
-    mGroup->add_buffer(new MediaBuffer(max_size));
+    for (int i = 0; i < kMaxMediaBufferSize; i++) {
+        mGroup->add_buffer(new MediaBuffer(max_size));
+    }
 
     mSrcBuffer = new (std::nothrow) uint8_t[max_size];
     if (mSrcBuffer == NULL) {
