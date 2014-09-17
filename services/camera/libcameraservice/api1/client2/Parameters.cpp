@@ -237,6 +237,8 @@ status_t Parameters::initialize(const CameraMetadata *info, int deviceVersion) {
 
         String8 supportedPreviewFrameRates;
         for (size_t i=0; i < availableFpsRanges.count; i += 2) {
+            int fpsStart = availableFpsRanges.data.i32[i];
+            int fpsEnd = availableFpsRanges.data.i32[i+1];
             // from the [min, max] fps range use the max value
             int fps = fpsFromRange(availableFpsRanges.data.i32[i],
                                    availableFpsRanges.data.i32[i+1]);
@@ -254,7 +256,10 @@ status_t Parameters::initialize(const CameraMetadata *info, int deviceVersion) {
             }
 
             supportedPreviewFrameRates += String8::format("%d",
-                    fps);
+                    fpsStart);
+            supportedPreviewFrameRates += ",";
+            supportedPreviewFrameRates += String8::format("%d",
+                    fpsEnd);
 
             ALOGV("%s: Supported preview frame rates: %s",
                     __FUNCTION__, supportedPreviewFrameRates.string());
