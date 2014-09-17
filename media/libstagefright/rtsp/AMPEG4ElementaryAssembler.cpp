@@ -87,8 +87,9 @@ static bool GetIntegerAttribute(
 }
 
 static bool GetSampleRateIndex(int32_t sampleRate, size_t *tableIndex) {
+    // RTP AVP profile supports 90Khz Sampling Rate.
     static const int32_t kSampleRateTable[] = {
-        96000, 88200, 64000, 48000, 44100, 32000,
+        96000, 90000, 88200, 64000, 48000, 44100, 32000,
         24000, 22050, 16000, 12000, 11025, 8000
     };
     const size_t kNumSampleRates =
