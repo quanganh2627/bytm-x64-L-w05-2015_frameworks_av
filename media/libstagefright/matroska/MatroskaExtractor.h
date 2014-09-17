@@ -81,6 +81,8 @@ private:
 
     MatroskaExtractor(const MatroskaExtractor &);
     MatroskaExtractor &operator=(const MatroskaExtractor &);
+
+    void getFrameRate(int32_t* framerate, int32_t trackNum, int32_t index);
 };
 
 bool SniffMatroska(

@@ -105,8 +105,9 @@ status_t AVIExtractor::AVISource::start(MetaData *params) {
 
     mBufferGroup = new MediaBufferGroup;
 
-    mBufferGroup->add_buffer(new MediaBuffer(mTrack.mMaxSampleSize));
-    mBufferGroup->add_buffer(new MediaBuffer(mTrack.mMaxSampleSize));
+    for (int i = 0; i < kMaxMediaBufferSize; i++) {
+        mBufferGroup->add_buffer(new MediaBuffer(mTrack.mMaxSampleSize));
+    }
     mSampleIndex = 0;
 
     const char *mime;
@@ -723,6 +724,8 @@ status_t AVIExtractor::parseStreamFormat(off64_t offset, size_t size) {
 
         track->mMeta->setInt32(kKeyWidth, width);
         track->mMeta->setInt32(kKeyHeight, height);
+        track->mMeta->setInt32(kKeyDisplayWidth, width);
+        track->mMeta->setInt32(kKeyDisplayHeight, height);
     } else {
         uint32_t format = U16LE_AT(data);
 
@@ -1140,6 +1143,8 @@ status_t AVIExtractor::addH264CodecSpecificData(size_t trackIndex) {
 
     track->mMeta->setInt32(kKeyWidth, width);
     track->mMeta->setInt32(kKeyHeight, height);
+    track->mMeta->setInt32(kKeyDisplayWidth, width);
+    track->mMeta->setInt32(kKeyDisplayHeight, height);
     track->mMeta->setData(kKeyAVCC, type, csd, csdSize);
 
     return OK;
