@@ -125,12 +125,7 @@ void NuPlayer::Decoder::onConfigure(const sp<AMessage> &format) {
     }
 
 #ifdef TARGET_HAS_ISV
-        sp<AMessage> params = new AMessage;
-        params->setInt32("set-isv-mode", 1);
-        status_t status = mCodec->setParameters(params);
-        if (status != OK) {
-            ALOGW("Failed to set ISV mode.");
-        }
+        format->setInt32("set-isv-mode", 1);
 #endif
 
     mCodec->getName(&mComponentName);
