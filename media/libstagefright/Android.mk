@@ -138,6 +138,54 @@ LOCAL_STATIC_LIBRARIES += libthreadedsource
 LOCAL_CPPFLAGS += -DUSE_INTEL_MULT_THREAD
 endif
 
+ifeq ($(USE_INTEL_MDP),true)
+LOCAL_C_INCLUDES += \
+          $(TARGET_OUT_HEADERS)/media_codecs
+
+LOCAL_STATIC_LIBRARIES += \
+          lib_stagefright_mdp_wmadec \
+          libmc_wma_dec \
+          libmc_umc_core_merged \
+          libmc_codec_common
+
+LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
+
+ifeq ($(TARGET_ARCH), x86)
+ifeq ($(TARGET_BOARD_PLATFORM), clovertrail)
+    IPP_LIB_EXT := ia32
+    IPP_LIB_ARCH := s_s8
+else
+    IPP_LIB_EXT := ia32
+    IPP_LIB_ARCH := s_p8
+endif
+else
+    IPP_LIB_EXT := intel64
+    IPP_LIB_ARCH := s_e9
+endif
+
+IPP_LIBS := \
+    -L$(TOP)/vendor/intel/PRIVATE/media_codecs/codecs/core/ipp/lib/$(IPP_LIB_EXT)/ \
+    -Xlinker --start-group \
+    -lippcore \
+    -lippac_$(IPP_LIB_ARCH) \
+    -lippvc_$(IPP_LIB_ARCH) \
+    -lippdc_$(IPP_LIB_ARCH) \
+    -lippcc_$(IPP_LIB_ARCH) \
+    -lipps_$(IPP_LIB_ARCH) \
+    -lippsc_$(IPP_LIB_ARCH) \
+    -lippi_$(IPP_LIB_ARCH) \
+    -lippvm \
+    -Xlinker --end-group \
+    -lsvml \
+    -limf \
+    -lirc
+
+LOCAL_LDFLAGS += \
+         -Wl,--no-warn-shared-textrel \
+         $(IPP_LIBS) \
+
+endif
+
 LOCAL_CFLAGS += -Wno-multichar
 
 ifeq ($(TARGET_HAS_ISV), true)
