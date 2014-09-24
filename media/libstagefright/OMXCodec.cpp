@@ -58,6 +58,10 @@
 
 #include "include/avc_utils.h"
 
+#ifdef USE_INTEL_MDP
+#include "UMCMacro.h"
+#endif
+
 namespace android {
 
 // Treat time out as an error if we have not received any output
@@ -75,6 +79,10 @@ const static uint32_t kMaxColorFormatSupported = 1000;
 static sp<MediaSource> Make##name(const sp<MediaSource> &source, const sp<MetaData> &meta) { \
     return new name(source, meta); \
 }
+
+#ifdef USE_INTEL_MDP
+FACTORY_CREATE_DECL(MDPWMADecoder)
+#endif
 
 #define FACTORY_REF(name) { #name, Make##name },
 
@@ -100,6 +108,30 @@ static sp<MediaSource> InstantiateSoftwareEncoder(
 
     return NULL;
 }
+
+#ifdef USE_INTEL_MDP
+/* for SF decoders plug-ins */
+static sp<MediaSource> InstantiateSoftwareDecoder(
+        const char *name, const sp<MediaSource> &source) {
+    struct FactoryInfo {
+        const char *name;
+        sp<MediaSource> (*CreateFunc)(const sp<MediaSource> &);
+    };
+
+    static const FactoryInfo kFactoryInfo[] = {
+
+        FACTORY_REF(MDPWMADecoder)
+    };
+    for (size_t i = 0;
+         i < sizeof(kFactoryInfo) / sizeof(kFactoryInfo[0]); ++i) {
+        if (!strcmp(name, kFactoryInfo[i].name)) {
+           return (*kFactoryInfo[i].CreateFunc)(source);
+        }
+    }
+
+    return NULL;
+}
+#endif // #ifdef USE_INTEL_MDP
 
 #undef FACTORY_CREATE_ENCODER
 #undef FACTORY_REF
@@ -335,17 +367,29 @@ sp<MediaSource> OMXCodec::Create(
             componentName = tmp.c_str();
         }
 
+#ifndef USE_INTEL_MDP
         if (createEncoder) {
             sp<MediaSource> softwareCodec =
                 InstantiateSoftwareEncoder(componentName, source, meta);
 
             if (softwareCodec != NULL) {
+
                 ALOGV("Successfully allocated software codec '%s'", componentName);
 
                 return softwareCodec;
             }
         }
+#else
+        sp<MediaSource> softwareCodec = (createEncoder)?
+            InstantiateSoftwareEncoder(componentName, source, meta):
+            InstantiateSoftwareDecoder(componentName, source);
 
+        if (softwareCodec != NULL) {
+            ALOGV("Successfully allocated software codec '%s'", componentName);
+
+            return softwareCodec;
+        }
+#endif
         ALOGV("Attempting to allocate OMX node '%s'", componentName);
 
         if (!createEncoder
