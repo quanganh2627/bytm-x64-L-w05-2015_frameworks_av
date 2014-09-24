@@ -942,7 +942,7 @@ status_t WifiDisplaySource::PlaybackSession::addSource(
         format->setInt32("store-metadata-in-buffers-output", (mHDCP != NULL)
                 && (mHDCP->getCaps() & HDCPModule::HDCP_CAPS_ENCRYPT_NATIVE));
         format->setInt32(
-                "color-format", OMX_COLOR_FormatAndroidOpaque);
+                "color-format", OMX_COLOR_Format16bitRGB565);
         format->setInt32("profile-idc", profileIdc);
         format->setInt32("level-idc", levelIdc);
         format->setInt32("constraint-set", constraintSet);
@@ -1049,6 +1049,9 @@ status_t WifiDisplaySource::PlaybackSession::addVideoSource(
     if (err != OK) {
         return err;
     }
+
+    //original buffer size is same as encoder input buffer size, increase it to improve performance
+    numInputBuffers += 6;
 
     err = source->setMaxAcquiredBufferCount(numInputBuffers);
     CHECK_EQ(err, (status_t)OK);
