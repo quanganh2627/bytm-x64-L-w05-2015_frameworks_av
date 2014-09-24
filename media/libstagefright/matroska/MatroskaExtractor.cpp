@@ -435,13 +435,14 @@ void BlockIterator::seek(
 
     const mkvparser::CuePoint::TrackPosition *pTP = NULL;
     const mkvparser::Track *thisTrack = pTracks->GetTrackByIndex(mIndex);
+    const mkvparser::Track *pTrack = NULL;
     if (thisTrack->GetType() == 1) { // video
         MatroskaExtractor::TrackInfo& track = mExtractor->mTracks.editItemAt(mIndex);
         pTP = track.find(seekTimeNs);
     } else {
         // The Cue index is built around video keyframes
         for (size_t index = 0; index < trackCount; ++index) {
-            const mkvparser::Track *pTrack = pTracks->GetTrackByIndex(index);
+            pTrack = pTracks->GetTrackByIndex(index);
             if (pTrack && pTrack->GetType() == 1 && pCues->Find(seekTimeNs, pTrack, pCP, pTP)) {
                 ALOGV("Video track located at %zu", index);
                 break;
@@ -449,10 +450,11 @@ void BlockIterator::seek(
         }
     }
 
-
-    // Always *search* based on the video track, but finalize based on mTrackNum
-    if (!pTP) {
-        ALOGE("Did not locate the video track for seeking");
+    // Always *search* based on the video track, if video is present.
+    if (pTrack) {
+        pCues->Find(seekTimeNs, pTrack, pCP, pTP);
+    } else {
+        ALOGE("Did not locate the track for seeking");
         return;
     }
 
@@ -986,7 +988,12 @@ void MatroskaExtractor::addTracks() {
 
                 if (!strcmp("A_AAC", codecID)) {
                     meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AAC);
-                    CHECK(codecPrivateSize >= 2);
+
+                    // Matroska spec does not expect any codec private data
+                    //however files containing codec private data will be supported
+                    if(codecPrivateSize < 2) {
+                        codecPrivateSize =0;
+                    }
 
                     addESDSFromCodecPrivate(
                             meta, true, codecPrivate, codecPrivateSize);
