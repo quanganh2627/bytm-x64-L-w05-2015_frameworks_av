@@ -339,6 +339,9 @@ status_t AudioFlinger::PatchPanel::createAudioPatch(const struct audio_patch *pa
                 status = BAD_VALUE;
                 goto exit;
             }
+            AudioHwDevice *audioHwDevice = audioflinger->mAudioHwDevs.valueAt(index);
+            sp<ThreadBase> thread =
+                            audioflinger->checkPlaybackThread_l(patch->sources[0].ext.mix.handle);
             // limit to connections between devices and output streams
             for (unsigned int i = 0; i < patch->num_sinks; i++) {
                 if (patch->sinks[i].type != AUDIO_PORT_TYPE_DEVICE) {
@@ -348,14 +351,12 @@ status_t AudioFlinger::PatchPanel::createAudioPatch(const struct audio_patch *pa
                     goto exit;
                 }
                 // limit to connections between sinks and sources on same HW module
-                if (patch->sinks[i].ext.device.hw_module != srcModule) {
+                if (patch->sinks[i].ext.device.hw_module != srcModule &&
+                    (!(thread->mType == ThreadBase::OFFLOAD))) {
                     status = BAD_VALUE;
                     goto exit;
                 }
             }
-            AudioHwDevice *audioHwDevice = audioflinger->mAudioHwDevs.valueAt(index);
-            sp<ThreadBase> thread =
-                            audioflinger->checkPlaybackThread_l(patch->sources[0].ext.mix.handle);
             if (thread == 0) {
                 ALOGW("createAudioPatch() bad playback I/O handle %d",
                           patch->sources[0].ext.mix.handle);
