@@ -18,7 +18,6 @@
 
 #define LOG_TAG "AudioFlinger::PatchPanel"
 //#define LOG_NDEBUG 0
-
 #include "Configuration.h"
 #include <utils/Log.h>
 #include <audio_utils/primitives.h>
@@ -42,6 +41,8 @@
 #define ALOGVV(a...) do { } while(0)
 #endif
 
+/* Flag for routing during offload */
+#define AUDIO_PARAMETER_KEY_STREAM_OUTPUT "output_devices"
 namespace android {
 
 /* List connected audio ports and their attributes */
@@ -380,7 +381,15 @@ status_t AudioFlinger::PatchPanel::createAudioPatch(const struct audio_patch *pa
                 AudioParameter param = AudioParameter(String8(address));
                 free(address);
                 param.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), (int)type);
-                status = thread->setParameters(param.toString());
+
+                if (thread->mType == ThreadBase::OFFLOAD) {
+                    AudioParameter param1;
+                    param1.addInt(String8(AUDIO_PARAMETER_KEY_STREAM_OUTPUT), type);
+                    audioflinger->mPrimaryHardwareDev->hwDevice()->set_parameters(
+                                 audioflinger->mPrimaryHardwareDev->hwDevice(), param1.toString());
+                } else {
+                    status = thread->setParameters(param.toString());
+                }
             }
 
         } break;
