@@ -378,7 +378,18 @@ void NuPlayer::RTSPSource::onMessageReceived(const sp<AMessage> &msg) {
 
             onConnected();
 
-            notifyVideoSizeChanged();
+            sp<MetaData> format = getFormatMeta(false);
+            int32_t width = 0, height = 0;
+            if (format != NULL
+                    && format->findInt32(kKeyWidth, &width)
+                    && format->findInt32(kKeyHeight, &height)) {
+                sp<AMessage> msg = new AMessage;
+                msg->setInt32("width", width);
+                msg->setInt32("height", height);
+                notifyVideoSizeChanged(msg);
+            } else {
+                notifyVideoSizeChanged();
+            }
 
             uint32_t flags = 0;
 
