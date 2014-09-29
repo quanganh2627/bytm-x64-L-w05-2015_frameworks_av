@@ -16,7 +16,6 @@
 
 #define LOG_TAG "AudioPolicyManager"
 //#define LOG_NDEBUG 0
-
 //#define VERY_VERBOSE_LOGGING
 #ifdef VERY_VERBOSE_LOGGING
 #define ALOGVV ALOGV
@@ -210,7 +209,6 @@ bool AudioPolicyManager::stringToBool(const char *value)
 // AudioPolicyInterface implementation
 // ----------------------------------------------------------------------------
 
-
 status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
                                                           audio_policy_dev_state_t state,
                                                   const char *device_address)
@@ -279,6 +277,17 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
 
             ALOGV("setDeviceConnectionState() disconnecting output device %x", device);
 
+#ifdef BGM_ENABLED
+            //disable the background music if the devices supporting BGM becomes unavailable
+            if (device & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+                audio_io_handle_t BGMOutput = 0;
+                AudioParameter param = AudioParameter();
+                param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT),
+                        BGMOutput);
+                mpClientInterface->setParameters(0, param.toString());
+                ALOGV("[BGMUSIC] BGM device becomes unavailable");
+            }
+#endif //BGM_ENABLED
             // Set Disconnect to HALs
             AudioParameter param = AudioParameter(address);
             param.addInt(String8(AUDIO_PARAMETER_DEVICE_DISCONNECT), device);
@@ -286,7 +295,6 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
 
             // remove device from available output devices
             mAvailableOutputDevices.remove(devDesc);
-
             checkOutputsForDevice(devDesc, state, outputs, address);
             } break;
 
@@ -707,7 +715,8 @@ void AudioPolicyManager::setForceUse(audio_policy_force_use_t usage,
             config != AUDIO_POLICY_FORCE_WIRED_ACCESSORY &&
             config != AUDIO_POLICY_FORCE_ANALOG_DOCK &&
             config != AUDIO_POLICY_FORCE_DIGITAL_DOCK && config != AUDIO_POLICY_FORCE_NONE &&
-            config != AUDIO_POLICY_FORCE_NO_BT_A2DP) {
+            config != AUDIO_POLICY_FORCE_NO_BT_A2DP &&
+            config != AUDIO_POLICY_FORCE_WIDI) {
             ALOGW("setForceUse() invalid config %d for FOR_MEDIA", config);
             return;
         }
@@ -846,8 +855,52 @@ audio_io_handle_t AudioPolicyManager::getOutputForAttr(const audio_attributes_t 
     ALOGV("getOutputForAttr() usage=%d, content=%d, tag=%s flags=%08x",
             attr->usage, attr->content_type, attr->tags, attr->flags);
 
+    audio_stream_type_t stream = streamTypefromAttributesInt(attr);
+
     // TODO this is where filtering for custom policies (rerouting, dynamic sources) will go
+#ifdef BGM_ENABLED
+    routing_strategy strategy;
+    bool isBGMEnabled = false;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE), value)
+                == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        }
+        else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+    if ((isBGMEnabled) && ((stream == AUDIO_STREAM_DTMF) ||
+            (stream == AUDIO_STREAM_SYSTEM) || (stream == AUDIO_STREAM_TTS) ||
+            (stream == AUDIO_STREAM_ENFORCED_AUDIBLE) ||
+            (stream == AUDIO_STREAM_RING))) {
+        // if bgm is enabled, all notifications, alarm, touch tones must be
+        // routed to the primary device user and it must not interfere with
+        // the remote user playback
+        strategy = STRATEGY_BACKGROUND_MUSIC;
+    } else if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+            ((stream == AUDIO_STREAM_ALARM) ||
+                    (stream == AUDIO_STREAM_NOTIFICATION))) {
+        // if widi device is connected, alarm must be heard only in local,
+        // notification must be heard on both DUT and Widi
+        // in all modes
+        strategy = STRATEGY_SONIFICATION;
+    } else {
+        strategy = getStrategy(stream);
+    }
+
+#else
     routing_strategy strategy = (routing_strategy) getStrategyForAttr(attr);
+#endif //BGM_ENABLED
+
     audio_devices_t device = getDeviceForStrategy(strategy, false /*fromCache*/);
 
     if ((attr->flags & AUDIO_FLAG_HW_AV_SYNC) != 0) {
@@ -857,7 +910,15 @@ audio_io_handle_t AudioPolicyManager::getOutputForAttr(const audio_attributes_t 
     ALOGV("getOutputForAttr() device %d, samplingRate %d, format %x, channelMask %x, flags %x",
           device, samplingRate, format, channelMask, flags);
 
-    audio_stream_type_t stream = streamTypefromAttributesInt(attr);
+#ifdef BGM_ENABLED
+    //BGMUSIC support - if more than one instance requests
+    // the same device, force different sink for other instances.
+    if (isBGMEnabled && (flags != AUDIO_OUTPUT_FLAG_REMOTE_BGM)) {
+        device = getDeviceForStrategy(STRATEGY_BACKGROUND_MUSIC,
+                 false /*fromCache*/);
+    }
+#endif //BGM_ENABLED
+
     return getOutputForDevice(device, stream, samplingRate, format, channelMask, flags,
                 offloadInfo);
 }
@@ -1038,9 +1099,54 @@ non_direct_output:
         // routing change will happen when startOutput() will be called
         SortedVector<audio_io_handle_t> outputs = getOutputsForDevice(device, mOutputs);
 
+#ifdef BGM_ENABLED
+        bool isBGMEnabled = false;
+        audio_devices_t availableOutputDeviceTypes =
+                mAvailableOutputDevices.types();
+        if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+                (stream == AUDIO_STREAM_MUSIC)) {
+            String8 reply = mpClientInterface->getParameters(0,
+                String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+            AudioParameter param = AudioParameter(reply);
+            String8 value;
+
+            if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                    value) == NO_ERROR) {
+                isBGMEnabled  = (value == "true");
+            } else {
+                ALOGI("isBGMEnabled: could not get key %s",
+                        AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+                isBGMEnabled  = false;
+            }
+        }
+        if (isBGMEnabled && (flags == 0)) {
+            // the default flags for music streams when bgm is active
+            // is AUDIO_OUTPUT_FLAG_REMOTE_BGM and the same will be used to select the outputs
+            int tempflags = AUDIO_OUTPUT_FLAG_REMOTE_BGM;
+            output = selectOutput(outputs, (audio_output_flags_t)tempflags,
+                     format);
+        } else {
+#endif
         // at this stage we should ignore the DIRECT flag as no direct output could be found earlier
         flags = (audio_output_flags_t)(flags & ~AUDIO_OUTPUT_FLAG_DIRECT);
         output = selectOutput(outputs, flags, format);
+#ifdef BGM_ENABLED
+        }
+        //The check for flag is added to over come dummy getoutputs with
+        // invalid parameters JIC
+        //We check for flags as there can be a possibility of deep buffer
+        // enabled music streams in addition to BGM sink stream
+        if ((stream == AUDIO_STREAM_MUSIC) &&
+                ((flags == AUDIO_OUTPUT_FLAG_REMOTE_BGM)) &&
+                (isBGMEnabled) &&
+                (device & AUDIO_DEVICE_OUT_REMOTE_SUBMIX)) {
+            AudioParameter param = AudioParameter();
+            param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT),
+                    output);
+            mpClientInterface->setParameters(0, param.toString());
+            ALOGV("[BGMUSIC] save output %d", output);
+        }
+#endif
     }
     ALOGW_IF((output == 0), "getOutput() could not find output for stream %d, samplingRate %d,"
             "format %d, channels %x, flags %x", stream, samplingRate, format, channelMask, flags);
@@ -1128,7 +1234,49 @@ status_t AudioPolicyManager::startOutput(audio_io_handle_t output,
 
     if (outputDesc->mRefCount[stream] == 1) {
         audio_devices_t newDevice = getNewOutputDevice(output, false /*fromCache*/);
+#ifdef BGM_ENABLED
+        routing_strategy strategy;
+        bool isBGMEnabled = false;
+        audio_devices_t availableOutputDeviceTypes =
+                mAvailableOutputDevices.types();
+        if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+            String8 reply = mpClientInterface->getParameters(0,
+                String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+            AudioParameter param = AudioParameter(reply);
+            String8 value;
+
+            if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                    value) == NO_ERROR) {
+                isBGMEnabled  = (value == "true");
+            } else {
+                ALOGI("isBGMEnabled: could not get key %s",
+                        AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+                isBGMEnabled  = false;
+            }
+        }
+        if ((isBGMEnabled) && ((stream == AUDIO_STREAM_DTMF) ||
+                (stream == AUDIO_STREAM_SYSTEM) ||
+                (stream == AUDIO_STREAM_TTS) ||
+                (stream == AUDIO_STREAM_ENFORCED_AUDIBLE) ||
+                (stream == AUDIO_STREAM_RING))) {
+            // if bgm is enabled, all notifications, alarm, touch tones must be
+            // routed to the primary device user and it must not interfere with
+            // the remote user playback
+            strategy = STRATEGY_BACKGROUND_MUSIC;
+        } else if ((availableOutputDeviceTypes &
+                AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+                ((stream == AUDIO_STREAM_ALARM) ||
+                        (stream == AUDIO_STREAM_NOTIFICATION))) {
+            // if widi device is connected, alarm must be heard only in local,
+            // notification must be heard on both DUT and Widi
+            // in all modes
+            strategy = STRATEGY_SONIFICATION;
+        } else {
+            strategy = getStrategy(stream);
+        }
+#else
         routing_strategy strategy = getStrategy(stream);
+#endif //BGM_ENABLED
         bool shouldWait = (strategy == STRATEGY_SONIFICATION) ||
                             (strategy == STRATEGY_SONIFICATION_RESPECTFUL);
         uint32_t waitMs = 0;
@@ -1226,6 +1374,50 @@ status_t AudioPolicyManager::stopOutput(audio_io_handle_t output,
             // update the outputs if stopping one with a stream that can affect notification routing
             handleNotificationRoutingForStream(stream);
         }
+#ifdef BGM_ENABLED
+        bool isBGMEnabled = false;
+        audio_io_handle_t BGMOutput = 0;
+        audio_devices_t availableOutputDeviceTypes =
+                mAvailableOutputDevices.types();
+        if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+                (stream == AUDIO_STREAM_MUSIC)) {
+            String8 reply = mpClientInterface->getParameters(0,
+                String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+            AudioParameter param = AudioParameter(reply);
+            String8 value;
+
+            if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                    value) == NO_ERROR) {
+                isBGMEnabled  = (value == "true");
+            } else {
+                ALOGI("isBGMEnabled: could not get key %s",
+                        AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+                isBGMEnabled  = false;
+            }
+
+            reply = mpClientInterface->getParameters(0,
+                    String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT));
+            param = AudioParameter(reply);
+            if (param.get(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT),
+                    value) == NO_ERROR) {
+                BGMOutput = atoi(value);
+            } else {
+                ALOGI("BGMOutput: could not get key %s",
+                        AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT);
+                BGMOutput = 0;
+            }
+        }
+        if (isBGMEnabled && (output == BGMOutput) &&
+                (outputDesc->mRefCount[stream] == 0)) {
+            BGMOutput = 0;
+            AudioParameter param = AudioParameter();
+            param.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT),
+                    BGMOutput);
+            mpClientInterface->setParameters(0, param.toString());
+            ALOGD("[BGMUSIC] stopOutput() clear background output refcount = %d",
+                    outputDesc->mRefCount[stream]);
+        }
+#endif //BGM_ENABLED
         return NO_ERROR;
     } else {
         ALOGW("stopOutput() refcount is already 0 for output %d", output);
@@ -1942,6 +2134,7 @@ bool AudioPolicyManager::isOffloadSupported(const audio_offload_info_t& offloadI
      offloadInfo.format,
      offloadInfo.stream_type, offloadInfo.bit_rate, offloadInfo.duration_us,
      offloadInfo.has_video);
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
 
     // Check if offload has been disabled
     char propValue[PROPERTY_VALUE_MAX];
@@ -1950,6 +2143,11 @@ bool AudioPolicyManager::isOffloadSupported(const audio_offload_info_t& offloadI
             ALOGV("offload disabled by audio.offload.disable=%s", propValue );
             return false;
         }
+    }
+    // if submix is device is enabled - disable offload
+    if(availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+       ALOGV("isOffloadSupported: submix attached - offloading disabled");
+       return false;
     }
 
     // Check if stream type is music, then only allow offload as of now.
@@ -3609,6 +3807,46 @@ void AudioPolicyManager::closeOutput(audio_io_handle_t output)
     mpClientInterface->setParameters(output, param.toString());
 
     mpClientInterface->closeOutput(output);
+#ifdef BGM_ENABLED
+    bool isBGMEnabled = false;
+    audio_io_handle_t BGMOutput = 0;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+
+        reply = mpClientInterface->getParameters(0,
+                String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT));
+        param = AudioParameter(reply);
+        if (param.get(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT),
+                value) == NO_ERROR) {
+            BGMOutput = atoi(value);
+        } else {
+            ALOGI("BGMOutput: could not get key %s",
+                    AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT);
+            BGMOutput = 0;
+        }
+    }
+    if ((isBGMEnabled) && (output == BGMOutput)) {
+        BGMOutput = 0;
+        AudioParameter param1 = AudioParameter();
+        param1.addInt(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT),
+                BGMOutput);
+        mpClientInterface->setParameters(0, param1.toString());
+        ALOGD("[BGMUSIC] closeOutput() clear background output");
+    }
+#endif //BGM_ENABLED
     mOutputs.removeItem(output);
     mPreviousOutputs = mOutputs;
 }
@@ -3675,6 +3913,26 @@ void AudioPolicyManager::checkOutputForStrategy(routing_strategy strategy)
     SortedVector<audio_io_handle_t> srcOutputs = getOutputsForDevice(oldDevice, mPreviousOutputs);
     SortedVector<audio_io_handle_t> dstOutputs = getOutputsForDevice(newDevice, mOutputs);
 
+#ifdef BGM_ENABLED
+    bool isBGMEnabled = false;
+    routing_strategy strategy1;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+#endif //BGM_ENABLED
     if (!vectorsEqual(srcOutputs,dstOutputs)) {
         ALOGV("checkOutputForStrategy() strategy %d, moving from output %d to output %d",
               strategy, srcOutputs[0], dstOutputs[0]);
@@ -3708,7 +3966,33 @@ void AudioPolicyManager::checkOutputForStrategy(routing_strategy strategy)
         }
         // Move tracks associated to this strategy from previous output to new output
         for (int i = 0; i < AUDIO_STREAM_CNT; i++) {
+#ifdef BGM_ENABLED
+            if ((isBGMEnabled) &&
+                    (((audio_stream_type_t)i == AUDIO_STREAM_DTMF) ||
+                    ((audio_stream_type_t)i == AUDIO_STREAM_SYSTEM) ||
+                    ((audio_stream_type_t)i == AUDIO_STREAM_TTS) ||
+                    ((audio_stream_type_t)i == AUDIO_STREAM_ENFORCED_AUDIBLE) ||
+                    ((audio_stream_type_t)i == AUDIO_STREAM_RING))) {
+                // if bgm is enabled, all notifications, alarm, touch tones
+                // must be routed to the primary device user and it must not
+                // interfere with the remote user playback
+                strategy1 = STRATEGY_BACKGROUND_MUSIC;
+            } else if ((availableOutputDeviceTypes &
+                    AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+                    (((audio_stream_type_t)i == AUDIO_STREAM_ALARM) ||
+                            ((audio_stream_type_t)i ==
+                                    AUDIO_STREAM_NOTIFICATION))) {
+                // if widi device is connected, alarm must be heard only
+                // in local, notification must be heard on both DUT and Widi
+                // in all modes
+                strategy1 = STRATEGY_SONIFICATION;
+            } else {
+                strategy1 = getStrategy((audio_stream_type_t)i);
+            }
+            if (strategy1 == strategy) {
+#else
             if (getStrategy((audio_stream_type_t)i) == strategy) {
+#endif //BGM_ENABLED
                 mpClientInterface->invalidateStream((audio_stream_type_t)i);
             }
         }
@@ -3800,6 +4084,25 @@ audio_devices_t AudioPolicyManager::getNewOutputDevice(audio_io_handle_t output,
             return outputDesc->device();
         }
     }
+#ifdef BGM_ENABLED
+    bool isBGMEnabled = false;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+#endif //BGM_ENABLED
 
     // check the following by order of priority to request a routing change if necessary:
     // 1: the strategy enforced audible is active and enforced on the output:
@@ -3830,6 +4133,11 @@ audio_devices_t AudioPolicyManager::getNewOutputDevice(audio_io_handle_t output,
         device = getDeviceForStrategy(STRATEGY_SONIFICATION_RESPECTFUL, fromCache);
     } else if (outputDesc->isStrategyActive(STRATEGY_MEDIA)) {
         device = getDeviceForStrategy(STRATEGY_MEDIA, fromCache);
+#ifdef BGM_ENABLED
+    } else if (isBGMEnabled ||
+                 outputDesc->isStrategyActive(STRATEGY_BACKGROUND_MUSIC)) {
+        device = getDeviceForStrategy(STRATEGY_BACKGROUND_MUSIC, fromCache);
+#endif //BGM_ENABLED
     } else if (outputDesc->isStrategyActive(STRATEGY_DTMF)) {
         device = getDeviceForStrategy(STRATEGY_DTMF, fromCache);
     }
@@ -3870,7 +4178,47 @@ audio_devices_t AudioPolicyManager::getDevicesForStream(audio_stream_type_t stre
         return AUDIO_DEVICE_NONE;
     }
     audio_devices_t devices;
+#ifdef BGM_ENABLED
+    AudioPolicyManager::routing_strategy strategy;
+    bool isBGMEnabled = false;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+    if ((isBGMEnabled) && ((stream == AUDIO_STREAM_DTMF) ||
+            (stream == AUDIO_STREAM_SYSTEM) ||
+            (stream == AUDIO_STREAM_TTS) ||
+            (stream == AUDIO_STREAM_ENFORCED_AUDIBLE) ||
+            (stream == AUDIO_STREAM_RING))) {
+        // if bgm is enabled, all notifications, alarm, touch tones must be
+        // routed to the primary device user and it must not interfere with
+        // the remote user playback
+        strategy = STRATEGY_BACKGROUND_MUSIC;
+    } else if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+            ((stream == AUDIO_STREAM_ALARM) ||
+                    (stream == AUDIO_STREAM_NOTIFICATION))) {
+        // if widi device is connected, alarm must be heard only in local,
+        // notification must be heard on both DUT and Widi
+        // in all modes
+        strategy = STRATEGY_SONIFICATION;
+    } else {
+        strategy = getStrategy(stream);
+    }
+#else
     AudioPolicyManager::routing_strategy strategy = getStrategy(stream);
+#endif //BGM_ENABLED
     devices = getDeviceForStrategy(strategy, true /*fromCache*/);
     SortedVector<audio_io_handle_t> outputs = getOutputsForDevice(devices, mOutputs);
     for (size_t i = 0; i < outputs.size(); i++) {
@@ -3995,8 +4343,14 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             if (device == AUDIO_DEVICE_OUT_SPEAKER && (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_SPEAKER_SAFE))
                 device = AUDIO_DEVICE_OUT_SPEAKER_SAFE;
         } else if (isStreamActive(AUDIO_STREAM_MUSIC, SONIFICATION_RESPECTFUL_AFTER_MUSIC_DELAY)) {
-            // while media is playing (or has recently played), use the same device
+            // while media is playing (or has recently played),
+            // use the same device if device is not WIDI or HDMI,
+            // otherwise fall back on the sonification behavior
             device = getDeviceForStrategy(STRATEGY_MEDIA, false /*fromCache*/);
+            if (device == AUDIO_DEVICE_OUT_AUX_DIGITAL ||
+                    device == AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+                device = getDeviceForStrategy(STRATEGY_SONIFICATION, false /*fromCache*/);
+            }
         } else {
             // when media is not playing anymore, fall back on the sonification behavior
             device = getDeviceForStrategy(STRATEGY_SONIFICATION, false /*fromCache*/);
@@ -4071,6 +4425,8 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 if (device) break;
                 device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_AUX_DIGITAL;
                 if (device) break;
+                device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
+                if (device) break;
                 device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET;
                 if (device) break;
             }
@@ -4099,6 +4455,8 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
                 device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET;
                 if (device) break;
                 device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_AUX_DIGITAL;
+                if (device) break;
+                device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
                 if (device) break;
                 device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET;
                 if (device) break;
@@ -4142,7 +4500,72 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
         // FALL THROUGH
 
     case STRATEGY_MEDIA: {
+
+#ifdef BGM_ENABLED
+        bool isBGMEnabled = false;
+        audio_devices_t availableOutputDeviceTypes =
+                mAvailableOutputDevices.types();
+        if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+            String8 reply = mpClientInterface->getParameters(0,
+                String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+            AudioParameter param = AudioParameter(reply);
+            String8 value;
+
+            if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                    value) == NO_ERROR) {
+                isBGMEnabled  = (value == "true");
+            } else {
+                ALOGI("isBGMEnabled: could not get key %s",
+                        AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+                isBGMEnabled  = false;
+            }
+        }
+        // Follow STRATEGY_PHONE when all these conditions are met:
+        // - We are in call
+        // - ENFORCED_AUDIBLE streams can be muted (due to fallthrough)
+        // - No sink other than the primary is active
+        // - BGM is not active
+        if (isInCall() &&
+            device == AUDIO_DEVICE_NONE &&
+            !(device & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) && !(isBGMEnabled)) {
+            ALOGV("%s-  superseding STRATEGY_MEDIA while in call, "
+                    "follow STRATEGY_PHONE", __FUNCTION__);
+            device = getDeviceForStrategy(STRATEGY_PHONE, false);
+            break;
+        }
+#endif//BGM_ENABLED
+
         uint32_t device2 = AUDIO_DEVICE_NONE;
+
+        switch (mForceUse[AUDIO_POLICY_FORCE_FOR_MEDIA]) {
+            case AUDIO_POLICY_FORCE_SPEAKER:
+                device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_SPEAKER;
+                  if (device)
+                    return device;
+                break;
+            case AUDIO_POLICY_FORCE_HEADPHONES:
+                device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_WIRED_HEADPHONE;
+                if (device)
+                    return device;
+                 device = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_WIRED_HEADSET;
+                if (device)
+                    return device;
+                break;
+            default:
+                break;
+        }
+
+#ifdef BGM_ENABLED
+        //If BGM devices are present, always force the output to it
+        // - other attached sinks will be handled in STRATEGY_BACKGROUND_MUSIC
+        if (isBGMEnabled) {
+           if (device2 == AUDIO_DEVICE_NONE)
+               device2 = availableOutputDeviceTypes &  AUDIO_DEVICE_OUT_AUX_DIGITAL;
+           if ((device2 == AUDIO_DEVICE_NONE) && (strategy != STRATEGY_SONIFICATION))
+               device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
+           ALOGV("[BGMUSIC] STRATEGY_MEDIA - force aux/widi always device = %x",device2);
+        }
+#endif//BGM_ENABLED
         if (strategy != STRATEGY_SONIFICATION) {
             // no sonification on remote submix (e.g. WFD)
             device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
@@ -4180,6 +4603,10 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
             // no sonification on aux digital (e.g. HDMI)
             device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_AUX_DIGITAL;
         }
+        if ((device2 == AUDIO_DEVICE_NONE) && (strategy != STRATEGY_SONIFICATION)) {
+            // no sonification on remote submix (e.g. WFD)
+            device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
+        }
         if ((device2 == AUDIO_DEVICE_NONE) &&
                 (mForceUse[AUDIO_POLICY_FORCE_FOR_DOCK] == AUDIO_POLICY_FORCE_ANALOG_DOCK)) {
             device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET;
@@ -4214,11 +4641,52 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
         }
         } break;
 
+    case STRATEGY_BACKGROUND_MUSIC: {
+
+#ifdef BGM_ENABLED
+        uint32_t device2 = 0;
+
+        ALOGV("[BGMUSIC] STRATEGY_BACKGROUND_MUSIC");
+        if ((mForceUse[AUDIO_POLICY_FORCE_FOR_MEDIA] != AUDIO_POLICY_FORCE_NO_BT_A2DP) &&
+            (getA2dpOutput() != 0) && !mA2dpSuspended) {
+            if (device2 == 0) {
+                device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_BLUETOOTH_A2DP;
+            }
+            if (device2 == 0) {
+                device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES;
+            }
+            if (device2 == AUDIO_DEVICE_NONE) {
+                device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER;
+            }
+        }
+        if (device2 == AUDIO_DEVICE_NONE) {
+            device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_WIRED_HEADPHONE;
+        }
+        if (device2 == 0) {
+            device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_WIRED_HEADSET;
+        }
+        if (device2 == 0) {
+            device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_SPEAKER;
+        }
+        if ((isStreamActive(AUDIO_STREAM_RING)) ||
+                (isStreamActive(AUDIO_STREAM_ALARM)) ||
+                (isStreamActive(AUDIO_STREAM_ENFORCED_AUDIBLE))) {
+            device2 |= (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_SPEAKER);
+        }
+        device |= device2;
+        if (device) break;
+        device = mDefaultOutputDevice->mDeviceType;
+        if (device == 0) {
+            ALOGE("[BGMUSIC] getDeviceForStrategy() no device found for STRATEGY_BACKGROUND_MUSIC");
+        }
+#endif //BGM_ENABLED
+        } //STRATEGY_BACKGROUND_MUSIC
+        break;
+
     default:
         ALOGW("getDeviceForStrategy() unknown strategy: %d", strategy);
         break;
     }
-
     ALOGVV("getDeviceForStrategy() strategy %d, device %x", strategy, device);
     return device;
 }
@@ -4328,6 +4796,45 @@ uint32_t AudioPolicyManager::setOutputDevice(audio_io_handle_t output,
         muteWaitMs += setOutputDevice(outputDesc->mOutput2->mIoHandle, device, force, delayMs);
         return muteWaitMs;
     }
+
+#ifdef BGM_ENABLED
+    bool isBGMEnabled = false;
+    audio_io_handle_t BGMOutput = 0;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+
+        reply = mpClientInterface->getParameters(0,
+                String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT));
+        param = AudioParameter(reply);
+        if (param.get(String8(AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT),
+                value) == NO_ERROR) {
+            BGMOutput = atoi(value);
+        } else {
+            ALOGI("BGMOutput: could not get key %s",
+                    AUDIO_PARAMETER_VALUE_REMOTE_BGM_OUTPUT);
+            BGMOutput = 0;
+        }
+    }
+    // force the routing if BGM state is on
+    if (!isInCall() && (isBGMEnabled) && (output != BGMOutput)) {
+        device = getDeviceForStrategy(STRATEGY_BACKGROUND_MUSIC, false /*fromCache*/);
+        ALOGD("[BGMUSIC] BGM is ON, return new device for music =  %x",device);
+    }
+#endif //BGM_ENABLED
+
     // no need to proceed if new device is not AUDIO_DEVICE_NONE and not supported by current
     // output profile
     if ((device != AUDIO_DEVICE_NONE) &&
@@ -4992,6 +5499,32 @@ float AudioPolicyManager::computeVolume(audio_stream_type_t stream,
         device = outputDesc->device();
     }
 
+
+#ifdef BGM_ENABLED
+    bool isBGMEnabled = false;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+            (stream == AUDIO_STREAM_MUSIC)) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+    if (isBGMEnabled && (device == AUDIO_DEVICE_OUT_REMOTE_SUBMIX)) {
+        ALOGD("[BGMUSIC] DO NOT APPLY VOLUME for BGM SINK - return max volume");
+        return 1.0;
+    }
+#endif //BGM_ENABLED
+
     volume = volIndexToAmpl(device, streamDesc, index);
 
     // if a headset is connected, apply the following rules to ring tones and notifications
@@ -4999,7 +5532,30 @@ float AudioPolicyManager::computeVolume(audio_stream_type_t stream,
     // - always attenuate ring tones and notifications volume by 6dB
     // - if music is playing, always limit the volume to current music volume,
     // with a minimum threshold at -36dB so that notification is always perceived.
+#ifdef BGM_ENABLED
+    routing_strategy stream_strategy;
+    if ((isBGMEnabled) && ((stream == AUDIO_STREAM_DTMF) ||
+            (stream == AUDIO_STREAM_SYSTEM) ||
+            (stream == AUDIO_STREAM_TTS) ||
+            (stream == AUDIO_STREAM_ENFORCED_AUDIBLE) ||
+            (stream == AUDIO_STREAM_RING))) {
+        // if bgm is enabled, all notifications, alarm, touch tones must be
+        // routed to the primary device user and it must not interfere with
+        // the remote user playback
+        stream_strategy = STRATEGY_BACKGROUND_MUSIC;
+    } else if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+            ((stream == AUDIO_STREAM_ALARM) ||
+                    (stream == AUDIO_STREAM_NOTIFICATION))) {
+        // if widi device is connected, alarm must be heard only in local,
+        // notification must be heard on both DUT and Widi
+        // in all modes
+        stream_strategy = STRATEGY_SONIFICATION;
+    } else {
+        stream_strategy = getStrategy(stream);
+    }
+#else
     const routing_strategy stream_strategy = getStrategy(stream);
+#endif //BGM_ENABLED
     if ((device & (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
             AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
             AUDIO_DEVICE_OUT_WIRED_HEADSET |
@@ -5041,6 +5597,26 @@ status_t AudioPolicyManager::checkAndSetVolume(audio_stream_type_t stream,
                                                    bool force)
 {
 
+#ifdef BGM_ENABLED
+    bool isBGMEnabled = false;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+            (stream == AUDIO_STREAM_MUSIC)) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+#endif //BGM_ENABLED
     // do not change actual stream volume if the stream is muted
     if (mOutputs.valueFor(output)->mMuteCount[stream] != 0) {
         ALOGVV("checkAndSetVolume() stream %d muted count %d",
@@ -5064,14 +5640,22 @@ status_t AudioPolicyManager::checkAndSetVolume(audio_stream_type_t stream,
     // - the force flag is set
     if (volume != mOutputs.valueFor(output)->mCurVolume[stream] ||
             force) {
-        mOutputs.valueFor(output)->mCurVolume[stream] = volume;
-        ALOGVV("checkAndSetVolume() for output %d stream %d, volume %f, delay %d", output, stream, volume, delayMs);
-        // Force VOICE_CALL to track BLUETOOTH_SCO stream volume when bluetooth audio is
-        // enabled
-        if (stream == AUDIO_STREAM_BLUETOOTH_SCO) {
-            mpClientInterface->setStreamVolume(AUDIO_STREAM_VOICE_CALL, volume, output, delayMs);
+#ifdef BGM_ENABLED
+        if (isBGMEnabled) {
+            ALOGD("[BGMUSIC] DO NOT APPLY VOLUME for BGM SINK");
+        } else {
+#endif //BGM_ENABLED
+            mOutputs.valueFor(output)->mCurVolume[stream] = volume;
+            ALOGVV("checkAndSetVolume() for output %d stream %d, volume %f, delay %d", output, stream, volume, delayMs);
+            // Force VOICE_CALL to track BLUETOOTH_SCO stream volume when bluetooth audio is
+            // enabled
+            if (stream == AUDIO_STREAM_BLUETOOTH_SCO) {
+                mpClientInterface->setStreamVolume(AUDIO_STREAM_VOICE_CALL, volume, output, delayMs);
+            }
+            mpClientInterface->setStreamVolume(stream, volume, output, delayMs);
+#ifdef BGM_ENABLED
         }
-        mpClientInterface->setStreamVolume(stream, volume, output, delayMs);
+#endif //BGM_ENABLED
     }
 
     if (stream == AUDIO_STREAM_VOICE_CALL ||
@@ -5089,6 +5673,33 @@ status_t AudioPolicyManager::checkAndSetVolume(audio_stream_type_t stream,
             mLastVoiceVolume = voiceVolume;
         }
     }
+#ifdef BGM_ENABLED
+    if (isBGMEnabled) {
+       // get the newly forced sink
+         audio_io_handle_t output2 = 0;
+         sp<AudioOutputDescriptor> desc = NULL;
+         audio_devices_t device2 = getDeviceForStrategy(STRATEGY_BACKGROUND_MUSIC, false /*fromCache*/);
+         SortedVector<audio_io_handle_t> outputs = getOutputsForDevice(device2, mOutputs);
+         for(size_t i = 0; i < outputs.size(); i++) {
+             desc = mOutputs.valueFor(outputs[i]);
+             if(desc->isActive())
+                break;
+         }
+         //BGM is applicable only for music streams - there is a possibility of
+         // an inactive output based on a different strategy returned here. There
+         // is no need of applying volume for this output.
+         if(!desc->isActive()) {
+            ALOGVV("[BGMUSIC] No active outputs available for BGM - no volume applied");
+            return NO_ERROR;
+         }
+         output2 = selectOutput(outputs, (audio_output_flags_t)desc->mFlags, desc->mFormat);
+         float volume = computeVolume(stream, index, output2, device2);
+         ALOGD("[BGMUSIC] compute volume for the forced active sink = %f for device2 %x device = %x",volume, device2,device);
+         //applying the volume for the current active output for the device2.
+         mpClientInterface->setStreamVolume(stream, volume,
+                                                       output2, delayMs);
+    }
+#endif //BGM_ENABLED
 
     return NO_ERROR;
 }
@@ -5117,8 +5728,54 @@ void AudioPolicyManager::setStrategyMute(routing_strategy strategy,
                                              audio_devices_t device)
 {
     ALOGVV("setStrategyMute() strategy %d, mute %d, output %d", strategy, on, output);
+#ifdef BGM_ENABLED
+    bool isBGMEnabled = false;
+    routing_strategy strategy1;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+#endif //BGM_ENABLED
     for (int stream = 0; stream < AUDIO_STREAM_CNT; stream++) {
+#ifdef BGM_ENABLED
+        if ((isBGMEnabled) &&
+                (((audio_stream_type_t)stream == AUDIO_STREAM_DTMF) ||
+                ((audio_stream_type_t)stream == AUDIO_STREAM_SYSTEM) ||
+                ((audio_stream_type_t)stream == AUDIO_STREAM_TTS) ||
+                ((audio_stream_type_t)stream == AUDIO_STREAM_ENFORCED_AUDIBLE) ||
+                ((audio_stream_type_t)stream == AUDIO_STREAM_RING))) {
+            // if bgm is enabled, all notifications, alarm, touch tones must be
+            // routed to the primary device user and it must not interfere with
+            // the remote user playback
+            strategy1 = STRATEGY_BACKGROUND_MUSIC;
+        } else if ((availableOutputDeviceTypes &
+                AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+                (((audio_stream_type_t)stream == AUDIO_STREAM_ALARM) ||
+                        ((audio_stream_type_t)stream ==
+                                AUDIO_STREAM_NOTIFICATION))) {
+            // if widi device is connected, alarm must be heard only in local,
+            // notification must be heard on both DUT and Widi
+            // in all modes
+            strategy1 = STRATEGY_SONIFICATION;
+        } else {
+            strategy1 = getStrategy((audio_stream_type_t)stream);
+        }
+        if (strategy1 == strategy) {
+#else
         if (getStrategy((audio_stream_type_t)stream) == strategy) {
+#endif //BGM_ENABLED
             setStreamMute((audio_stream_type_t)stream, on, output, delayMs, device);
         }
     }
@@ -5173,7 +5830,47 @@ void AudioPolicyManager::handleIncallSonification(audio_stream_type_t stream,
     // interfere with the device used for phone strategy
     // if stateChange is true, we are called from setPhoneState() and we must mute or unmute as
     // many times as there are active tracks on the output
+#ifdef BGM_ENABLED
+    routing_strategy stream_strategy;
+    bool isBGMEnabled = false;
+    audio_devices_t availableOutputDeviceTypes = mAvailableOutputDevices.types();
+    if (availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) {
+        String8 reply = mpClientInterface->getParameters(0,
+            String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE));
+        AudioParameter param = AudioParameter(reply);
+        String8 value;
+
+        if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE),
+                value) == NO_ERROR) {
+            isBGMEnabled  = (value == "true");
+        } else {
+            ALOGI("isBGMEnabled: could not get key %s",
+                    AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE);
+            isBGMEnabled  = false;
+        }
+    }
+    if ((isBGMEnabled) && ((stream == AUDIO_STREAM_DTMF) ||
+            (stream == AUDIO_STREAM_SYSTEM) ||
+            (stream == AUDIO_STREAM_TTS) ||
+            (stream == AUDIO_STREAM_ENFORCED_AUDIBLE) ||
+            (stream == AUDIO_STREAM_RING))) {
+        // if bgm is enabled, all notifications, alarm, touch tones must be
+        // routed to the primary device user and it must not interfere with
+        // the remote user playback
+        stream_strategy = STRATEGY_BACKGROUND_MUSIC;
+    } else if ((availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX) &&
+            ((stream == AUDIO_STREAM_ALARM) ||
+                    (stream == AUDIO_STREAM_NOTIFICATION))) {
+        // if widi device is connected, alarm must be heard only in local,
+        // notification must be heard on both DUT and Widi
+        // in all modes
+        stream_strategy = STRATEGY_SONIFICATION;
+    } else {
+        stream_strategy = getStrategy(stream);
+    }
+#else
     const routing_strategy stream_strategy = getStrategy(stream);
+#endif //BGM_ENABLED
     if ((stream_strategy == STRATEGY_SONIFICATION) ||
             ((stream_strategy == STRATEGY_SONIFICATION_RESPECTFUL))) {
         sp<AudioOutputDescriptor> outputDesc = mOutputs.valueFor(mPrimaryOutput);
