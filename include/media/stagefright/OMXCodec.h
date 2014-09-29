@@ -267,6 +267,9 @@ private:
         int32_t bitRate, int32_t  wmaFormatTag,
         int32_t wmaBlockAlign);
 #endif
+#ifdef USE_FEATURE_ALAC
+    status_t setALACFormat( void *pConfig );
+#endif
     status_t setVideoPortFormatType(
             OMX_U32 portIndex,
             OMX_VIDEO_CODINGTYPE compressionFormat,

@@ -145,6 +145,13 @@ ifeq ($(TARGET_HAS_ISV), true)
 LOCAL_CFLAGS +=-DTARGET_HAS_ISV
 endif
 
+ifeq ($(USE_FEATURE_ALAC),true)
+LOCAL_CPPFLAGS += -DUSE_FEATURE_ALAC
+LOCAL_C_INCLUDES += \
+        $(TOP)/frameworks/av/media/libstagefright/omx \
+        $(TOP)/external/alac
+endif
+
 LOCAL_MODULE:= libstagefright
 
 LOCAL_MODULE_TAGS := optional
