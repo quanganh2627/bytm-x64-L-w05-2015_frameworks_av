@@ -33,6 +33,10 @@ LOCAL_SHARED_LIBRARIES :=               \
         libstagefright_foundation       \
         libdl
 
+ifeq ($(USE_FEATURE_ALAC),true)
+    LOCAL_CPPFLAGS += -DUSE_FEATURE_ALAC
+endif
+
 LOCAL_MODULE:= libstagefright_omx
 
 include $(BUILD_SHARED_LIBRARY)
