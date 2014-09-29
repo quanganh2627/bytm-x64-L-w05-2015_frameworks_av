@@ -105,7 +105,6 @@ struct AwesomePlayer {
     void postAudioSeekComplete();
     void postAudioTearDown();
     status_t dump(int fd, const Vector<String16> &args) const;
-
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;

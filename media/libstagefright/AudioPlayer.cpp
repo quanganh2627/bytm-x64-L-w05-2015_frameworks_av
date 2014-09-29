@@ -15,7 +15,6 @@
  */
 
 #include <inttypes.h>
-
 //#define LOG_NDEBUG 0
 #define LOG_TAG "AudioPlayer"
 #include <utils/Log.h>
@@ -32,9 +31,13 @@
 #include <media/stagefright/MediaSource.h>
 #include <media/stagefright/MetaData.h>
 #include <media/stagefright/Utils.h>
-
 #include "include/AwesomePlayer.h"
 
+#ifdef BGM_ENABLED
+#include <media/AudioParameter.h>
+#include <hardware/audio.h>
+#include "media/BGMAudio.h"
+#endif
 namespace android {
 
 AudioPlayer::AudioPlayer(
@@ -149,6 +152,52 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
             mapAACProfileToAudioFormat(audioFormat,(OMX_AUDIO_AACPROFILETYPE) aacaot);
         }
     }
+#ifdef BGM_ENABLED
+    bool AllowBackgroundPlayback = false;
+    if (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX,"")
+          == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+
+        String8 reply;
+        char* bgmKVpair;
+        int activesessionid = 0;
+        BGMAudio *BGMSession;
+
+        reply = AudioSystem::getParameters(
+                0,String8(AudioParameter::keyBGMState));
+        bgmKVpair = strpbrk((char *)reply.string(), "=");
+        ALOGV("%s [BGMUSIC] bgmKVpair = %s",__func__,bgmKVpair);
+        ++bgmKVpair;
+        AllowBackgroundPlayback = strcmp(bgmKVpair,"true") ? false : true;
+        if (AllowBackgroundPlayback) {
+            reply = AudioSystem::getParameters(
+                    0,String8(AudioParameter::keyBGMSession));
+            bgmKVpair = strpbrk((char *)reply.string(), "=");
+            ++bgmKVpair;
+            BGMSession = (BGMAudio*)atoi(bgmKVpair);
+            if (BGMSession == NULL)
+                return -EINVAL;
+
+            activesessionid = mAudioSink->getSessionId();
+            // if the BGM session is beginning for the first time, save the session
+            if((BGMSession->mBGMAudioSessionID == 0) &&
+                    (BGMSession->mBGMAudioAvailable)) {
+               //save the audio session of bgm player
+               BGMSession->mBGMAudioSessionID = activesessionid;
+            }
+            // check if the play request is from the same application
+            if((activesessionid == BGMSession->mBGMAudioSessionID) &&
+                    (BGMSession->mBGMAudioAvailable)) {
+               AllowBackgroundPlayback = true;
+            } else {
+               AllowBackgroundPlayback = false;
+            }
+        }
+        ALOGV("mBGMAudioSessionID = %d, activesessionid = %d, "
+                "AllowBackgroundPlayback = %d", BGMSession->mBGMAudioSessionID,
+                activesessionid, AllowBackgroundPlayback);
+    }
+#endif
+
 
     int avgBitRate = -1;
     format->findInt32(kKeyBitRate, &avgBitRate);
@@ -157,10 +206,20 @@ status_t AudioPlayer::start(bool sourceAlreadyStarted) {
 
         uint32_t flags = AUDIO_OUTPUT_FLAG_NONE;
         audio_offload_info_t offloadInfo = AUDIO_INFO_INITIALIZER;
+#ifdef BGM_ENABLED
+        flags = AllowBackgroundPlayback ?
+                  AUDIO_OUTPUT_FLAG_REMOTE_BGM : AUDIO_OUTPUT_FLAG_NONE;
+          // Deep buffer is not supported when remote BGM is active
+
+        if (allowDeepBuffering() && (!AllowBackgroundPlayback)) {
+            flags |= AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
+        }
+#else
 
         if (allowDeepBuffering()) {
             flags |= AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
         }
+#endif
         if (useOffload()) {
             flags |= AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD;
 
@@ -282,6 +341,38 @@ void AudioPlayer::pause(bool playPendingSamples) {
 
         mPinnedTimeUs = ALooper::GetNowUs();
     }
+#ifdef BGM_ENABLED
+    if (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX,"")
+        == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+        String8 reply;
+        char* bgmKVpair;
+        BGMAudio *BGMSession;
+        bool AllowBackgroundPlayback = false;
+
+        reply = AudioSystem::getParameters(
+                0,String8(AudioParameter::keyBGMSession));
+        bgmKVpair = strpbrk((char *)reply.string(), "=");
+        ++bgmKVpair;
+        BGMSession = (BGMAudio*)atoi(bgmKVpair);
+
+        reply = AudioSystem::getParameters(
+                0,String8(AudioParameter::keyBGMState));
+        bgmKVpair = strpbrk((char *)reply.string(), "=");
+        ALOGV("%s [BGMUSIC] bgmKVpair = %s",__func__,bgmKVpair);
+        ++bgmKVpair;
+        AllowBackgroundPlayback = strcmp(bgmKVpair,"true") ? false : true;
+        ALOGV("%s [BGMUSIC] AllowBackgroundPlayback = %d",
+                __func__,AllowBackgroundPlayback);
+
+        int activesessionid = mAudioSink->getSessionId();
+        if ((BGMSession != NULL) &&
+                (BGMSession->mBGMAudioSessionID == activesessionid) &&
+                (!AllowBackgroundPlayback)) {
+            //save the audio session of bgm player
+            BGMSession->mBGMAudioSessionID = 0;
+        }
+    }
+#endif //BGM_ENABLED
 
     mPlaying = false;
 }
@@ -308,6 +399,28 @@ void AudioPlayer::reset() {
 
     ALOGV("reset: mPlaying=%d mReachedEOS=%d useOffload=%d",
                                 mPlaying, mReachedEOS, useOffload() );
+#ifdef BGM_ENABLED
+    if (AudioSystem::getDeviceConnectionState(AUDIO_DEVICE_OUT_REMOTE_SUBMIX,"")
+        == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
+        String8 reply;
+        char* bgmKVpair;
+        BGMAudio *BGMSession;
+
+        reply = AudioSystem::getParameters(
+                0,String8(AudioParameter::keyBGMSession));
+        bgmKVpair = strpbrk((char *)reply.string(), "=");
+        ++bgmKVpair;
+        BGMSession = (BGMAudio*)atoi(bgmKVpair);
+
+        int activesessionid = mAudioSink->getSessionId();
+        // if the BGM session is terminated or connection is closed, reset the session
+        if ((BGMSession != NULL) &&
+                (BGMSession->mBGMAudioSessionID == activesessionid)) {
+            //update the audio session of bgm player
+            BGMSession->mBGMAudioSessionID = 0;
+        }
+    }
+#endif //BGM_ENABLED
 
     if (mAudioSink.get() != NULL) {
         mAudioSink->stop();
