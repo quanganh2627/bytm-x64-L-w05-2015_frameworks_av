@@ -136,6 +136,11 @@ private:
 
     AudioPlayer(const AudioPlayer &);
     AudioPlayer &operator=(const AudioPlayer &);
+#ifdef BGM_ENABLED
+    bool mAllowBackgroundPlayback;
+    int  mBGMAudioSessionID;
+    void updateBGMoutput();
+#endif
 };
 
 }  // namespace android

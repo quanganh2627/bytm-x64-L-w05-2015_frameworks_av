@@ -113,6 +113,10 @@ LOCAL_STATIC_LIBRARIES := \
         libFLAC \
         libmedia_helper
 
+ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
+  LOCAL_CFLAGS += -DBGM_ENABLED
+endif
+
 LOCAL_SHARED_LIBRARIES += \
         libstagefright_enc_common \
         libstagefright_avc_common \
