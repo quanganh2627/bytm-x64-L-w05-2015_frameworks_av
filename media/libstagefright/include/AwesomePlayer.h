@@ -105,7 +105,6 @@ struct AwesomePlayer {
     void postAudioSeekComplete();
     void postAudioTearDown();
     status_t dump(int fd, const Vector<String16> &args) const;
-
 private:
     friend struct AwesomeEvent;
     friend struct PreviewPlayer;
@@ -365,6 +364,11 @@ private:
 
     AwesomePlayer(const AwesomePlayer &);
     AwesomePlayer &operator=(const AwesomePlayer &);
+#ifdef BGM_ENABLED
+    status_t remoteBGMSuspend();
+    status_t remoteBGMResume();
+    bool     mAudioPlayerPaused;
+#endif //BGM_ENABLED
 };
 
 }  // namespace android

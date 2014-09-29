@@ -187,6 +187,7 @@ protected:
             STRATEGY_SONIFICATION_RESPECTFUL,
             STRATEGY_DTMF,
             STRATEGY_ENFORCED_AUDIBLE,
+            STRATEGY_BACKGROUND_MUSIC,
             NUM_STRATEGIES
         };
 
@@ -820,6 +821,7 @@ protected:
         uint32_t        mTestChannels;
         uint32_t        mTestLatencyMs;
 #endif //AUDIO_POLICY_TEST
+        static bool isVirtualInputDevice(audio_devices_t device);
 
 private:
         static float volIndexToAmpl(audio_devices_t device, const StreamDescriptor& streamDesc,
@@ -827,7 +829,6 @@ private:
         // updates device caching and output for streams that can influence the
         //    routing of notifications
         void handleNotificationRoutingForStream(audio_stream_type_t stream);
-        static bool isVirtualInputDevice(audio_devices_t device);
         static bool deviceDistinguishesOnAddress(audio_devices_t device);
         // find the outputs on a given output descriptor that have the given address.
         // to be called on an AudioOutputDescriptor whose supported devices (as defined
@@ -851,6 +852,15 @@ private:
                 const audio_offload_info_t *offloadInfo);
         // internal function to derive a stream type value from audio attributes
         audio_stream_type_t streamTypefromAttributesInt(const audio_attributes_t *attr);
+#ifdef BGM_ENABLED
+        /*flag to keep track of background music*/
+        bool mIsBGMEnabled;
+        audio_io_handle_t mBGMOutput;
+
+        bool IsRemoteBGMSupported(audio_stream_type_t stream);
+        // return the strategy corresponding to a given stream type in case of BGM
+        routing_strategy getStrategyforbackgroundsink(audio_stream_type_t stream);
+#endif // BGM_ENABLED
 };
 
 };
