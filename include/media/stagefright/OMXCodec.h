@@ -261,7 +261,9 @@ private:
     status_t setAC3Format(int32_t numChannels, int32_t sampleRate);
 
     void setG711Format(int32_t numChannels);
-
+#ifdef USE_FEATURE_ALAC
+    status_t setALACFormat( void *pConfig );
+#endif
     status_t setVideoPortFormatType(
             OMX_U32 portIndex,
             OMX_VIDEO_CODINGTYPE compressionFormat,
