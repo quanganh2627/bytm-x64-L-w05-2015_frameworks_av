@@ -58,6 +58,9 @@ LOCAL_C_INCLUDES :=                                                 \
 ifeq ($(INTEL_WIDI), true)
 LOCAL_CFLAGS += -DINTEL_WIDI
 endif
+ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
+  LOCAL_CFLAGS += -DBGM_ENABLED
+endif
 
 LOCAL_MODULE:= libmediaplayerservice
 

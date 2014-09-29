@@ -30,6 +30,10 @@
 #include "TestPlayerStub.h"
 #include "StagefrightPlayer.h"
 #include "nuplayer/NuPlayerDriver.h"
+#ifdef BGM_ENABLED
+#include <hardware/audio.h>
+#include <media/AudioParameter.h>
+#endif
 
 namespace android {
 
@@ -62,6 +66,19 @@ status_t MediaPlayerFactory::registerFactory_l(IFactory* factory,
 
 static player_type getDefaultPlayerType() {
     char value[PROPERTY_VALUE_MAX];
+#ifdef BGM_ENABLED
+    bool BGMEnabled = false;
+    String8 value1;
+    String8 reply = AudioSystem::getParameters(0,String8(AudioParameter::keyBGMState));
+    AudioParameter param = AudioParameter(reply);
+    if (param.get(String8(AUDIO_PARAMETER_KEY_REMOTE_BGM_STATE), value1) == NO_ERROR) {
+        BGMEnabled  = (value1 == "true");
+    }
+    ALOGV("%s [BGMUSIC] BGMEnabled = %d",__func__,BGMEnabled);
+    if (BGMEnabled)
+        return STAGEFRIGHT_PLAYER;
+#endif
+
     if (property_get("media.stagefright.use-awesome", value, NULL)
             && (!strcmp("1", value) || !strcasecmp("true", value))) {
         return STAGEFRIGHT_PLAYER;

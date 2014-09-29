@@ -55,6 +55,9 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES:= \
     AudioPolicyManager.cpp
 
+ifeq ($(ENABLE_BACKGROUND_MUSIC),true)
+  LOCAL_CFLAGS += -DBGM_ENABLED
+endif
 LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutils \
