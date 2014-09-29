@@ -45,7 +45,9 @@ const char *MEDIA_MIMETYPE_AUDIO_FLAC = "audio/flac";
 const char *MEDIA_MIMETYPE_AUDIO_AAC_ADTS = "audio/aac-adts";
 const char *MEDIA_MIMETYPE_AUDIO_MSGSM = "audio/gsm";
 const char *MEDIA_MIMETYPE_AUDIO_AC3 = "audio/ac3";
-
+#ifdef USE_FEATURE_ALAC
+const char *MEDIA_MIMETYPE_AUDIO_ALAC = "audio/alac";
+#endif
 const char *MEDIA_MIMETYPE_CONTAINER_MPEG4 = "video/mp4";
 const char *MEDIA_MIMETYPE_CONTAINER_WAV = "audio/x-wav";
 const char *MEDIA_MIMETYPE_CONTAINER_OGG = "application/ogg";

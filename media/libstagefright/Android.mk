@@ -198,6 +198,12 @@ ifeq ($(TARGET_HAS_MULTIPLE_DISPLAY),true)
     LOCAL_SHARED_LIBRARIES += libmultidisplay
 endif
 
+ifeq ($(USE_FEATURE_ALAC),true)
+LOCAL_CPPFLAGS += -DUSE_FEATURE_ALAC
+LOCAL_C_INCLUDES += \
+        $(TOP)/frameworks/av/media/libstagefright/omx
+endif
+
 LOCAL_MODULE:= libstagefright
 
 LOCAL_MODULE_TAGS := optional

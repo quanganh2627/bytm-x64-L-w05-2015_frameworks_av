@@ -55,6 +55,9 @@ enum {
     kKeyAVCC              = 'avcc',  // raw data
     kKeyHVCC              = 'hvcc',  // raw data
     kKeyD263              = 'd263',  // raw data
+#ifdef USE_FEATURE_ALAC
+    kKeyAlacMagicCookie   = 'almc',  // raw data
+#endif
     kKeyVorbisInfo        = 'vinf',  // raw data
     kKeyVorbisBooks       = 'vboo',  // raw data
     kKeyOpusHeader        = 'ohdr',  // raw data
