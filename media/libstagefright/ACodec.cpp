@@ -3077,6 +3077,23 @@ status_t ACodec::setVideoFormatOnPort(
     err = mOMX->setParameter(
             mNode, OMX_IndexParamPortDefinition, &def, sizeof(def));
 
+    if (!strncmp(mComponentName.c_str(), "OMX.Intel.VideoDecoder", 22) && mRotationDegrees) {
+
+        OMX_INDEXTYPE index;
+
+        err =
+            mOMX->getExtensionIndex(
+                mNode,
+                "OMX.Intel.index.rotation",
+                &index);
+        if (err == OK) {
+            err = mOMX->setParameter(mNode, index, (void*)&mRotationDegrees, sizeof(int32_t));
+        } else {
+            // ingore this error
+            ALOGW("Set decode rotation failed");
+        }
+    }
+
     return err;
 }
 
