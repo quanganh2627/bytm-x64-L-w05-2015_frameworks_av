@@ -15,6 +15,11 @@
  */
 
 //#define LOG_NDEBUG 0
+#define DUMP_DECODE_INFO
+#ifdef DUMP_DECODE_INFO
+#define LOG_NIDEBUG 0
+#endif
+
 #define LOG_TAG "NuPlayerRenderer"
 #include <utils/Log.h>
 
@@ -45,12 +50,51 @@ const int64_t NuPlayer::Renderer::kMinPositionUpdateDelayUs = 100000ll;
 
 static bool sFrameAccurateAVsync = false;
 
+#ifdef DUMP_DECODE_INFO
+/*
+* Using __thread storage class for Frame counters to make
+* them Thread-local in order to enable instrumentation of
+* multiple simultaneous video playbacks.
+*/
+static __thread int tl_dropFrameCount = 0;
+static __thread int tl_emptyFrameCount = 0;
+static __thread int tl_renderFrameCount =0;
+static __thread int tl_decodeFrameCount = 0;
+static __thread unsigned long tl_startbackStart = 0;
+static __thread unsigned long tl_startbackEnd = 0;
+
+// property for printing the decode info
+// LOG_LEVEL_0: default not print
+// LOG_LEVEL_1: print base info
+// LOG_LEVEL_2: print each render frame @system time
+#define LOG_LEVEL_0 0
+#define LOG_LEVEL_1 1
+#define LOG_LEVEL_2 2
+static unsigned long g_log_level = 0;
+
+#define log_decode_print(level, format, ...) \
+    if (g_log_level >= level) { \
+        ALOGI(format, __VA_ARGS__); \
+    } \
+    else { \
+        void(0); \
+    }
+
+#endif
+
 static void readProperties() {
     char value[PROPERTY_VALUE_MAX];
     if (property_get("persist.sys.media.avsync", value, NULL)) {
         sFrameAccurateAVsync =
             !strcmp("1", value) || !strcasecmp("true", value);
     }
+
+#ifdef DUMP_DECODE_INFO
+    char property[PROPERTY_VALUE_MAX];
+    if (property_get("debug.dump.log", property, NULL) > 0) {
+        g_log_level = atoi(property);
+    }
+#endif
 }
 
 NuPlayer::Renderer::Renderer(
@@ -837,6 +881,7 @@ void NuPlayer::Renderer::onDrainVideoQueue() {
     }
 
     int64_t nowUs = -1;
+
     int64_t realTimeUs;
     if (mFlags & FLAG_REAL_TIME) {
         CHECK(entry->mBuffer->meta()->findInt64("timeUs", &realTimeUs));
@@ -860,10 +905,28 @@ void NuPlayer::Renderer::onDrainVideoQueue() {
         if (tooLate) {
             ALOGV("video late by %lld us (%.2f secs)",
                  mVideoLateByUs, mVideoLateByUs / 1E6);
+#ifdef DUMP_DECODE_INFO
+            log_decode_print(LOG_LEVEL_1,"Time out, drop the %dth buffer", tl_dropFrameCount++);
+#endif
+
         } else {
             ALOGV("rendering video at media time %.2f secs",
                     (mFlags & FLAG_REAL_TIME ? realTimeUs :
                     (realTimeUs + mAnchorTimeMediaUs - mAnchorTimeRealUs)) / 1E6);
+#ifdef DUMP_DECODE_INFO
+            if (g_log_level >= LOG_LEVEL_1) {
+                if (entry->mBuffer->size() != 0)
+                    tl_renderFrameCount++;
+                else
+                    log_decode_print(LOG_LEVEL_1,"get the %dth empty buffer", tl_emptyFrameCount++);
+                if(0 == tl_startbackStart) {
+                    struct timeval tv;
+                    gettimeofday(&tv,NULL);
+                    tl_startbackStart = tv.tv_sec * 1000 + tv.tv_usec/1000;
+                }
+            }
+#endif
+
         }
     } else {
         setVideoLateByUs(0);
@@ -945,6 +1008,12 @@ void NuPlayer::Renderer::onQueueBuffer(const sp<AMessage> &msg) {
         postDrainAudioQueue_l();
     } else {
         mVideoQueue.push_back(entry);
+#ifdef DUMP_DECODE_INFO
+        if(g_log_level >= LOG_LEVEL_1) {
+           ++tl_decodeFrameCount;
+        }
+#endif
+
         postDrainVideoQueue();
     }
 
@@ -1183,6 +1252,34 @@ void NuPlayer::Renderer::onPause() {
         mAudioSink->pause();
         startAudioOffloadPauseTimeout();
     }
+
+#ifdef DUMP_DECODE_INFO
+    {
+        if (g_log_level >= LOG_LEVEL_1) {
+            struct timeval tv;
+            gettimeofday(&tv, NULL);
+            tl_startbackEnd = tv.tv_sec * 1000 + tv.tv_usec / 1000 ;
+
+            float playbackDuration = (float)(tl_startbackEnd - tl_startbackStart) / 1000.0f;
+            float decode_FPS = (float) (tl_decodeFrameCount - 1)/ playbackDuration;
+            float render_FPS = (float) (tl_renderFrameCount - 1) / playbackDuration;
+
+            ALOGI("  ************ NuPlayer decoding performance ****************\n");
+            ALOGI("decodeFrameCount = %lu, renderFrameCount=%lu, dropFrameCount=%lu, emptyFrameCount=%lu",
+                   tl_decodeFrameCount,tl_renderFrameCount, tl_dropFrameCount,tl_emptyFrameCount);
+
+            ALOGI("playbackDuration=%f, render_FPS=%f \n", playbackDuration, render_FPS);
+            ALOGI("  ***************      End       ********************\n");
+
+            tl_startbackStart = 0;
+            tl_startbackEnd = 0;
+            tl_decodeFrameCount = 0;
+            tl_renderFrameCount = 0;
+            tl_dropFrameCount = 0;
+            tl_emptyFrameCount = 0;
+        }
+    }
+#endif
 
     ALOGV("now paused audio queue has %d entries, video has %d entries",
           mAudioQueue.size(), mVideoQueue.size());
