@@ -4566,10 +4566,6 @@ audio_devices_t AudioPolicyManager::getDeviceForStrategy(routing_strategy strate
            ALOGV("[BGMUSIC] STRATEGY_MEDIA - force aux/widi always device = %x",device2);
         }
 #endif//BGM_ENABLED
-        if (strategy != STRATEGY_SONIFICATION) {
-            // no sonification on remote submix (e.g. WFD)
-            device2 = availableOutputDeviceTypes & AUDIO_DEVICE_OUT_REMOTE_SUBMIX;
-        }
         if ((device2 == AUDIO_DEVICE_NONE) &&
                 (mForceUse[AUDIO_POLICY_FORCE_FOR_MEDIA] != AUDIO_POLICY_FORCE_NO_BT_A2DP) &&
                 (getA2dpOutput() != 0) && !mA2dpSuspended) {
