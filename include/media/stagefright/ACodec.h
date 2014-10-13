@@ -297,7 +297,13 @@ private:
 
     status_t setupAMRCodec(bool encoder, bool isWAMR, int32_t bitRate);
     status_t setupG711Codec(bool encoder, int32_t numChannels);
-
+#ifdef USE_FEATURE_ALAC
+    status_t setALACFormat(
+        int32_t frameLength, int32_t compatibleVersion, int32_t bitDepth,
+        int32_t pb, int32_t mb, int32_t kb, int32_t numChannels,
+        int32_t maxRun, int32_t maxFrameBytes, int32_t avgBitRate,
+        int32_t sampleRate);
+#endif
     status_t setupFlacCodec(
             bool encoder, int32_t numChannels, int32_t sampleRate, int32_t compressionLevel);
 
