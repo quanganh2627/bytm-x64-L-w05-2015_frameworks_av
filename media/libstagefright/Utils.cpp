@@ -39,6 +39,10 @@
 #include "MetaDataExt.h"
 #endif
 
+#ifdef USE_FEATURE_ALAC
+#include "include/ALACDecoder.h"
+#endif
+
 namespace android {
 
 uint16_t U16_AT(const uint8_t *ptr) {
@@ -356,6 +360,47 @@ status_t convertMetaDataToMessage(
         buffer->meta()->setInt32("csd", true);
         buffer->meta()->setInt64("timeUs", 0);
         msg->setBuffer("csd-0", buffer);
+#endif
+#ifdef USE_FEATURE_ALAC
+    } else if (meta->findData(kKeyAlacMagicCookie, &type, &data, &size)) {
+        int32_t frameLength, maxFrameBytes, avgBitRate, sampleRate;
+        int16_t maxRun;
+        int8_t compatibleVersion, bitDepth, pb, mb, kb, numChannels;
+
+        ALACSpecificConfig *pConfigALAC = (ALACSpecificConfig *) data;
+
+        frameLength = pConfigALAC->frameLength;
+        msg->setInt32("alac-frameLength", frameLength);
+
+        compatibleVersion = pConfigALAC->compatibleVersion;
+        msg->setInt32("alac-compatibleVersion", compatibleVersion);
+
+        bitDepth = pConfigALAC->bitDepth;
+        msg->setInt32("alac-bitDepth", bitDepth);
+
+        pb = pConfigALAC->pb;
+        msg->setInt32("alac-pb", pb);
+
+        mb = pConfigALAC->mb;
+        msg->setInt32("alac-mb", mb);
+
+        kb = pConfigALAC->kb;
+        msg->setInt32("alac-kb", kb);
+
+        numChannels = pConfigALAC->numChannels;
+        msg->setInt32("alac-numChannels", numChannels);
+
+        maxRun = pConfigALAC->maxRun;
+        msg->setInt32("alac-maxRun", maxRun);
+
+        maxFrameBytes = pConfigALAC->maxFrameBytes;
+        msg->setInt32("alac-maxFrameBytes", maxFrameBytes);
+
+        avgBitRate = pConfigALAC->avgBitRate;
+        msg->setInt32("alac-avgBitRate", avgBitRate);
+
+        sampleRate = pConfigALAC->sampleRate;
+        msg->setInt32("alac-sampleRate", sampleRate);
 #endif
     }
 
