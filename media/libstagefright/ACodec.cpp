@@ -24,6 +24,10 @@
 #include <inttypes.h>
 #include <utils/Trace.h>
 
+#ifdef USE_FEATURE_ALAC
+#include "include/ALACDecoder.h"
+#endif
+
 #include <media/stagefright/ACodec.h>
 
 #include <binder/MemoryDealer.h>
@@ -51,6 +55,10 @@
 #include <OMX_VideoExt.h>
 #include <OMX_Component.h>
 #include <OMX_IndexExt.h>
+
+#ifdef USE_FEATURE_ALAC
+#include <OMX_Ext_Intel.h>
+#endif
 
 #include "include/avc_utils.h"
 
@@ -1136,6 +1144,10 @@ status_t ACodec::setComponentRole(
             "video_decoder.mpeg2", "video_encoder.mpeg2" },
         { MEDIA_MIMETYPE_AUDIO_AC3,
             "audio_decoder.ac3", "audio_encoder.ac3" },
+#ifdef USE_FEATURE_ALAC
+        { MEDIA_MIMETYPE_AUDIO_ALAC,
+            "audio_decoder.alac", "audio_encoder.alac" },
+#endif
     };
 
     static const size_t kNumMimeToRole =
@@ -1531,6 +1543,48 @@ status_t ACodec::configureCodec(
         } else {
             err = setupG711Codec(encoder, numChannels);
         }
+#ifdef USE_FEATURE_ALAC
+    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_ALAC)) {
+        int32_t frameLength, compatibleVersion, bitDepth, pb, mb, kb;
+        int32_t numChannels, maxRun, maxFrameBytes, avgBitRate, sampleRate;
+
+        if (!msg->findInt32("alac-frameLength", &frameLength)) {
+            frameLength = 0;
+        }
+        if (!msg->findInt32("alac-compatibleVersion", &compatibleVersion)) {
+            compatibleVersion = 0;
+        }
+        if (!msg->findInt32("alac-bitDepth", &bitDepth)) {
+            bitDepth = 0;
+        }
+        if (!msg->findInt32("alac-pb", &pb)) {
+            pb = 0;
+        }
+        if (!msg->findInt32("alac-mb", &mb)) {
+            mb = 0;
+        }
+        if (!msg->findInt32("alac-kb", &kb)) {
+            kb = 0;
+        }
+        if (!msg->findInt32("alac-numChannels", &numChannels)) {
+            numChannels = 0;
+        }
+        if (!msg->findInt32("alac-maxRun", &maxRun)) {
+            maxRun = 0;
+        }
+        if (!msg->findInt32("alac-maxFrameBytes", &maxFrameBytes)) {
+            maxFrameBytes = 0;
+        }
+        if (!msg->findInt32("alac-avgBitRate", &avgBitRate)) {
+            avgBitRate = 0;
+        }
+        if (!msg->findInt32("alac-sampleRate", &sampleRate)) {
+            sampleRate = 0;
+        }
+
+        setALACFormat(frameLength, compatibleVersion, bitDepth, pb, mb, kb,
+            numChannels, maxRun, maxFrameBytes, avgBitRate, sampleRate);
+#endif
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_FLAC)) {
         int32_t numChannels, sampleRate, compressionLevel = -1;
         if (encoder &&
@@ -1973,6 +2027,50 @@ status_t ACodec::setupG711Codec(bool encoder, int32_t numChannels) {
     return setupRawAudioFormat(
             kPortIndexInput, 8000 /* sampleRate */, numChannels);
 }
+
+#ifdef USE_FEATURE_ALAC
+status_t ACodec::setALACFormat(
+        int32_t frameLength, int32_t compatibleVersion, int32_t bitDepth,
+        int32_t pb, int32_t mb, int32_t kb, int32_t numChannels,
+        int32_t maxRun, int32_t maxFrameBytes, int32_t avgBitRate,
+        int32_t sampleRate) {
+
+    ALOGV("ENTER setALACFormat\n");
+
+    // Set format parameters on input port
+    OMX_AUDIO_PARAM_ALACTYPE_EXT_INTEL alacParams;
+    InitOMXParams(&alacParams);
+    alacParams.nPortIndex = kPortIndexInput;
+
+    status_t err = mOMX->getParameter( mNode,
+        (OMX_INDEXTYPE)OMX_IndexParamAudioAlac,
+        &alacParams, sizeof(alacParams) );
+    CHECK_EQ( err, (status_t)OK );
+
+    alacParams.nFrameLength = frameLength;
+    alacParams.nCompatibleVersion = (OMX_U8)compatibleVersion;
+    alacParams.nBitDepth = (OMX_U8) bitDepth;
+    alacParams.nPb = (OMX_U8) pb;
+    alacParams.nMb = (OMX_U8) mb;
+    alacParams.nKb = (OMX_U8) kb;
+    alacParams.nChannels = numChannels;
+    alacParams.nMaxRun = (OMX_U16) maxRun;
+    alacParams.nMaxFrameBytes = maxFrameBytes;
+    alacParams.nAvgBitRate = avgBitRate;
+    alacParams.nSampleRate = sampleRate;
+
+    err = mOMX->setParameter( mNode,
+        (OMX_INDEXTYPE)OMX_IndexParamAudioAlac,
+        &alacParams, sizeof(alacParams) );
+    if (err != OK) {
+            ALOGE("setParameter('OMX_IndexParamAudioAlac') failed (err = %d)", err);
+            return err;
+    }
+
+    ALOGV("EXIT setALACFormat\n");
+    return OK;
+}
+#endif
 
 status_t ACodec::setupFlacCodec(
         bool encoder, int32_t numChannels, int32_t sampleRate, int32_t compressionLevel) {
@@ -3628,6 +3726,26 @@ status_t ACodec::getPortFormat(OMX_U32 portIndex, sp<AMessage> &notify) {
                     notify->setString("mime", MEDIA_MIMETYPE_AUDIO_WMA);
                     notify->setInt32("channel-count", params.nChannels);
                     notify->setInt32("sample-rate", params.nSamplingRate);
+                    break;
+                }
+#endif
+
+#ifdef USE_FEATURE_ALAC
+                case OMX_AUDIO_CodingALAC:
+                {
+                    OMX_AUDIO_PARAM_ALACTYPE_EXT_INTEL params;
+                    InitOMXParams(&params);
+                    params.nPortIndex = portIndex;
+
+                    CHECK_EQ((status_t)OK, mOMX->getParameter(
+                            mNode,
+                            (OMX_INDEXTYPE)OMX_IndexParamAudioAlac,
+                            &params,
+                            sizeof(params)));
+
+                    notify->setString("mime", MEDIA_MIMETYPE_AUDIO_ALAC);
+                    notify->setInt32("channel-count", params.nChannels);
+                    notify->setInt32("sample-rate", params.nSampleRate);
                     break;
                 }
 #endif
