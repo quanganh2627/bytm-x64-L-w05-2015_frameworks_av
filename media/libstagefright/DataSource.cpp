@@ -19,6 +19,7 @@
 #if CHROMIUM_AVAILABLE
 #include "include/chromium_http_stub.h"
 #endif
+#include "include/AVIExtractor.h"
 
 #include "include/AACExtractor.h"
 #include "include/DRMExtractor.h"
@@ -168,6 +169,8 @@ void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer_l(SniffMP3);
     RegisterSniffer_l(SniffAAC);
     RegisterSniffer_l(SniffMPEG2PS);
+    RegisterSniffer_l(SniffAVI);
+
     RegisterSniffer_l(SniffWVM);
 
     char value[PROPERTY_VALUE_MAX];
