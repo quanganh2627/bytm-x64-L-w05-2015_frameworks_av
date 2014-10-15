@@ -668,6 +668,13 @@ status_t AudioFlinger::PlaybackThread::Track::start(AudioSystem::sync_event_t ev
                 invalidate();
                 return PERMISSION_DENIED;
             }
+            audio_mode_t mode = AUDIO_MODE_INVALID;
+            mode = thread->mAudioFlinger->getMode();
+            if ((mode == AUDIO_MODE_IN_CALL) ||
+                (mode == AUDIO_MODE_IN_COMMUNICATION)) {
+                invalidate();
+                return PERMISSION_DENIED;
+            }
         }
         Mutex::Autolock _lth(thread->mLock);
         track_state state = mState;
