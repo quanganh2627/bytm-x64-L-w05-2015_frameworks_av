@@ -791,6 +791,13 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
         uint8_t hi = chunkType >> 24;
         uint8_t lo = (chunkType >> 16) & 0xff;
 
+        // chunType is "0x37467878" equal '7Fxx', it is user defined chunk, now just skip it;
+        if (chunkType == 0x37467878) {
+            data += 16;
+            size -= 16;
+            continue;
+        }
+
         if (hi < '0' || hi > '9' || lo < '0' || lo > '9') {
             return ERROR_MALFORMED;
         }
@@ -870,6 +877,9 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
 
     for (size_t i = 0; i < mTracks.size(); ++i) {
         Track *track = &mTracks.editItemAt(i);
+        if (track->mKind == Track::OTHER) {
+            continue;
+        }
 
         if (track->mBytesPerSample > 0) {
             // Assume all chunks are roughly the same size for now.
@@ -884,7 +894,7 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
 
             double avgChunkSize = 0;
             size_t j;
-            for (j = 0; j <= numSamplesToAverage; ++j) {
+            for (j = 0; j < numSamplesToAverage; ++j) {
                 off64_t offset;
                 size_t size;
                 bool isKey;
