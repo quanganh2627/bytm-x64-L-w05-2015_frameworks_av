@@ -643,10 +643,11 @@ status_t Parameters::initialize(const CameraMetadata *info, int deviceVersion) {
         params.set(CameraParameters::KEY_SUPPORTED_FLASH_MODES,
                 supportedFlashModes);
     } else {
-        // No flash means null flash mode and supported flash modes keys, so
-        // remove them just to be safe
-        params.remove(CameraParameters::KEY_FLASH_MODE);
-        params.remove(CameraParameters::KEY_SUPPORTED_FLASH_MODES);
+        flashMode = Parameters::FLASH_MODE_OFF;
+        params.set(CameraParameters::KEY_FLASH_MODE,
+                CameraParameters::FLASH_MODE_OFF);
+        params.set(CameraParameters::KEY_SUPPORTED_FLASH_MODES,
+                CameraParameters::FLASH_MODE_OFF);
     }
 
     camera_metadata_ro_entry_t minFocusDistance =
@@ -1616,9 +1617,7 @@ status_t Parameters::set(const String8& paramString) {
     if (validatedParams.flashMode != flashMode) {
         camera_metadata_ro_entry_t flashAvailable =
             staticInfo(ANDROID_FLASH_INFO_AVAILABLE, 1, 1);
-        bool isFlashAvailable =
-                flashAvailable.data.u8[0] == ANDROID_FLASH_INFO_AVAILABLE_TRUE;
-        if (!isFlashAvailable &&
+        if (!flashAvailable.data.u8[0] &&
                 validatedParams.flashMode != Parameters::FLASH_MODE_OFF) {
             ALOGE("%s: Requested flash mode \"%s\" is not supported: "
                     "No flash on device", __FUNCTION__,
@@ -1643,11 +1642,9 @@ status_t Parameters::set(const String8& paramString) {
                     newParams.get(CameraParameters::KEY_FLASH_MODE));
             return BAD_VALUE;
         }
-        // Update in case of override, but only if flash is supported
-        if (isFlashAvailable) {
-            newParams.set(CameraParameters::KEY_FLASH_MODE,
-                    flashModeEnumToString(validatedParams.flashMode));
-        }
+        // Update in case of override
+        newParams.set(CameraParameters::KEY_FLASH_MODE,
+                flashModeEnumToString(validatedParams.flashMode));
     }
 
     // WHITE_BALANCE
@@ -2389,7 +2386,7 @@ Parameters::Parameters::flashMode_t Parameters::flashModeStringToEnum(
         const char *flashMode) {
     return
         !flashMode ?
-            Parameters::FLASH_MODE_OFF :
+            Parameters::FLASH_MODE_INVALID :
         !strcmp(flashMode, CameraParameters::FLASH_MODE_OFF) ?
             Parameters::FLASH_MODE_OFF :
         !strcmp(flashMode, CameraParameters::FLASH_MODE_AUTO) ?
