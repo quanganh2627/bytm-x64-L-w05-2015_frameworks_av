@@ -33,6 +33,10 @@ LOCAL_SHARED_LIBRARIES :=               \
         libstagefright_foundation       \
         libdl
 
+ifeq ($(USE_INTEL_MDP),true)
+    LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
+endif
+
 LOCAL_MODULE:= libstagefright_omx
 
 include $(BUILD_SHARED_LIBRARY)

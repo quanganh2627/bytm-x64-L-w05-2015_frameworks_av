@@ -62,6 +62,9 @@ extern const char *MEDIA_MIMETYPE_TEXT_3GPP;
 extern const char *MEDIA_MIMETYPE_TEXT_SUBRIP;
 extern const char *MEDIA_MIMETYPE_TEXT_VTT;
 extern const char *MEDIA_MIMETYPE_TEXT_CEA_608;
+#ifdef USE_INTEL_MDP
+extern const char *MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED;
+#endif
 
 }  // namespace android
 
