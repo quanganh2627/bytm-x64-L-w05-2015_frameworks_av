@@ -54,6 +54,7 @@ enum {
     kKeyAACProfile        = 'aacp',  // int32_t
     kKeyAVCC              = 'avcc',  // raw data
     kKeyD263              = 'd263',  // raw data
+    kKeyAlacMagicCookie   = 'almc',  // raw data
     kKeyVorbisInfo        = 'vinf',  // raw data
     kKeyVorbisBooks       = 'vboo',  // raw data
     kKeyWantsNALFragments = 'NALf',
@@ -161,6 +162,12 @@ enum {
     kKeyCryptoDefaultIVSize = 'cryS',  // int32_t
 
     kKeyPssh              = 'pssh',  // raw data
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    kKeyWmaBlockAlign     = 'blka',
+    kKeyWmaFormatTag      = 'frmt',
+    kKeyBitPerSample      = 'btps',
+#endif //ifdef USE_INTEL_ASF_EXTRACTOR
+
 };
 
 enum {

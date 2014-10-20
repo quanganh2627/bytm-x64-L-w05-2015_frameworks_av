@@ -33,6 +33,9 @@
 #include "include/OggExtractor.h"
 #include "include/WAVExtractor.h"
 #include "include/WVMExtractor.h"
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#endif
 
 #include "matroska/MatroskaExtractor.h"
 
@@ -171,6 +174,9 @@ void DataSource::RegisterDefaultSniffers() {
     RegisterSniffer_l(SniffMPEG2PS);
     RegisterSniffer_l(SniffAVI);
 
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    RegisterSniffer_l(SniffAsf);
+#endif
     RegisterSniffer_l(SniffWVM);
 
     char value[PROPERTY_VALUE_MAX];
@@ -234,6 +240,9 @@ sp<DataSource> DataSource::CreateFromURI(
     }
 
     if (source == NULL || source->initCheck() != OK) {
+        if (source != NULL) {
+            source.clear();
+        }
         return NULL;
     }
 

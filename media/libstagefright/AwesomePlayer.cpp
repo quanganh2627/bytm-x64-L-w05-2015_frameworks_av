@@ -56,6 +56,11 @@
 
 #include <cutils/properties.h>
 
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "AsfExtractor.h"
+#include "MetaDataExt.h"
+#endif
+
 #define USE_SURFACE_ALLOC 1
 #define FRAME_DROP_FREQ 0
 
@@ -1892,7 +1897,13 @@ void AwesomePlayer::onVideoEvent() {
 
         ATRACE_INT("Video Lateness (ms)", latenessUs / 1E3);
 
+        sp<MetaData> meta = mExtractor->getMetaData();
+        const char *mime;
+        CHECK(meta->findCString(kKeyMIMEType, &mime));
         if (latenessUs > 500000ll
+#ifdef USE_INTEL_ASF_EXTRACTOR
+                && strcasecmp(mime, MEDIA_MIMETYPE_CONTAINER_ASF)
+#endif
                 && mAudioPlayer != NULL
                 && mAudioPlayer->getMediaTimeMapping(
                     &realTimeUs, &mediaTimeUs)) {
