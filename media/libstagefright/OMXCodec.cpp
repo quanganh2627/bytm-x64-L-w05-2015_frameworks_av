@@ -75,6 +75,15 @@ enum{
 
 #include "include/avc_utils.h"
 
+#ifdef USE_INTEL_MDP
+#include "UMCMacro.h"
+//#include "include/ThreadedSource.h"
+#endif
+
+#ifdef USE_INTEL_ASF_EXTRACTOR
+#include "MetaDataExt.h"
+#endif
+
 namespace android {
 
 // Treat time out as an error if we have not received any output
@@ -95,6 +104,18 @@ static sp<MediaSource> Make##name(const sp<MediaSource> &source, const sp<MetaDa
 
 #define FACTORY_REF(name) { #name, Make##name },
 
+#ifdef USE_INTEL_MDP
+FACTORY_CREATE_DECL(CIPMP3Decoder)
+FACTORY_CREATE_DECL(CIPAACDecoder)
+FACTORY_CREATE_ENCODER_DECL(CIPAACEncoder)
+FACTORY_CREATE_DECL(CIPAMRNBDecoder)
+FACTORY_CREATE_ENCODER_DECL(CIPAMRNBEncoder)
+FACTORY_CREATE_DECL(CIPAMRWBDecoder)
+FACTORY_CREATE_ENCODER_DECL(CIPAMRWBEncoder)
+FACTORY_CREATE_DECL(CIPVorbisDecoder)
+FACTORY_CREATE_DECL(CIPWMADecoder)
+#endif
+
 FACTORY_CREATE_ENCODER(AACEncoder)
 
 static sp<MediaSource> InstantiateSoftwareEncoder(
@@ -105,7 +126,21 @@ static sp<MediaSource> InstantiateSoftwareEncoder(
         sp<MediaSource> (*CreateFunc)(const sp<MediaSource> &, const sp<MetaData> &);
     };
 
+    if (!strncmp(name, "CIPAACEncoder", 13)) {
+        int32_t aacProfile;
+        meta->findInt32(kKeyAACProfile, &aacProfile);
+        if(aacProfile != OMX_AUDIO_AACObjectLC) {
+           return NULL; //Use Google AAC encoder for all AAC profiles except AAC_LC.
+        }
+    }
+
+
     static const FactoryInfo kFactoryInfo[] = {
+#ifdef USE_INTEL_MDP
+        FACTORY_REF(CIPAMRNBEncoder)
+        FACTORY_REF(CIPAMRWBEncoder)
+        FACTORY_REF(CIPAACEncoder)
+#endif // #ifdef USE_INTEL_MDP
         FACTORY_REF(AACEncoder)
     };
     for (size_t i = 0;
@@ -117,6 +152,35 @@ static sp<MediaSource> InstantiateSoftwareEncoder(
 
     return NULL;
 }
+
+#ifdef USE_INTEL_MDP
+/* for SF decoders plug-ins */
+static sp<MediaSource> InstantiateSoftwareDecoder(
+        const char *name, const sp<MediaSource> &source) {
+    struct FactoryInfo {
+        const char *name;
+        sp<MediaSource> (*CreateFunc)(const sp<MediaSource> &);
+    };
+
+    static const FactoryInfo kFactoryInfo[] = {
+
+        FACTORY_REF(CIPMP3Decoder)
+        FACTORY_REF(CIPAACDecoder)
+        FACTORY_REF(CIPAMRNBDecoder)
+        FACTORY_REF(CIPAMRWBDecoder)
+        FACTORY_REF(CIPVorbisDecoder)
+        FACTORY_REF(CIPWMADecoder)
+    };
+    for (size_t i = 0;
+         i < sizeof(kFactoryInfo) / sizeof(kFactoryInfo[0]); ++i) {
+        if (!strcmp(name, kFactoryInfo[i].name)) {
+           return (*kFactoryInfo[i].CreateFunc)(source);
+        }
+    }
+
+    return NULL;
+}
+#endif // #ifdef USE_INTEL_MDP
 
 #undef FACTORY_CREATE_ENCODER
 #undef FACTORY_REF
@@ -352,6 +416,8 @@ sp<MediaSource> OMXCodec::Create(
             componentName = tmp.c_str();
         }
 
+
+#ifndef USE_INTEL_MDP
         if (createEncoder) {
             sp<MediaSource> softwareCodec =
                 InstantiateSoftwareEncoder(componentName, source, meta);
@@ -362,6 +428,17 @@ sp<MediaSource> OMXCodec::Create(
                 return softwareCodec;
             }
         }
+#else
+        sp<MediaSource> softwareCodec = (createEncoder)?
+        InstantiateSoftwareEncoder(componentName, source, meta):
+        InstantiateSoftwareDecoder(componentName, source);
+
+        if (softwareCodec != NULL) {
+            ALOGV("Successfully allocated software codec '%s'", componentName);
+
+            return softwareCodec;
+        }
+#endif
 
         ALOGV("Attempting to allocate OMX node '%s'", componentName);
 
@@ -552,6 +629,12 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
 
             addCodecSpecificData(
                     codec_specific_data, codec_specific_data_size);
+#ifdef USE_INTEL_ASF_EXTRACTOR
+        } else if (meta->findData(kKeyConfigData, &type, &data, &size)) {
+
+            CODEC_LOGV("Found config data for WMV, size is %d", size);
+            addCodecSpecificData(data, size);
+#endif
         } else if (meta->findData(kKeyAVCC, &type, &data, &size)) {
             // Parse the AVCDecoderConfigurationRecord
 
@@ -915,6 +998,10 @@ void OMXCodec::setVideoInputFormat(
         compressionFormat = OMX_VIDEO_CodingMPEG4;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_H263, mime)) {
         compressionFormat = OMX_VIDEO_CodingH263;
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_WMV, mime)) {
+        compressionFormat = OMX_VIDEO_CodingWMV;
+#endif
     } else {
         ALOGE("Not a supported video mime type: %s", mime);
         CHECK(!"Should not be here. Not a supported video mime type.");
@@ -1322,6 +1409,10 @@ status_t OMXCodec::setVideoOutputFormat(
         compressionFormat = OMX_VIDEO_CodingVP9;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_MPEG2, mime)) {
         compressionFormat = OMX_VIDEO_CodingMPEG2;
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_WMV, mime)) {
+        compressionFormat = OMX_VIDEO_CodingWMV;
+#endif
     } else {
         ALOGE("Not a supported video mime type: %s", mime);
         CHECK(!"Should not be here. Not a supported video mime type.");
@@ -1522,6 +1613,11 @@ void OMXCodec::setComponentRole(
             "video_decoder.vp8", "video_encoder.vp8" },
         { MEDIA_MIMETYPE_VIDEO_VP9,
             "video_decoder.vp9", "video_encoder.vp9" },
+#ifdef USE_INTEL_ASF_EXTRACTOR
+        { MEDIA_MIMETYPE_VIDEO_WMV,
+            "video_decoder.wmv", NULL },
+#endif
+
         { MEDIA_MIMETYPE_AUDIO_RAW,
             "audio_decoder.raw", "audio_encoder.raw" },
         { MEDIA_MIMETYPE_AUDIO_FLAC,

@@ -60,5 +60,8 @@ const char *MEDIA_MIMETYPE_TEXT_3GPP = "text/3gpp-tt";
 const char *MEDIA_MIMETYPE_TEXT_SUBRIP = "application/x-subrip";
 const char *MEDIA_MIMETYPE_TEXT_VTT = "text/vtt";
 const char *MEDIA_MIMETYPE_TEXT_CEA_608 = "text/cea-608";
+#ifdef USE_INTEL_MDP
+const char *MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED = "audio/mp4a-aacextended"; //For Audio Object Type > 31
+#endif
 
 }  // namespace android

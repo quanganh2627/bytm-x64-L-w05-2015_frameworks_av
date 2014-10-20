@@ -55,6 +55,7 @@ enum {
     kKeyAVCC              = 'avcc',  // raw data
     kKeyHVCC              = 'hvcc',  // raw data
     kKeyD263              = 'd263',  // raw data
+    kKeyAlacMagicCookie   = 'almc',  // raw data
     kKeyVorbisInfo        = 'vinf',  // raw data
     kKeyVorbisBooks       = 'vboo',  // raw data
     kKeyOpusHeader        = 'ohdr',  // raw data
@@ -173,6 +174,12 @@ enum {
     kKeyTrackIsDefault    = 'dflt', // bool (int32_t)
     // Similar to MediaFormat.KEY_IS_FORCED_SUBTITLE but pertains to av tracks as well.
     kKeyTrackIsForced     = 'frcd', // bool (int32_t)
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    kKeyWmaBlockAlign     = 'blka',
+    kKeyWmaFormatTag      = 'frmt',
+    kKeyBitPerSample      = 'btps',
+#endif //ifdef USE_INTEL_ASF_EXTRACTOR
+
 };
 
 enum {
