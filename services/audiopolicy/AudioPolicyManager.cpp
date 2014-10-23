@@ -897,8 +897,14 @@ audio_io_handle_t AudioPolicyManager::getOutputForAttr(const audio_attributes_t 
     ALOGV("getOutputForAttr() usage=%d, content=%d, tag=%s flags=%08x",
             attr->usage, attr->content_type, attr->tags, attr->flags);
 
+    audio_stream_type_t stream = streamTypefromAttributesInt(attr);
+
     // TODO this is where filtering for custom policies (rerouting, dynamic sources) will go
+#ifdef BGM_ENABLED
+    routing_strategy strategy = getStrategyforbackgroundsink(stream);
+#else
     routing_strategy strategy = (routing_strategy) getStrategyForAttr(attr);
+#endif //BGM_ENABLED
     audio_devices_t device = getDeviceForStrategy(strategy, false /*fromCache*/);
 
     if ((attr->flags & AUDIO_FLAG_HW_AV_SYNC) != 0) {
@@ -908,7 +914,6 @@ audio_io_handle_t AudioPolicyManager::getOutputForAttr(const audio_attributes_t 
     ALOGV("getOutputForAttr() device %d, samplingRate %d, format %x, channelMask %x, flags %x",
           device, samplingRate, format, channelMask, flags);
 
-    audio_stream_type_t stream = streamTypefromAttributesInt(attr);
 #ifdef BGM_ENABLED
     //BGMUSIC support - if more than one instance requests
     // the same device, force different sink for other instances.
