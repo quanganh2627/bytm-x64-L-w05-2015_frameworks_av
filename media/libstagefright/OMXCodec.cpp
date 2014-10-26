@@ -1832,7 +1832,7 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                 mNativeWindow.get(), NATIVE_WINDOW_QUEUES_TO_WINDOW_COMPOSER,
                 &is_native_window);
 
-    if(err==0)
+    if(err==0 && def.format.video.eColorFormat != OMX_COLOR_FormatYUV420Planar)
     {
         /* Only videos which are shown in native windows can be rescaled */
         if(is_native_window) {
