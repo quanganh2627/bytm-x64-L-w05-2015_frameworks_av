@@ -542,6 +542,12 @@ static const char *GetMIMETypeForHandler(uint32_t handler) {
         case FOURCC('D', 'I', 'G', 'I'):
         case FOURCC('D', 'I', 'V', '1'):
         case FOURCC('d', 'i', 'v', '1'):
+        case FOURCC('D', 'I', 'V', '3'):
+        case FOURCC('d', 'i', 'v', '3'):
+        case FOURCC('D', 'I', 'V', '4'):
+        case FOURCC('d', 'i', 'v', '4'):
+        case FOURCC('D', 'I', 'V', '5'):
+        case FOURCC('d', 'i', 'v', '5'):
         case FOURCC('D', 'I', 'V', 'X'):
         case FOURCC('d', 'i', 'v', 'x'):
         case FOURCC('D', 'X', '5', '0'):
