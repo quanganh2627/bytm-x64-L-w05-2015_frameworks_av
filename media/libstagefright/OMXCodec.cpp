@@ -506,6 +506,7 @@ status_t OMXCodec::parseHEVCCodecSpecificData(
     }
     return OK;
 }
+
 status_t OMXCodec::parseAVCCodecSpecificData(
         const void *data, size_t size,
         unsigned *profile, unsigned *level) {
@@ -947,7 +948,7 @@ void OMXCodec::setVideoInputFormat(
     if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mime)) {
         compressionFormat = OMX_VIDEO_CodingAVC;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mime)) {
-		compressionFormat = OMX_VIDEO_CodingHEVC;
+        compressionFormat = OMX_VIDEO_CodingHEVC;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_MPEG4, mime)) {
         compressionFormat = OMX_VIDEO_CodingMPEG4;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_H263, mime)) {
@@ -1353,7 +1354,7 @@ status_t OMXCodec::setVideoOutputFormat(
     if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mime)) {
         compressionFormat = OMX_VIDEO_CodingAVC;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mime)) {
-		compressionFormat = OMX_VIDEO_CodingHEVC;
+        compressionFormat = OMX_VIDEO_CodingHEVC;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_MPEG4, mime)) {
         compressionFormat = OMX_VIDEO_CodingMPEG4;
     } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_H263, mime)) {
@@ -1557,7 +1558,7 @@ void OMXCodec::setComponentRole(
         { MEDIA_MIMETYPE_VIDEO_AVC,
             "video_decoder.avc", "video_encoder.avc" },
         { MEDIA_MIMETYPE_VIDEO_HEVC,
-			"video_decoder.hevc", "video_encoder.hevc" },
+            "video_decoder.hevc", "video_encoder.hevc" },
         { MEDIA_MIMETYPE_VIDEO_MPEG4,
             "video_decoder.mpeg4", "video_encoder.mpeg4" },
         { MEDIA_MIMETYPE_VIDEO_H263,
@@ -3318,7 +3319,7 @@ bool OMXCodec::drainInputBuffer(BufferInfo *info) {
         size_t size = specific->mSize;
 
         if ((!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mMIME) ||
-			 !strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mMIME))
+                !strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mMIME))
                 && !(mQuirks & kWantsNALFragments)) {
             static const uint8_t kNALStartCode[4] =
                     { 0x00, 0x00, 0x00, 0x01 };

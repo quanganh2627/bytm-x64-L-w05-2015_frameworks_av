@@ -507,7 +507,7 @@ status_t MPEG4Extractor::readMetaData() {
         } else {
             mFileMetaData->setCString(kKeyMIMEType, "audio/mp4");
         }
-
+        mInitCheck = OK;
     } else {
         mInitCheck = err;
     }
@@ -803,7 +803,6 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
         if (*offset != stop_offset) {
             return ERROR_MALFORMED;
         }
-
 
         return OK;
     }
@@ -1339,7 +1338,6 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
                 return err;
             }
 
-
             *offset += chunk_size;
             break;
         }
@@ -1558,6 +1556,8 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
 
             mLastTrack->meta->setData(
                     kKeyAVCC, kTypeAVCC, buffer->data(), chunk_data_size);
+            *offset += chunk_size;
+
 
             break;
         }
@@ -2242,10 +2242,10 @@ status_t MPEG4Extractor::verifyTrack(Track *track) {
             return ERROR_MALFORMED;
         }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_VIDEO_HEVC)) {
-		if (!track->meta->findData(kKeyHVCC, &type, &data, &size)
-				|| type != kTypeHVCC) {
-			return ERROR_MALFORMED;
-		}
+        if (!track->meta->findData(kKeyHVCC, &type, &data, &size)
+                || type != kTypeHVCC) {
+            return ERROR_MALFORMED;
+        }
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_VIDEO_MPEG4)
             || !strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AAC)) {
         if (!track->meta->findData(kKeyESDS, &type, &data, &size)
@@ -2444,15 +2444,15 @@ MPEG4Source::MPEG4Source(
         // The number of bytes used to encode the length of a NAL unit.
         mNALLengthSize = 1 + (ptr[4] & 3);
     } else if (mIsHEVC) {
-		uint32_t type;
-		const void *data;
-		size_t size;
-		CHECK(format->findData(kKeyHVCC, &type, &data, &size));
-		const uint8_t *ptr = (const uint8_t *)data;
+        uint32_t type;
+        const void *data;
+        size_t size;
+        CHECK(format->findData(kKeyHVCC, &type, &data, &size));
+        const uint8_t *ptr = (const uint8_t *)data;
 
-		CHECK(size >= 7);
-		CHECK_EQ((unsigned)ptr[0], 1u);
-		mNALLengthSize = 1 + (ptr[14 + 7] & 3);
+        CHECK(size >= 7);
+        CHECK_EQ((unsigned)ptr[0], 1u);
+        mNALLengthSize = 1 + (ptr[14 + 7] & 3);
     }
 
     CHECK(format->findInt32(kKeyTrackID, &mTrackId));
