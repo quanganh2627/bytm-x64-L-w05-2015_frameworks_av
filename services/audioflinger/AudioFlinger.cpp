@@ -1421,8 +1421,6 @@ sp<IAudioRecord> AudioFlinger::openRecord(
         pid_t pid = IPCThreadState::self()->getCallingPid();
         client = registerPid(pid);
 
-        mPreProcAudioSessionId = *sessionId;
-
         if (sessionId != NULL && *sessionId != AUDIO_SESSION_ALLOCATE) {
             lSessionId = *sessionId;
         } else {
@@ -1433,6 +1431,8 @@ sp<IAudioRecord> AudioFlinger::openRecord(
             }
         }
         ALOGV("openRecord() lSessionId: %d input %d", lSessionId, input);
+
+        mPreProcAudioSessionId = lSessionId;
 
         // TODO: the uid should be passed in as a parameter to openRecord
         recordTrack = thread->createRecordTrack_l(client, sampleRate, format, channelMask,
