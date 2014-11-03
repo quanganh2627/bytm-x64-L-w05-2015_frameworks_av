@@ -4706,10 +4706,6 @@ bool ACodec::FlushingState::onOMXEvent(
                         && mFlushComplete[kPortIndexOutput]) {
                     changeStateIfWeOwnAllBuffers();
                 }
-            } else if ( data2 != OMX_ALL) {
-                /* flush on neither input nor output ... must be pp port */
-                ALOGD("FlushingState::onOMXEvent() call BaseState::OnOmxEvent");
-                return BaseState::onOMXEvent(event, data1, data2);
             } else {
                 CHECK_EQ(data2, OMX_ALL);
                 CHECK(mFlushComplete[kPortIndexInput]);
