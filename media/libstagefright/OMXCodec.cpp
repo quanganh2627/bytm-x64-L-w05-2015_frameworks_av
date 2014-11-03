@@ -94,6 +94,14 @@ static sp<MediaSource> Make##name(const sp<MediaSource> &source, const sp<MetaDa
 
 #define FACTORY_REF(name) { #name, Make##name },
 
+#ifdef TARGET_HAS_ISV
+#define INIT_OMX_TYPE(f) \
+  memset(&f, 0, sizeof(f)); \
+  (f).nSize = sizeof(f); \
+  (f).nVersion.s.nVersionMajor = 1; \
+  (f).nVersion.s.nVersionMinor = 1
+#endif
+
 #ifdef USE_INTEL_MDP
 FACTORY_CREATE_DECL(CIPMP3Decoder)
 FACTORY_CREATE_DECL(CIPAACDecoder)
@@ -706,6 +714,12 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
         if (mIsEncoder) {
             setVideoInputFormat(mMIME, meta);
         } else {
+#ifdef TARGET_HAS_ISV
+            OMX_PARAM_DEBLOCKINGTYPE deblock;
+            INIT_OMX_TYPE(deblock);
+            deblock.bDeblocking = OMX_TRUE;
+            mOMX->setParameter(mNode, OMX_IndexParamCommonDeblocking, &deblock, sizeof(deblock));
+#endif
             status_t err = setVideoOutputFormat(
                     mMIME, meta);
 
