@@ -5952,6 +5952,7 @@ bool AudioFlinger::RecordThread::checkForNewParameter_l(const String8& keyValueP
                                                         status_t& status)
 {
     bool reconfig = false;
+    bool tracksInvalidated = false;
 
     status = NO_ERROR;
 
@@ -6009,6 +6010,9 @@ bool AudioFlinger::RecordThread::checkForNewParameter_l(const String8& keyValueP
             mOutDevice = value;
             status = BAD_VALUE;
         } else {
+            unsigned int prevInDevice = mInDevice;
+            bool prevInDeviceBt = (mInDevice == AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET);
+            bool inDeviceBt = (value == AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET);
             mInDevice = value;
             // disable AEC and NS if the device is a BT SCO headset supporting those
             // pre processings
@@ -6019,6 +6023,11 @@ bool AudioFlinger::RecordThread::checkForNewParameter_l(const String8& keyValueP
                     sp<RecordTrack> track = mTracks[i];
                     setEffectSuspended_l(FX_IID_AEC, suspend, track->sessionId());
                     setEffectSuspended_l(FX_IID_NS, suspend, track->sessionId());
+
+                    if ((!prevInDeviceBt && inDeviceBt) || (prevInDeviceBt && !inDeviceBt)) {
+                        track->invalidate();
+                        tracksInvalidated = true;
+                    }
                 }
             }
         }
@@ -6033,7 +6042,7 @@ bool AudioFlinger::RecordThread::checkForNewParameter_l(const String8& keyValueP
         mAudioSource = (audio_source_t)value;
     }
 
-    if (status == NO_ERROR) {
+    if (status == NO_ERROR && !tracksInvalidated) {
         status = mInput->stream->common.set_parameters(&mInput->stream->common,
                 keyValuePair.string());
         if (status == INVALID_OPERATION) {
