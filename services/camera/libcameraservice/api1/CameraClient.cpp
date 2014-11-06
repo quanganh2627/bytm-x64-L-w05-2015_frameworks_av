@@ -440,8 +440,11 @@ void CameraClient::stopPreview() {
     if (checkPidAndHardware() != NO_ERROR) return;
 
 
-    disableMsgType(CAMERA_MSG_PREVIEW_FRAME);
+    disableMsgType(CAMERA_MSG_PREVIEW_FRAME|
+            CAMERA_MSG_PREVIEW_METADATA|
+            CAMERA_MSG_ERROR);
     mHardware->stopPreview();
+    enableMsgType(CAMERA_MSG_PREVIEW_METADATA|CAMERA_MSG_ERROR);
 
     mPreviewBuffer.clear();
 }
@@ -452,8 +455,9 @@ void CameraClient::stopRecording() {
     Mutex::Autolock lock(mLock);
     if (checkPidAndHardware() != NO_ERROR) return;
 
-    disableMsgType(CAMERA_MSG_VIDEO_FRAME);
+    disableMsgType(CAMERA_MSG_VIDEO_FRAME|CAMERA_MSG_ERROR);
     mHardware->stopRecording();
+    enableMsgType(CAMERA_MSG_ERROR);
     mCameraService->playSound(CameraService::SOUND_RECORDING);
 
     mPreviewBuffer.clear();
