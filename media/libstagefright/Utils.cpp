@@ -110,6 +110,10 @@ status_t convertMetaDataToMessage(
 
         msg->setInt32("width", width);
         msg->setInt32("height", height);
+        int32_t framerate = 0;
+        if (meta->findInt32(kKeyFrameRate, &framerate)) {
+            msg->setInt32("frame-rate", framerate);
+        }
 
         int32_t sarWidth, sarHeight;
         if (meta->findInt32(kKeySARWidth, &sarWidth)
