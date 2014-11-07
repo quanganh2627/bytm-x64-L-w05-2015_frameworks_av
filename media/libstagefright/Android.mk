@@ -74,6 +74,7 @@ LOCAL_C_INCLUDES:= \
         $(TOP)/system/netd/include \
         $(TOP)/external/icu/icu4c/source/common \
         $(TOP)/external/icu/icu4c/source/i18n \
+        $(TOP)/external/alac \
 
 LOCAL_SHARED_LIBRARIES := \
         libbinder \
