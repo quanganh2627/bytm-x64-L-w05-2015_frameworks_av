@@ -71,6 +71,11 @@ Camera::~Camera()
     // deadlock if we call any method of ICamera here.
 }
 
+status_t Camera::setPriority(int cameraId, bool lowPriority)
+{
+    return CameraBaseT::setPriority(cameraId, lowPriority);
+}
+
 sp<Camera> Camera::connect(int cameraId, const String16& clientPackageName,
         int clientUid)
 {

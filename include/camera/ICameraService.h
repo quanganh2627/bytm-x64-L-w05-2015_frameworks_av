@@ -53,6 +53,9 @@ public:
         GET_LEGACY_PARAMETERS,
         SUPPORTS_CAMERA_API,
         CONNECT_LEGACY,
+        // Intel extension not added to ICameraService.aidl, since setting
+        // low priority is not supported for Camera HAL v3. Keep at the end
+        SET_PRIORITY,
     };
 
     enum {
@@ -142,6 +145,8 @@ public:
             int clientUid,
             /*out*/
             sp<ICamera>& device) = 0;
+
+    virtual status_t setPriority(int cameraId, bool lowPriority) = 0;
 };
 
 // ----------------------------------------------------------------------------

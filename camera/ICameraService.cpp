@@ -312,6 +312,16 @@ public:
         status_t res = data.readInt32();
         return res;
     }
+
+    virtual status_t setPriority(int cameraId, bool lowPriority)
+    {
+        Parcel data, reply;
+        data.writeInterfaceToken(ICameraService::getInterfaceDescriptor());
+        data.writeInt32(cameraId);
+        data.writeInt32(lowPriority);
+        remote()->transact(BnCameraService::SET_PRIORITY, data, &reply);
+        return reply.readInt32();
+    }
 };
 
 IMPLEMENT_META_INTERFACE(CameraService, "android.hardware.ICameraService");
@@ -488,6 +498,13 @@ status_t BnCameraService::onTransact(
             } else {
                 reply->writeInt32(0);
             }
+            return NO_ERROR;
+        } break;
+        case SET_PRIORITY: {
+            CHECK_INTERFACE(ICameraService, data, reply);
+            int32_t cameraId = data.readInt32();
+            bool lowPriority = data.readInt32();
+            reply->writeInt32(setPriority(cameraId, lowPriority));
             return NO_ERROR;
         } break;
         default:

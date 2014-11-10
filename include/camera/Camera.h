@@ -70,6 +70,7 @@ public:
 
             // construct a camera client from an existing remote
     static  sp<Camera>  create(const sp<ICamera>& camera);
+    static  status_t    setPriority(int cameraId, bool lowPriority);
     static  sp<Camera>  connect(int cameraId,
                                 const String16& clientPackageName,
                                 int clientUid);
