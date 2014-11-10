@@ -9,6 +9,7 @@
  * Mar 31 2014: IMC: rescale video on demand
  * Jun 17 2014: IMC: provide stride and slice hight to play odd sized videos correctly
  * Jun 26 2014: IMC: remove assertions which brake rescaling
+ * Nov 11 2014: IMC: introduce kCamera, report 31 encoder profile, limit playback to 1080p, fixed check for hantro decoder, introduce thumbnailmode
  */
 
 /*
@@ -338,7 +339,14 @@ sp<MediaSource> OMXCodec::Create(
             tmp.append(".secure");
 
             componentName = tmp.c_str();
+        } else if (flags & kClientNeedsFramebuffer)
+            if(componentNameBase && strncmp(componentNameBase, "OMX.hantro.G1.video.decoder",27)==0) {
+                tmp = componentNameBase;
+                tmp.append(".thumbnail");
+
+                componentName = tmp.c_str();
         }
+
 
         if (createEncoder) {
             sp<MediaSource> softwareCodec =
@@ -469,6 +477,94 @@ status_t OMXCodec::parseAVCCodecSpecificData(
 
     return OK;
 }
+static OMX_VIDEO_AVCPROFILETYPE convertAVCProfile2OMXProfile(unsigned profile){
+    OMX_VIDEO_AVCPROFILETYPE type = OMX_VIDEO_AVCProfileMax;
+    switch(profile) {
+        case kAVCProfileBaseline:
+            type=OMX_VIDEO_AVCProfileBaseline;
+            break;
+        case kAVCProfileMain:
+            type=OMX_VIDEO_AVCProfileMain;
+            break;
+        case kAVCProfileExtended:
+            type=OMX_VIDEO_AVCProfileExtended;
+            break;
+        case kAVCProfileHigh:
+            type=OMX_VIDEO_AVCProfileHigh;
+            break;
+        case kAVCProfileHigh10:
+            type=OMX_VIDEO_AVCProfileHigh10;
+            break;
+        case kAVCProfileHigh422:
+            type=OMX_VIDEO_AVCProfileHigh422;
+            break;
+        case kAVCProfileHigh444:
+        case kAVCProfileCAVLC444Intra:
+            type=OMX_VIDEO_AVCProfileHigh444;
+            break;
+        default:
+            ;
+    }
+    return type;
+}
+
+static OMX_VIDEO_AVCLEVELTYPE covertAVCLevel2OMXlevel( unsigned level) {
+   OMX_VIDEO_AVCLEVELTYPE type = OMX_VIDEO_AVCLevelMax;
+
+   switch (level) {
+   case 9:
+        type = OMX_VIDEO_AVCLevel1b;
+        break;
+   case 10:
+        type = OMX_VIDEO_AVCLevel1;
+        break;
+   case 11:
+        type = OMX_VIDEO_AVCLevel11;
+        break;
+   case 12:
+        type = OMX_VIDEO_AVCLevel12;
+        break;
+   case 13:
+        type = OMX_VIDEO_AVCLevel13;
+        break;
+   case 20:
+        type = OMX_VIDEO_AVCLevel2;
+        break;
+   case 21:
+        type = OMX_VIDEO_AVCLevel21;
+        break;
+   case 22:
+        type = OMX_VIDEO_AVCLevel22;
+        break;
+   case 30:
+        type = OMX_VIDEO_AVCLevel3;
+        break;
+   case 31:
+        type = OMX_VIDEO_AVCLevel31;
+        break;
+   case 32:
+        type = OMX_VIDEO_AVCLevel32;
+        break;
+   case 40:
+        type = OMX_VIDEO_AVCLevel4;
+        break;
+   case 41:
+        type = OMX_VIDEO_AVCLevel41;
+        break;
+   case 42:
+        type = OMX_VIDEO_AVCLevel42;
+        break;
+   case 50:
+        type = OMX_VIDEO_AVCLevel5;
+        break;
+   case 51:
+        type = OMX_VIDEO_AVCLevel51;
+        break;
+   default:
+        ;
+   }
+   return type;
+}
 
 status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
     ALOGV("configureCodec protected=%d",
@@ -503,6 +599,38 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
             CODEC_LOGI(
                     "AVC profile = %u (%s), level = %u",
                     profile, AVCProfileToString(profile), level);
+
+            if(mComponentName && strncmp(mComponentName, "OMX.hantro.G1.video.decoder",27)==0) {
+                OMX_VIDEO_AVCLEVELTYPE omxlevel = covertAVCLevel2OMXlevel(level);
+                if(omxlevel != OMX_VIDEO_AVCLevelMax) {
+                    OMX_VIDEO_AVCPROFILETYPE omxprofile = convertAVCProfile2OMXProfile(profile);
+                    if(omxprofile != OMX_VIDEO_AVCProfileMax) {
+                        OMX_VIDEO_PARAM_PROFILELEVELTYPE param;
+                        bool supported = false;
+
+                        InitOMXParams(&param);
+                        param.nPortIndex = kPortIndexInput;
+
+                        for(param.nProfileIndex = 0, err = OMX_ErrorNone; (err == OMX_ErrorNone) && !supported; param.nProfileIndex++) {
+                            err = mOMX->getParameter(
+                                mNode, OMX_IndexParamVideoProfileLevelQuerySupported, &param, sizeof(param));
+                            if(err == OMX_ErrorNone) {
+                                OMX_VIDEO_AVCPROFILETYPE supportedProfile = static_cast<OMX_VIDEO_AVCPROFILETYPE>(param.eProfile);
+                                OMX_VIDEO_AVCLEVELTYPE supportedLevel = static_cast<OMX_VIDEO_AVCLEVELTYPE>(param.eLevel);
+
+                                if( (omxprofile == supportedProfile) && (omxlevel <= supportedLevel)) {
+                                    ALOGV("AVC profile and level is supported by decoder");
+                                    supported = true;
+                                    }
+                                }
+                            }
+                        if (!supported) {
+                            ALOGE("AVC profile  %u (%s) and level  %u is not supported by decoder",profile, AVCProfileToString(profile), level);
+                            return OMX_ErrorBadParameter;
+                            }
+                        }
+                    }
+                }
         } else if (meta->findData(kKeyVorbisInfo, &type, &data, &size)) {
             addCodecSpecificData(data, size);
 
@@ -994,12 +1122,20 @@ status_t OMXCodec::getVideoProfileLevel(
     InitOMXParams(&param);
     param.nPortIndex = kPortIndexOutput;
     for (param.nProfileIndex = 0;; ++param.nProfileIndex) {
-        status_t err = mOMX->getParameter(
+        if(      (mFlags&kCameraMode)
+            && (mComponentName)
+            && (strcmp(mComponentName, "OMX.hantro.7280.video.encoder")==0)
+            && (strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mMIME)==0))
+        {
+            /* hantro 7280  video encoder supports 720p for camera mode*/
+            param.eProfile = OMX_VIDEO_AVCProfileBaseline;
+            param.eLevel = OMX_VIDEO_AVCLevel31;
+        } else {status_t err = mOMX->getParameter(
                 mNode, OMX_IndexParamVideoProfileLevelQuerySupported,
                 &param, sizeof(param));
 
         if (err != OK) break;
-
+        }
         int32_t supportedProfile = static_cast<int32_t>(param.eProfile);
         int32_t supportedLevel = static_cast<int32_t>(param.eLevel);
         CODEC_LOGV("Supported profile: %d, level %d",
@@ -1207,6 +1343,12 @@ status_t OMXCodec::setVideoOutputFormat(
     aWidth  = (width + 15) & -16;
     aHeight = (height + 15) & -16;
 
+    /* platform limit is 1920*1080 */    
+    int32_t aSize = aWidth*aHeight;
+    if(aSize>(1088*1920)){
+        CODEC_LOGE("Reject video content of size with=%dx height=%d due to platform limitations",width,height);
+        return BAD_VALUE;
+        }
     CODEC_LOGV("setVideoOutputFormat width=%d, height=%d", width, height);
     CODEC_LOGV("setVideoOutputFormat width=%d, height=%d - alligned 16 bytes",
         aWidth, aHeight);
@@ -1854,11 +1996,11 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                     window_width,
                     window_height);
 
-                unsigned int rescale_width;
-                unsigned int rescale_height;
+                int rescale_width;
+                int rescale_height;
 
-                bool isLandscapeVideo = (((OMX_U32)def.format.video.nStride) > def.format.video.nSliceHeight);
-                bool isLandscapeWindow = (window_width>window_height);
+                bool isLandscapeVideo = (bool)(def.format.video.nStride>(int)def.format.video.nSliceHeight);
+                bool isLandscapeWindow = (bool)(window_width>window_height);
 
                 /* Compare the maximum dimension of the window with the maxium dimension of the video */
                 if((isLandscapeVideo != isLandscapeWindow)) {
@@ -1872,21 +2014,21 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                 /* Only if width and height are bigger, we can rescale.
                    In case only the height or the width is bigger, the video post proc might fail due to
                    parallel up and downscaling */
-                if(    rescale_height < def.format.video.nFrameHeight
-                    && rescale_width < def.format.video.nFrameWidth ) {
+                if(    rescale_height < (int)def.format.video.nFrameHeight
+                    && rescale_width < (int)def.format.video.nFrameWidth ) {
 
                     /* Recalc stride and sliceheight */
                     def.format.video.nStride  = (rescale_width + 15) & -16;
                     def.format.video.nSliceHeight = (rescale_height + 15) & -16;
 
                     /* Trace what we have done */
-                    ALOGW("allocateOutputBuffersFromNativeWindow rescale (width %lu ->%u, height %lu->%u, stride %lu, sliceheight %lu, format %d)",
-                        def.format.video.nFrameWidth,
+                    ALOGW("allocateOutputBuffersFromNativeWindow rescale (width %d ->%d, height %d->%d, stride %d, sliceheight %d, format %d)",
+                        (int)def.format.video.nFrameWidth,
                         rescale_width,
-                        def.format.video.nFrameHeight,
+                        (int)def.format.video.nFrameHeight,
                         rescale_height,
-                        def.format.video.nStride,
-                        def.format.video.nSliceHeight,
+                        (int)def.format.video.nStride,
+                        (int)def.format.video.nSliceHeight,
                         format);
 
                     def.format.video.nFrameWidth = rescale_width;
@@ -1901,10 +2043,10 @@ status_t OMXCodec::allocateOutputBuffersFromNativeWindow() {
                         0, 0,
                         rescale_width - 1,
                         rescale_height - 1);
+                    }
                 }
             }
         }
-    }
 
     err = native_window_set_buffers_geometry(
             mNativeWindow.get(),
@@ -4664,13 +4806,13 @@ void OMXCodec::initOutputFormat(const sp<MetaData> &inputFormat) {
                     CHECK_GE(rect.nWidth, 0u);
                     CHECK_GE(rect.nHeight, 0u);
 
-                    unsigned int rect_width = rect.nLeft + rect.nWidth - 1;
-                    unsigned int rect_height = rect.nTop + rect.nHeight - 1;
+                    int rect_width = rect.nLeft + rect.nWidth - 1;
+                    int rect_height = rect.nTop + rect.nHeight - 1;
 
-                    if(rect_width >= video_def->nFrameWidth)
-                        ALOGW("initOutputFormat warning (width %u >framewidth %lu)",rect_width,video_def->nFrameWidth);
-                    if(rect_height >= video_def->nFrameHeight)
-                        ALOGW("initOutputFormat warning (height %u >frameheight %lu)",rect_height,video_def->nFrameHeight);
+                    if(rect_width >= (int)video_def->nFrameWidth)
+                        ALOGW("initOutputFormat warning (width %d >framewidth %d)",rect_width,(int)(video_def->nFrameWidth));
+                    if(rect_height >= (int)video_def->nFrameHeight)
+                        ALOGW("initOutputFormat warning (height %d >frameheight %d)",rect_height,(int)(video_def->nFrameHeight));
 
                     mOutputFormat->setRect(
                             kKeyCropRect,
@@ -4773,6 +4915,59 @@ status_t QueryCodec(
         return OK;
     }
 
+
+    if(componentName && strncmp(componentName, "OMX.hantro.G1.video.decoder",27)==0) {
+        CodecProfileLevel profileLevel;
+        /* Do not create an instance of the OMX.hantro.G1.video.decoder but directly set the caps.*/
+        caps->mComponentName = componentName;
+        /* list supported mimetypes*/
+        if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_AVC, mime)){
+                profileLevel.mProfile = OMX_VIDEO_AVCProfileBaseline;
+                profileLevel.mLevel = OMX_VIDEO_AVCLevel41;
+                caps->mProfileLevels.push(profileLevel);
+
+                profileLevel.mProfile = OMX_VIDEO_AVCProfileMain;
+                caps->mProfileLevels.push(profileLevel);
+
+                profileLevel.mProfile = OMX_VIDEO_AVCProfileHigh;
+                caps->mProfileLevels.push(profileLevel);
+
+            } else if(!strcasecmp(MEDIA_MIMETYPE_VIDEO_MPEG4, mime)) {
+                profileLevel.mProfile = OMX_VIDEO_MPEG4ProfileSimple;
+                profileLevel.mLevel = OMX_VIDEO_MPEG4Level5;
+                caps->mProfileLevels.push(profileLevel);
+
+                profileLevel.mProfile = OMX_VIDEO_MPEG4ProfileAdvancedSimple;
+                profileLevel.mLevel = OMX_VIDEO_MPEG4Level5;
+                caps->mProfileLevels.push(profileLevel);
+
+            } else if(!strcasecmp(MEDIA_MIMETYPE_VIDEO_H263, mime)) {
+                profileLevel.mProfile = OMX_VIDEO_H263ProfileBaseline;
+                profileLevel.mLevel = OMX_VIDEO_H263Level70;
+                caps->mProfileLevels.push(profileLevel);
+
+            } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_VP8, mime)) {
+                /* OMX_VIDEO_VP8ProfileMain (0x01) and OMX_VIDEO_VP8Level_Version0 (0x01) are defined in the On2 source code, but not OMX framework.
+                   Maybe do not report any profile here...*/
+                profileLevel.mProfile = 0x01 /*OMX_VIDEO_VP8ProfileMain*/;
+                profileLevel.mLevel = 0x01 /*OMX_VIDEO_VP8Level_Version0*/;
+                caps->mProfileLevels.push(profileLevel);
+            }
+
+            /* add output port configuration*/
+            caps->mColorFormats.push(OMX_COLOR_FormatYUV420SemiPlanar);
+            caps->mColorFormats.push(OMX_COLOR_FormatYUV420PackedSemiPlanar);
+            caps->mColorFormats.push(OMX_COLOR_FormatYCbYCr);
+            caps->mColorFormats.push(OMX_COLOR_FormatYCrYCb);
+            caps->mColorFormats.push(OMX_COLOR_FormatCbYCrY);
+            caps->mColorFormats.push(OMX_COLOR_FormatCrYCbY);
+            caps->mColorFormats.push(OMX_COLOR_Format32bitARGB8888);
+            caps->mColorFormats.push(OMX_COLOR_Format32bitBGRA8888);
+            caps->mColorFormats.push(OMX_COLOR_Format16bitARGB1555);
+            caps->mColorFormats.push(OMX_COLOR_Format16bitARGB4444);
+            caps->mColorFormats.push(OMX_COLOR_Format16bitRGB565);
+            caps->mColorFormats.push(OMX_COLOR_Format16bitBGR565);
+    } else {
     sp<OMXCodecObserver> observer = new OMXCodecObserver;
     IOMX::node_id node;
     status_t err = omx->allocateNode(componentName, observer, &node);
@@ -4832,7 +5027,7 @@ status_t QueryCodec(
     }
 
     CHECK_EQ(omx->freeNode(node), (status_t)OK);
-
+	}
     return OK;
 }
 
