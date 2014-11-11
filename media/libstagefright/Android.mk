@@ -203,6 +203,10 @@ LOCAL_C_INCLUDES += \
         $(TOP)/frameworks/av/media/libstagefright/omx
 endif
 
+ifeq ($(INTEL_VIDEOENCODER_MULTIPLE_NALUS),true)
+LOCAL_CPPFLAGS += -DINTEL_VIDEOENCODER_MULTIPLE_NALUS
+endif
+
 LOCAL_MODULE:= libstagefright
 
 LOCAL_MODULE_TAGS := optional
