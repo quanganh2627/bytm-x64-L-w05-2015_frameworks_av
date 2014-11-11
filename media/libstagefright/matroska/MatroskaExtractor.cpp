@@ -439,6 +439,7 @@ void BlockIterator::seek(
     if (thisTrack->GetType() == 1) { // video
         MatroskaExtractor::TrackInfo& track = mExtractor->mTracks.editItemAt(mIndex);
         pTP = track.find(seekTimeNs);
+        pTrack = thisTrack;
     } else {
         // The Cue index is built around video keyframes
         for (size_t index = 0; index < trackCount; ++index) {
