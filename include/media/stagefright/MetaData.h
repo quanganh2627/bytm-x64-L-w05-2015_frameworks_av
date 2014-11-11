@@ -173,6 +173,11 @@ enum {
     kKeyTrackIsDefault    = 'dflt', // bool (int32_t)
     // Similar to MediaFormat.KEY_IS_FORCED_SUBTITLE but pertains to av tracks as well.
     kKeyTrackIsForced     = 'frcd', // bool (int32_t)
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    kKeyWmaBlockAlign     = 'blka',
+    kKeyWmaFormatTag      = 'frmt',
+    kKeyBitPerSample      = 'btps',
+#endif
 };
 
 enum {

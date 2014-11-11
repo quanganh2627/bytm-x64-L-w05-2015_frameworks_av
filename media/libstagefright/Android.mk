@@ -27,6 +27,7 @@ LOCAL_SRC_FILES:=                         \
         MP3Extractor.cpp                  \
         MPEG2TSWriter.cpp                 \
         MPEG4Extractor.cpp                \
+        AVIExtractor.cpp                  \
         MPEG4Writer.cpp                   \
         MediaAdapter.cpp                  \
         MediaBuffer.cpp                   \
@@ -117,6 +118,14 @@ LOCAL_SHARED_LIBRARIES += \
         libstagefright_avc_common \
         libstagefright_foundation \
         libdl
+
+ifeq ($(USE_INTEL_ASF_EXTRACTOR),true)
+LOCAL_C_INCLUDES += \
+        $(TARGET_OUT_HEADERS)/libmix_asf_extractor
+LOCAL_STATIC_LIBRARIES += libasfextractor
+LOCAL_SHARED_LIBRARIES += libasfparser
+LOCAL_CPPFLAGS += -DUSE_INTEL_ASF_EXTRACTOR
+endif
 
 LOCAL_CFLAGS += -Wno-multichar
 
