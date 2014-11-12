@@ -80,7 +80,7 @@ class ServerProxy;
 // Search also for "2", "left", "right", "[0]", "[1]", ">> 16", "<< 16", etc.
 #define FCC_2 2     // FCC_2 = Fixed Channel Count 2
 
-static const nsecs_t kDefaultStandbyTimeInNsecs = seconds(3);
+static const nsecs_t kDefaultStandbyTimeInNsecs = seconds(0);
 
 #define MAX_GAIN 4096.0f
 #define MAX_GAIN_INT 0x1000
