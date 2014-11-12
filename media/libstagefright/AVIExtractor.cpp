@@ -816,7 +816,9 @@ bool AVIExtractor::IsCorrectChunkType(
 
 status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
     if ((size % 16) != 0) {
-        return ERROR_MALFORMED;
+        /* some index chunk has redundant data, align to 16 instead of return error */
+        size -= (size % 16);
+        // return ERROR_MALFORMED;
     }
 
     sp<ABuffer> buffer = new ABuffer(size);
