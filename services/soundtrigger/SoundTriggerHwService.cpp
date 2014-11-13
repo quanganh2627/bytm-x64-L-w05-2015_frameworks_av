@@ -615,9 +615,15 @@ status_t SoundTriggerHwService::Module::startRecognition(sound_model_handle_t ha
     //TODO: get capture handle and device from audio policy service
     config->capture_handle = model->mCaptureIOHandle;
     config->capture_device = model->mCaptureDevice;
+
+    // WoV
+    mIsStartOrStop = true;
     status_t status = mHwDevice->start_recognition(mHwDevice, handle, config,
                                         SoundTriggerHwService::recognitionCallback,
                                         this);
+
+    // WoV
+    mIsStartOrStop = false;
 
     if (status == NO_ERROR) {
         model->mState = Model::STATE_ACTIVE;
@@ -643,7 +649,15 @@ status_t SoundTriggerHwService::Module::stopRecognition(sound_model_handle_t han
     if (model->mState != Model::STATE_ACTIVE) {
         return INVALID_OPERATION;
     }
+
+    // WoV
+    mIsStartOrStop = true;
+
     mHwDevice->stop_recognition(mHwDevice, handle);
+
+    // WoV
+    mIsStartOrStop = false;
+
     model->mState = Model::STATE_IDLE;
     return NO_ERROR;
 }
@@ -743,6 +757,15 @@ void SoundTriggerHwService::Module::setCaptureState_l(bool active)
     ALOGV("Module::setCaptureState_l %d", active);
     sp<SoundTriggerHwService> service;
     sound_trigger_service_state_t state;
+
+    // WoV(Sound trigger): workaround
+    char wov[512] = { 0 };
+    property_get("persist.wov.enable", wov, "1");
+    if (atoi(wov) == 1 && mIsStartOrStop) {
+        ALOGW("WoV workaround: don't send service event.");
+        return;
+    }
+    // end
 
     Vector< sp<IMemory> > events;
     {

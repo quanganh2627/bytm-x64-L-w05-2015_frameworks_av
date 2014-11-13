@@ -148,6 +148,9 @@ public:
         sp<ISoundTriggerClient>                mClient;
         DefaultKeyedVector< sound_model_handle_t, sp<Model> >     mModels;
         sound_trigger_service_state_t          mServiceState;
+
+        // Wov
+        bool                                   mIsStartOrStop;
     }; // class Module
 
     class CallbackThread : public Thread {
