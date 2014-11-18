@@ -916,12 +916,12 @@ status_t WifiDisplaySource::onReceiveM3Response(
                 && (!strcasecmp("true", val) || !strcmp("1", val))) {
             ALOGI("Using PCM audio.");
             mUsingPCMAudio = true;
-        } else if (supportsAAC) {
-            ALOGI("Using AAC audio.");
-            mUsingPCMAudio = false;
         } else if (supportsPCM) {
             ALOGI("Using PCM audio.");
             mUsingPCMAudio = true;
+        } else if (supportsAAC) {
+            ALOGI("Using AAC audio.");
+            mUsingPCMAudio = false;
         } else {
             ALOGI("Sink doesn't support an audio format we do.");
             return ERROR_UNSUPPORTED;
