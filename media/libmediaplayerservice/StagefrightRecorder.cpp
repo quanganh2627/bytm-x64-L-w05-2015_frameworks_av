@@ -6,6 +6,7 @@
  * Apr  3 2014: Intel: verify result of dup(output file descriptor)
  * Jun 17 2014: IMC: roll back profile calculation for h264;
  *                   set defaults in decoder accordingly
+ * Nov 11 2014: IMC: Introduce kCamera mode
  */
 
 /*
@@ -1533,7 +1534,7 @@ status_t StagefrightRecorder::setupVideoEncoder(
     sp<MediaSource> encoder = OMXCodec::Create(
             client.interface(), enc_meta,
             true /* createEncoder */, cameraSource,
-            NULL, encoder_flags);
+            NULL, encoder_flags|OMXCodec::kCameraMode);
     if (encoder == NULL) {
         ALOGW("Failed to create the encoder");
         // When the encoder fails to be created, we need

@@ -1,4 +1,11 @@
 /*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * Notes:
+ * OCT 21 2014: IMC: introduce kCameraMode
+ */
+ 
+/*
  * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,6 +67,9 @@ struct OMXCodec : public MediaSource,
 
         // Secure decoding mode
         kUseSecureInputBuffers = 256,
+
+		//Camera Mode
+		kCameraMode = 8192,
     };
     static sp<MediaSource> Create(
             const sp<IOMX> &omx,
