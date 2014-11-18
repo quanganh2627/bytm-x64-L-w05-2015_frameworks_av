@@ -25,6 +25,7 @@
 #include "RepeaterSource.h"
 #include "include/avc_utils.h"
 #include "WifiDisplaySource.h"
+#include "ExtAudioSource.h"
 
 #include <binder/IServiceManager.h>
 #include <cutils/properties.h>
@@ -34,7 +35,6 @@
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/foundation/AMessage.h>
 #include <media/stagefright/foundation/hexdump.h>
-#include <media/stagefright/AudioSource.h>
 #include <media/stagefright/DataSource.h>
 #include <media/stagefright/MediaDefs.h>
 #include <media/stagefright/MediaErrors.h>
@@ -1062,7 +1062,7 @@ status_t WifiDisplaySource::PlaybackSession::addVideoSource(
 }
 
 status_t WifiDisplaySource::PlaybackSession::addAudioSource(bool usePCMAudio) {
-    sp<AudioSource> audioSource = new AudioSource(
+    sp<ExtAudioSource> audioSource = new ExtAudioSource(
             AUDIO_SOURCE_REMOTE_SUBMIX,
             48000 /* sampleRate */,
             2 /* channelCount */);
