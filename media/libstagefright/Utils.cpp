@@ -167,6 +167,35 @@ status_t convertMetaDataToMessage(
         if (meta->findInt32(kKeyAACAOT, &aacProfile)) {
             msg->setInt32("aac-profile", aacProfile);
         }
+#ifdef USE_INTEL_ASF_EXTRACTOR
+        int32_t wmaBlockAlign = 0;
+        if (meta->findInt32(kKeyWmaBlockAlign, &wmaBlockAlign)) {
+            ALOGV("wmaBlockAlign %d ",wmaBlockAlign);
+            msg->setInt32("wma-block-align", wmaBlockAlign);
+        }
+        int32_t wmaFormatTag = 0;
+        if (meta->findInt32(kKeyWmaFormatTag, &wmaFormatTag)) {
+            ALOGV("wmaFormatTag %d ",wmaFormatTag);
+            msg->setInt32("wma-format-tag", wmaFormatTag);
+        }
+        size_t      decSpecInfoDataSize = 0;
+        const void *pDecSpecInfoData = NULL;
+
+        uint32_t type;
+        if (meta->findData(kKeyConfigData, &type, &pDecSpecInfoData, &decSpecInfoDataSize)) {
+            ALOGV("WMA Codec-specific data size: %d", decSpecInfoDataSize);
+
+            sp<ABuffer> buffer = new ABuffer(decSpecInfoDataSize);
+            memcpy(buffer->data(),pDecSpecInfoData,decSpecInfoDataSize);
+            buffer->setRange(0, 0);
+            buffer->setRange(0, decSpecInfoDataSize);
+
+            buffer->meta()->setInt32("csd", true);
+            buffer->meta()->setInt64("timeUs", 0);
+
+            msg->setBuffer("csd-0", buffer);
+        }
+#endif
     }
 
     int32_t maxInputSize;
