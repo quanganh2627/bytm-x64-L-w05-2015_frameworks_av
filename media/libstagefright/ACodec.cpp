@@ -1132,6 +1132,8 @@ status_t ACodec::setComponentRole(
 #ifdef USE_INTEL_ASF_EXTRACTOR
         { MEDIA_MIMETYPE_VIDEO_WMV,
             "video_decoder.wmv", NULL },
+        { MEDIA_MIMETYPE_AUDIO_WMA,
+            "audio_decoder.wma", NULL},
 #endif
         { MEDIA_MIMETYPE_AUDIO_RAW,
             "audio_decoder.raw", "audio_encoder.raw" },
@@ -1499,7 +1501,35 @@ status_t ACodec::configureCodec(
                     isADTS != 0, sbrMode, maxOutputChannelCount, drc,
                     pcmLimiterEnable);
         }
-    } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_NB)) {
+    }
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_WMA)) {
+        ALOGV("WMA track was found");
+        int32_t numChannels, sampleRate;
+        if (!msg->findInt32("channel-count", &numChannels)
+                || !msg->findInt32("sample-rate", &sampleRate)) {
+            err = INVALID_OPERATION;
+        } else {
+            int32_t wmaFormatTag = 0;
+            int32_t wmaBlockAlign = 0;
+
+            if (!msg->findInt32("bit-rate", &bitRate)) {
+                bitRate = 0;
+            }
+            if (!msg->findInt32("wma-format-tag", &wmaFormatTag)) {
+                wmaFormatTag = 0;
+            }
+            if (!msg->findInt32("wma-block-align", &wmaBlockAlign)) {
+                wmaBlockAlign = 0;
+            }
+            ALOGV("WMA bitRate %d wmaFormatTag %d wmaBlockAlign %d",bitRate, wmaFormatTag, wmaBlockAlign);
+            err = setupWMACodec(
+                    numChannels, sampleRate, bitRate, wmaFormatTag,
+                    wmaBlockAlign);
+        }
+    }
+#endif
+    else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_NB)) {
         err = setupAMRCodec(encoder, false /* isWAMR */, bitRate);
     } else if (!strcasecmp(mime, MEDIA_MIMETYPE_AUDIO_AMR_WB)) {
         err = setupAMRCodec(encoder, true /* isWAMR */, bitRate);
@@ -1847,6 +1877,39 @@ status_t ACodec::setupAACCodec(
     }
     return res;
 }
+
+#ifdef USE_INTEL_ASF_EXTRACTOR
+status_t ACodec::setupWMACodec(
+        int32_t numChannels, int32_t sampleRate,
+        int32_t bitRate, int32_t  wmaFormatTag,
+        int32_t wmaBlockAlign) {
+
+    OMX_AUDIO_PARAM_WMATYPE profile;
+    InitOMXParams(&profile);
+    profile.nPortIndex = kPortIndexInput;
+
+    status_t err = mOMX->getParameter(
+                mNode, OMX_IndexParamAudioWma, &profile, sizeof(profile));
+
+    if (err != OK) {
+        return err;
+    }
+
+    profile.nChannels = numChannels;
+    profile.nSamplingRate = sampleRate;
+
+    profile.eProfile = OMX_AUDIO_WMAProfileL3;
+    profile.nSuperBlockAlign = wmaFormatTag; // WA to pass Format TAG
+    profile.nBlockAlign = wmaBlockAlign;
+    profile.nBitRate = bitRate;
+
+    status_t res = mOMX->setParameter(mNode, OMX_IndexParamAudioWma, &profile, sizeof(profile));
+    if (res != OK) {
+        ALOGE("WMA decoder set parameter is failed");
+    }
+    return res;
+}
+#endif
 
 status_t ACodec::setupAC3Codec(
         bool encoder, int32_t numChannels, int32_t sampleRate) {
@@ -3681,6 +3744,26 @@ status_t ACodec::getPortFormat(OMX_U32 portIndex, sp<AMessage> &notify) {
                     notify->setString("mime", MEDIA_MIMETYPE_AUDIO_ALAC);
                     notify->setInt32("channel-count", params.nChannels);
                     notify->setInt32("sample-rate", params.nSampleRate);
+                    break;
+                }
+#endif
+
+#ifdef USE_INTEL_ASF_EXTRACTOR
+                case OMX_AUDIO_CodingWMA:
+                {
+                    OMX_AUDIO_PARAM_WMATYPE params;
+                    InitOMXParams(&params);
+                    params.nPortIndex = portIndex;
+
+                    CHECK_EQ((status_t)OK, mOMX->getParameter(
+                            mNode,
+                            (OMX_INDEXTYPE)OMX_IndexParamAudioWma,
+                            &params,
+                            sizeof(params)));
+
+                    notify->setString("mime", MEDIA_MIMETYPE_AUDIO_WMA);
+                    notify->setInt32("channel-count", params.nChannels);
+                    notify->setInt32("sample-rate", params.nSamplingRate);
                     break;
                 }
 #endif
