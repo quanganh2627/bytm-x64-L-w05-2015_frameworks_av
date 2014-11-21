@@ -39,6 +39,7 @@
 #include <media/stagefright/MediaSource.h>
 #include <media/stagefright/MetaData.h>
 #include <utils/String8.h>
+#include <media/openmax/OMX_Audio.h>
 
 #include <byteswap.h>
 #include "include/ID3.h"
@@ -798,8 +799,9 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
         }
     } else if (chunk_size < 8) {
         // The smallest valid chunk is 8 bytes long.
-        ALOGE("invalid chunk size: %" PRIu64, chunk_size);
-        return ERROR_MALFORMED;
+        // Ignore the invalid data and continue
+        *offset += 4;
+        return OK;
     }
 
     char chunk[5];
@@ -1288,9 +1290,12 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
         case FOURCC('s', 'a', 'w', 'b'):
         {
             uint8_t buffer[8 + 20];
-            if (chunk_data_size < (ssize_t)sizeof(buffer)) {
-                // Basic AudioSampleEntry size.
-                return ERROR_MALFORMED;
+
+            // Some special clips contains more than one 'mp4a' box and the later one is invalid
+            int32_t num = 0xff;
+            if (mLastTrack->meta->findInt32(kKeyChannelCount, &num) && num <= 2) {
+                *offset += chunk_size;
+                break;
             }
 
             if (mDataSource->readAt(
@@ -1316,6 +1321,15 @@ status_t MPEG4Extractor::parseChunk(off64_t *offset, int depth) {
 
             off64_t stop_offset = *offset + chunk_size;
             *offset = data_offset + sizeof(buffer);
+
+            if (chunk_type == FOURCC('m', 'p', '4', 'a')) {
+                int32_t next_chunk;
+                mDataSource->readAt(data_offset + 48, &next_chunk, 4);
+                next_chunk = ntohl(next_chunk);
+                if (next_chunk == FOURCC('w', 'a', 'v', 'e'))
+                    *offset = data_offset + 44;
+            }
+
             while (*offset < stop_offset) {
                 status_t err = parseChunk(offset, depth + 1);
                 if (err != OK) {
@@ -2703,12 +2717,20 @@ status_t MPEG4Extractor::updateAudioTrackInfoFromESDS_MPEG4Audio(
         return OK;
     }
 
-    if (objectTypeIndication  == 0x6b) {
+    if (objectTypeIndication  == 0x6b || objectTypeIndication == 0x69) {
+#ifdef USE_INTEL_MDP
+        // This is mp3 audio
+        // Google decoder was not able to handle packetized MP3 audio.
+        // Intel CIP decoder supports and hence the change.
+        // This need not be upstreamed to AOSP, but changes needed in Intel software base.
+        mLastTrack->meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG);
+#else
         // The media subtype is MP3 audio
         // Our software MP3 audio decoder may not be able to handle
         // packetized MP3 audio; for now, lets just return ERROR_UNSUPPORTED
         ALOGE("MP3 track in MP4/3GPP file is not supported");
         return ERROR_UNSUPPORTED;
+#endif
     }
 
     const uint8_t *csd;
@@ -2746,6 +2768,15 @@ status_t MPEG4Extractor::updateAudioTrackInfoFromESDS_MPEG4Audio(
     if (objectType == 31) {  // AAC-ELD => additional 6 bits
         objectType = 32 + br.getBits(6);
     }
+#ifdef USE_INTEL_MDP
+    if ((objectType == OMX_AUDIO_AACObjectLD) || (objectType >= 31)) {
+        mLastTrack->meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AAC_EXTENDED);
+    }
+#endif
+    mLastTrack->meta->setInt32(kKeyAACProfile, objectType);
+
+    //keep AOT type
+    mLastTrack->meta->setInt32(kKeyAACAOT, objectType);
 
     //keep AOT type
     mLastTrack->meta->setInt32(kKeyAACAOT, objectType);
