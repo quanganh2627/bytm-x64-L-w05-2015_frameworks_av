@@ -198,34 +198,18 @@ class StagefrightPlayerFactory :
                                int64_t offset,
                                int64_t /*length*/,
                                float /*curScore*/) {
-        char buf[20];
-        lseek(fd, offset, SEEK_SET);
-        read(fd, buf, sizeof(buf));
-        lseek(fd, offset, SEEK_SET);
+        if (getDefaultPlayerType()
+                == STAGEFRIGHT_PLAYER) {
+            char buf[20];
+            lseek(fd, offset, SEEK_SET);
+            read(fd, buf, sizeof(buf));
+            lseek(fd, offset, SEEK_SET);
 
-        uint32_t ident = *((uint32_t*)buf);
-        uint32_t *bufptr = (uint32_t*)buf;
+            uint32_t ident = *((uint32_t*)buf);
 
-        // Magic number for WMA: 30 26 B2 75 8E 66 CF 11 A6 D9 00 AA 00 62  CE  6C
-        bufptr++;
-        if (ident == 0x75B22630) {
-            ident = *bufptr++;
-            if (ident == 0x11CF668E) {
-                ident = *bufptr++;
-                if (ident == 0xAA00D9A6) {
-                    ident = *bufptr++;
-                    if (ident == 0x6CCE6200) {
-                        ALOGV("WMA detected use Stagefright player");
-                        return 1.0;
-                    }
-                }
-            }
-        }
-
-        if (getDefaultPlayerType() == STAGEFRIGHT_PLAYER) {
-        // Ogg vorbis?
+            // Ogg vorbis?
             if (ident == 0x5367674f) // 'OggS'
-            return 1.0;
+                return 1.0;
         }
 
         return 0.0;
