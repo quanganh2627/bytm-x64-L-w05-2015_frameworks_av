@@ -1242,6 +1242,15 @@ status_t NuPlayer::feedDecoderInputData(bool audio, const sp<AMessage> &msg) {
             ALOGV("feedDecoderInputData() use mPendingAudioAccessUnit");
         } else {
             err = mSource->dequeueAccessUnit(audio, &accessUnit);
+            if ((err == ERROR_END_OF_STREAM) && (mAggregateBuffer != NULL)) {
+                ALOGV("feedDecoderInputData() EOS and Aggregate buffer not null,"
+                       "posting reply with buffer of size %d", mAggregateBuffer->size());
+                reply->setBuffer("buffer", mAggregateBuffer);
+                mAggregateBuffer.clear();
+                reply->post();
+                return OK;
+            }
+
         }
 
         if (err == -EWOULDBLOCK) {
