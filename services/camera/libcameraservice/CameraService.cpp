@@ -128,7 +128,6 @@ void CameraService::onFirstRef()
         }
         for (int i = 0; i < mNumberOfCameras; i++) {
             setCameraFree(i);
-            mLowPriorityPid[i] = -1;
         }
 
         if (mModule->common.module_api_version >=
@@ -731,19 +730,6 @@ status_t CameraService::connectHelperLocked(
     return OK;
 }
 
-status_t CameraService::setPriority(int cameraId, bool lowPriority) {
-    if (cameraId < 0 || cameraId >= mNumberOfCameras) {
-        return BAD_VALUE;
-    }
-
-    if (lowPriority) {
-        mLowPriorityPid[cameraId] = getCallingPid();
-    } else {
-        mLowPriorityPid[cameraId] = -1;
-    }
-    return OK;
-}
-
 status_t CameraService::connect(
         const sp<ICameraClient>& cameraClient,
         int cameraId,
@@ -757,27 +743,6 @@ status_t CameraService::connect(
 
     LOG1("CameraService::connect E (pid %d \"%s\", id %d)", callingPid,
             clientName8.string(), cameraId);
-
-    if (mLowPriorityPid[cameraId] == callingPid) {
-        LOG1("%s: Low priority camera being requested", __FUNCTION__);
-        for (int i = 0; i < mNumberOfCameras; i++) {
-            if (mStatusList[i] != ICameraServiceListener::STATUS_PRESENT) {
-                LOG1("%s: One camera open already. Rejecting low priority "
-                        "request",__FUNCTION__);
-                return OK;
-            }
-        }
-    } else {
-        LOG1("%s: Normal priority request, checking for a running low "
-                "priority instance",__FUNCTION__);
-        for (int i = 0; i < mNumberOfCameras; i++) {
-            sp<BasicClient> client = mClient[i].promote();
-            if (client != NULL && client.get()->isLowPriorityClient()) {
-                LOG1("%s: Killing low priority camera instance", __FUNCTION__);
-                client.get()->serviceDisconnect();
-            }
-        }
-    }
 
     status_t status = validateConnect(cameraId, /*inout*/clientUid);
     if (status != OK) {
@@ -806,11 +771,6 @@ status_t CameraService::connect(
                                      callingPid);
         if (status != OK) {
             return status;
-        }
-
-       if (client != NULL && mLowPriorityPid[cameraId] == callingPid) {
-            LOG1("%s: Created a low priority client instance", __FUNCTION__);
-            client.get()->setLowPriority();
         }
 
     }
@@ -1435,7 +1395,8 @@ CameraService::BasicClient::BasicClient(const sp<CameraService>& cameraService,
         const String16& clientPackageName,
         int cameraId, int cameraFacing,
         int clientPid, uid_t clientUid,
-        int servicePid): mClientPackageName(clientPackageName), mLowPriorityClient(false)
+        int servicePid):
+        mClientPackageName(clientPackageName)
 {
     mCameraService = cameraService;
     mRemoteBinder = remoteCallback;
@@ -1549,16 +1510,6 @@ void CameraService::BasicClient::opChanged(int32_t op, const String16& packageNa
         notifyError(ICameraDeviceCallbacks::ERROR_CAMERA_SERVICE, resultExtras);
         disconnect();
     }
-}
-
-void CameraService::BasicClient::serviceDisconnect() {
-    // Reset the client PID to allow a server-initiated disconnect,
-    // and to prevent further calls by the client.
-    LOG1("%s: Forcing a server initiated disconnect", __FUNCTION__);
-    mClientPid = getCallingPid();
-    CaptureResultExtras resultExtras; // a dummy result (invalid)
-    notifyError(ICameraDeviceCallbacks::ERROR_CAMERA_SERVICE, resultExtras);
-    disconnect();
 }
 
 // ----------------------------------------------------------------------------
