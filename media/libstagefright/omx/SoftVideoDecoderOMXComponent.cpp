@@ -130,7 +130,7 @@ void SoftVideoDecoderOMXComponent::updatePortDefinitions(bool updateCrop) {
     def->format.video.nStride = def->format.video.nFrameWidth;
     def->format.video.nSliceHeight = def->format.video.nFrameHeight;
 
-    def->nBufferSize = def->format.video.nFrameWidth * def->format.video.nFrameHeight * 3 / 2;
+    def->nBufferSize = def->format.video.nFrameWidth * def->format.video.nFrameHeight * 3;
 
     def = &editPortInfo(kOutputPortIndex)->mDef;
     def->format.video.nFrameWidth = outputBufferWidth();
@@ -140,7 +140,7 @@ void SoftVideoDecoderOMXComponent::updatePortDefinitions(bool updateCrop) {
 
     def->nBufferSize =
             (def->format.video.nFrameWidth *
-             def->format.video.nFrameHeight * 3) / 2;
+             def->format.video.nFrameHeight * 3);
 
     if (updateCrop) {
         mCropLeft = 0;
@@ -372,7 +372,7 @@ OMX_ERRORTYPE SoftVideoDecoderOMXComponent::internalSetParameter(
                 def->format.video.nStride = def->format.video.nFrameWidth;
                 def->format.video.nSliceHeight = def->format.video.nFrameHeight;
                 def->nBufferSize =
-                    def->format.video.nFrameWidth * def->format.video.nFrameHeight * 3 / 2;
+                    def->format.video.nFrameWidth * def->format.video.nFrameHeight * 3;
                 if (outputPort) {
                     mWidth = newWidth;
                     mHeight = newHeight;
