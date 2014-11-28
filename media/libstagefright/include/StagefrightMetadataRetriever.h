@@ -1,4 +1,11 @@
 /*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * Notes:
+ * Nov  25 2014: IMC: introduce HW thumbnail mutex
+ */
+ 
+/*
  * Copyright (C) 2010 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,6 +57,7 @@ private:
     bool mParsedMetaData;
     KeyedVector<int, String8> mMetaData;
     MediaAlbumArt *mAlbumArt;
+    mutable Mutex mLock;
 
     void parseMetaData();
 
@@ -57,6 +65,7 @@ private:
 
     StagefrightMetadataRetriever &operator=(
             const StagefrightMetadataRetriever &);
+    
 };
 
 }  // namespace android

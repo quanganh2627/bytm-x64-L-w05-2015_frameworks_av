@@ -1,4 +1,11 @@
 /*
+ * Copyright (C) 2014 Intel Mobile Communications GmbH
+ *
+ * Notes:
+ * Nov  25 2014: IMC: introduce HW thumbnail mutex
+ */
+ 
+/*
  * Copyright (C) 2009 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -386,6 +393,7 @@ VideoFrame *StagefrightMetadataRetriever::getFrameAtTime(
                 timeUs, option);
 
     if (frame == NULL) {
+        Mutex::Autolock autoLock(mLock);
         ALOGV("Software decoder failed to extract thumbnail, "
              "trying hardware decoder.");
 
