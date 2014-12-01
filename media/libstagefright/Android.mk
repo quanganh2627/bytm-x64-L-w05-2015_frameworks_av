@@ -151,28 +151,39 @@ LOCAL_STATIC_LIBRARIES += \
 
 LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
 
-ifeq ($(TARGET_ARCH), x86)
 ifeq ($(TARGET_BOARD_PLATFORM), clovertrail)
-    IPP_LIB_EXT := ia32
-    IPP_LIB_ARCH := s_s8
+    IPP_LIBS_32_EXT := ia32
+    IPP_LIBS_32_ARCH := s_s8
 else
-    IPP_LIB_EXT := ia32
-    IPP_LIB_ARCH := s_p8
+    IPP_LIBS_32_EXT := ia32
+    IPP_LIBS_32_ARCH := s_p8
 endif
-else
-    IPP_LIB_EXT := intel64
-    IPP_LIB_ARCH := s_e9
-endif
+IPP_LIBS_64_EXT := intel64
+IPP_LIBS_64_ARCH := s_e9
 
-LOCAL_STATIC_LIBRARIES += \
+LOCAL_STATIC_LIBRARIES_32 += \
     libmediaipp_libippcore \
-    libmediaipp_libippac_$(IPP_LIB_ARCH) \
-    libmediaipp_libippvc_$(IPP_LIB_ARCH) \
-    libmediaipp_libippdc_$(IPP_LIB_ARCH) \
-    libmediaipp_libippcc_$(IPP_LIB_ARCH) \
-    libmediaipp_libipps_$(IPP_LIB_ARCH) \
-    libmediaipp_libippsc_$(IPP_LIB_ARCH) \
-    libmediaipp_libippi_$(IPP_LIB_ARCH) \
+    libmediaipp_libippac_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippvc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippdc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippcc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libipps_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippsc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippi_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippvm \
+    libmediaipp_libsvml \
+    libmediaipp_libimf \
+    libmediaipp_libirc
+
+LOCAL_STATIC_LIBRARIES_64 += \
+    libmediaipp_libippcore \
+    libmediaipp_libippac_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippvc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippdc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippcc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libipps_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippsc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippi_$(IPP_LIBS_64_ARCH) \
     libmediaipp_libippvm \
     libmediaipp_libsvml \
     libmediaipp_libimf \

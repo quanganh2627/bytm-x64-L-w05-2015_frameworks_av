@@ -264,6 +264,12 @@ private:
 #ifdef USE_FEATURE_ALAC
     status_t setALACFormat( void *pConfig );
 #endif
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    status_t setWMAFormat(
+        int32_t numChannels, int32_t sampleRate,
+        int32_t bitRate, int32_t  wmaFormatTag,
+        int32_t wmaBlockAlign);
+#endif
     status_t setVideoPortFormatType(
             OMX_U32 portIndex,
             OMX_VIDEO_CODINGTYPE compressionFormat,

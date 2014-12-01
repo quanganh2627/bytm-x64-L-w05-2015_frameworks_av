@@ -5389,29 +5389,28 @@ status_t AudioPolicyManager::checkAndSetVolume(audio_stream_type_t stream,
     }
 #ifdef BGM_ENABLED
     if (IsRemoteBGMSupported(stream)) {
-       // get the newly forced sink
-         audio_io_handle_t output2 = 0;
-         sp<AudioOutputDescriptor> desc = NULL;
-         audio_devices_t device2 = getDeviceForStrategy(STRATEGY_BACKGROUND_MUSIC, false /*fromCache*/);
-         SortedVector<audio_io_handle_t> outputs = getOutputsForDevice(device2, mOutputs);
-         for(size_t i = 0; i < outputs.size(); i++) {
-             desc = mOutputs.valueFor(outputs[i]);
-             if(desc->isActive())
+        // get the newly forced sink
+        audio_io_handle_t output2 = AUDIO_IO_HANDLE_NONE;
+        audio_devices_t device2 = getDeviceForStrategy(STRATEGY_BACKGROUND_MUSIC,
+                                                       false /*fromCache*/);
+        SortedVector<audio_io_handle_t> outputs = getOutputsForDevice(device2, mOutputs);
+        for(size_t i = 0; i < outputs.size(); i++) {
+            sp<AudioOutputDescriptor> desc = mOutputs.valueFor(outputs[i]);
+            if (desc->isActive()) {
+                output2 = selectOutput(outputs, (audio_output_flags_t)desc->mFlags, desc->mFormat);
+                float volume = computeVolume(stream, index, output2, device2);
+                ALOGD("[BGMUSIC] compute volume for the forced active sink = %f "
+                      "for device2 %x device = %x",volume, device2,device);
+                //applying the volume for the current active output for the device2.
+                mpClientInterface->setStreamVolume(stream, volume, output2, delayMs);
                 break;
-         }
-         //BGM is applicable only for music streams - there is a possibility of
-         // an inactive output based on a different strategy returned here. There
-         // is no need of applying volume for this output.
-         if(!desc->isActive()) {
-            ALOGVV("[BGMUSIC] No active outputs available for BGM - no volume applied");
-            return NO_ERROR;
-         }
-         output2 = selectOutput(outputs, (audio_output_flags_t)desc->mFlags, desc->mFormat);
-         float volume = computeVolume(stream, index, output2, device2);
-         ALOGD("[BGMUSIC] compute volume for the forced active sink = %f for device2 %x device = %x",volume, device2,device);
-         //applying the volume for the current active output for the device2.
-         mpClientInterface->setStreamVolume(stream, volume,
-                                                       output2, delayMs);
+            }
+        }
+        //BGM is applicable only for music streams - there is a possibility of
+        // an inactive output based on a different strategy returned here. There
+        // is no need of applying volume for this output.
+        ALOGV_IF(output2 == AUDIO_IO_HANDLE_NONE,
+                 "[BGMUSIC] No active outputs available for BGM - no volume applied");
     }
 #endif //BGM_ENABLED
 

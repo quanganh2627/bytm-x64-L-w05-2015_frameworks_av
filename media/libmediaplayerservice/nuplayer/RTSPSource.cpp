@@ -73,6 +73,22 @@ NuPlayer::RTSPSource::~RTSPSource() {
         mLooper->unregisterHandler(id());
         mLooper->stop();
     }
+
+    // Avoid memory leak
+    for (size_t index = 0; index < mTracks.size(); index++) {
+        TrackInfo *info = &mTracks.editItemAt(index);
+        if (info->mSource != NULL) {
+            (info->mSource).clear();
+        }
+    }
+    mTracks.clear();
+
+    if (mAudioTrack != NULL) {
+        mAudioTrack.clear();
+    }
+    if (mVideoTrack != NULL) {
+        mVideoTrack.clear();
+    }
 }
 
 void NuPlayer::RTSPSource::prepareAsync() {
@@ -354,6 +370,12 @@ void NuPlayer::RTSPSource::onMessageReceived(const sp<AMessage> &msg) {
     switch (what) {
         case MyHandler::kWhatConnected:
         {
+            if (mState != CONNECTING) {
+                // MyHandler::kWhatConnected message came out of order
+                // ignore, break the operation to mTracks.
+                break;
+            }
+
             onConnected();
 
             notifyVideoSizeChanged();
