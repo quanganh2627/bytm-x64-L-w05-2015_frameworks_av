@@ -1353,8 +1353,13 @@ int64_t NuPlayer::Renderer::getPlayedOutAudioDurationUs(int64_t nowUs) {
 
     // TODO: remove the (int32_t) casting below as it may overflow at 12.4 hours.
     //CHECK_EQ(numFramesPlayed & (1 << 31), 0);  // can't be negative until 12.4 hrs, test
-    int64_t durationUs = (int64_t)((int32_t)numFramesPlayed * 1000LL * mAudioSink->msecsPerFrame())
+    int64_t durationUs;
+    if (offloadingAudio()) {
+        durationUs = (int64_t)((int32_t)numFramesPlayed * 1000LL);
+    } else {
+        durationUs = (int64_t)((int32_t)numFramesPlayed * 1000LL * mAudioSink->msecsPerFrame())
             + nowUs - numFramesPlayedAt;
+    }
     if (durationUs < 0) {
         // Occurs when numFramesPlayed position is very small and the following:
         // (1) In case 1, the time nowUs is computed before getTimestamp() is called and
