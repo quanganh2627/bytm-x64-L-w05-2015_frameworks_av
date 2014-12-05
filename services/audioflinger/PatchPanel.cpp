@@ -383,13 +383,15 @@ status_t AudioFlinger::PatchPanel::createAudioPatch(const struct audio_patch *pa
                 free(address);
                 param.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), (int)type);
 
+                status = thread->setParameters(param.toString());
                 if (thread->mType == ThreadBase::OFFLOAD) {
+                    // In case of offload, we need also to inform the primary HAL of the new device
+                    // while offload on going in order to route offload stream on the newly selected
+                    // device.
                     AudioParameter param1;
                     param1.addInt(String8(AUDIO_PARAMETER_KEY_STREAM_OUTPUT), type);
                     audioflinger->mPrimaryHardwareDev->hwDevice()->set_parameters(
                                  audioflinger->mPrimaryHardwareDev->hwDevice(), param1.toString());
-                } else {
-                    status = thread->setParameters(param.toString());
                 }
             }
 
