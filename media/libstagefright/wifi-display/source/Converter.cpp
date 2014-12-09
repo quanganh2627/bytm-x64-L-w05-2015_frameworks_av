@@ -159,7 +159,7 @@ status_t Converter::initEncoder() {
     }
 
     int32_t audioBitrate = GetInt32Property("media.wfd.audio-bitrate", 128000);
-    int32_t videoBitrate = GetInt32Property("media.wfd.video-bitrate", 5000000);
+    int32_t videoBitrate = GetInt32Property("media.wfd.video-bitrate", 2500000);
     mPrevVideoBitrate = videoBitrate;
 
     ALOGI("using audio bitrate of %d bps, video bitrate of %d bps",
@@ -171,10 +171,7 @@ status_t Converter::initEncoder() {
         mOutputFormat->setInt32("bitrate", videoBitrate);
         mOutputFormat->setInt32("bitrate-mode", OMX_Video_ControlRateConstant);
         mOutputFormat->setInt32("frame-rate", 30);
-        mOutputFormat->setInt32("i-frame-interval", 15);  // Iframes every 15 secs
-
-        // Configure encoder to use intra macroblock refresh mode
-        mOutputFormat->setInt32("intra-refresh-mode", OMX_VIDEO_IntraRefreshCyclic);
+        mOutputFormat->setInt32("i-frame-interval", 20);  // Iframes every 20 secs
 
         int width, height, mbs;
         if (!mOutputFormat->findInt32("width", &width)

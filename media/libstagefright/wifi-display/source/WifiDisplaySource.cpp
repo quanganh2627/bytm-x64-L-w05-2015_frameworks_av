@@ -77,8 +77,8 @@ WifiDisplaySource::WifiDisplaySource(
     // Enable all resolutions up to 1280x720p30
     mSupportedSourceVideoFormats.enableResolutionUpto(
             VideoFormats::RESOLUTION_CEA, 5,
-            VideoFormats::PROFILE_CHP,  // Constrained High Profile
-            VideoFormats::LEVEL_32);    // Level 3.2
+            VideoFormats::PROFILE_CBP,  // Constrained Base Profile
+            VideoFormats::LEVEL_31);    // Level 3.1
 }
 
 WifiDisplaySource::~WifiDisplaySource() {
