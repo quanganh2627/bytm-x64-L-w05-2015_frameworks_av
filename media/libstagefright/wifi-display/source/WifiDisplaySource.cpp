@@ -72,13 +72,18 @@ WifiDisplaySource::WifiDisplaySource(
     mSupportedSourceVideoFormats.disableAll();
 
     mSupportedSourceVideoFormats.setNativeResolution(
-            VideoFormats::RESOLUTION_CEA, 5);  // 1280x720 p30
+            VideoFormats::RESOLUTION_CEA, 15);  // 1280x720 p24
 
-    // Enable all resolutions up to 1280x720p30
+    // Enable 640x480 p60, 720x480p 60
     mSupportedSourceVideoFormats.enableResolutionUpto(
-            VideoFormats::RESOLUTION_CEA, 5,
+            VideoFormats::RESOLUTION_CEA, 1,
             VideoFormats::PROFILE_CBP,  // Constrained Base Profile
             VideoFormats::LEVEL_31);    // Level 3.1
+    //Enable 1280x720 p24
+    mSupportedSourceVideoFormats.setResolutionEnabled(VideoFormats::RESOLUTION_CEA, 15);
+    mSupportedSourceVideoFormats.setProfileLevel(VideoFormats::RESOLUTION_CEA, 15,
+        VideoFormats::PROFILE_CBP, VideoFormats::LEVEL_31);
+
 }
 
 WifiDisplaySource::~WifiDisplaySource() {
