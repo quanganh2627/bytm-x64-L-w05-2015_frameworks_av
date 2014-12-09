@@ -107,6 +107,10 @@ static status_t PostAndAwaitResponse(
 status_t WifiDisplaySource::start(const char *iface) {
     CHECK_EQ(mState, INITIALIZED);
 
+    if (property_set("media.wfd.prepared","true") < 0) {
+        ALOGE("Unable to set the property media.wfd.prepared to true");
+    }
+
     sp<AMessage> msg = new AMessage(kWhatStart, id());
     msg->setString("iface", iface);
 
@@ -115,6 +119,10 @@ status_t WifiDisplaySource::start(const char *iface) {
 }
 
 status_t WifiDisplaySource::stop() {
+    if (property_set("media.wfd.prepared","false") < 0) {
+        ALOGE("Unable to reset the property media.wfd.prepared to false");
+    }
+
     sp<AMessage> msg = new AMessage(kWhatStop, id());
 
     sp<AMessage> response;
