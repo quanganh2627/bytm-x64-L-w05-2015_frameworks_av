@@ -45,6 +45,7 @@ OMXMaster::~OMXMaster() {
 
 void OMXMaster::addVendorPlugin() {
     addPlugin("libstagefrighthw.so");
+    addPlugin("libstagefrighthw_vp9.so");
 }
 
 void OMXMaster::addPlugin(const char *libname) {
