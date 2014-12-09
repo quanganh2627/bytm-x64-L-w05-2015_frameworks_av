@@ -583,9 +583,16 @@ static const char *GetMIMETypeForHandler(uint32_t handler) {
         case FOURCC('a', 'v', 'c', '1'):
         case FOURCC('d', 'a', 'v', 'c'):
         case FOURCC('x', '2', '6', '4'):
+        case FOURCC('h', '2', '6', '4'):
         case FOURCC('H', '2', '6', '4'):
         case FOURCC('v', 's', 's', 'h'):
             return MEDIA_MIMETYPE_VIDEO_AVC;
+
+        case FOURCC('H', '2', '6', '3'):
+        case FOURCC('h', '2', '6', '3'):
+        case FOURCC('S', '2', '6', '3'):
+        case FOURCC('s', '2', '6', '3'):
+            return MEDIA_MIMETYPE_VIDEO_H263;
 
         default:
             return NULL;
@@ -672,6 +679,22 @@ status_t AVIExtractor::parseStreamHeader(off64_t offset, size_t size) {
     return OK;
 }
 
+// Returns the sample rate based on the sampling frequency index
+static uint32_t get_sample_rate(const uint8_t sf_index)
+{
+    static const uint32_t sample_rates[] =
+    {
+        96000, 88200, 64000, 48000, 44100, 32000,
+        24000, 22050, 16000, 12000, 11025, 8000
+    };
+
+    if (sf_index < sizeof(sample_rates) / sizeof(sample_rates[0])) {
+        return sample_rates[sf_index];
+    }
+
+    return 0;
+}
+
 status_t AVIExtractor::parseStreamFormat(off64_t offset, size_t size) {
     if (mTracks.isEmpty()) {
         return ERROR_MALFORMED;
@@ -709,8 +732,29 @@ status_t AVIExtractor::parseStreamFormat(off64_t offset, size_t size) {
     } else {
         uint32_t format = U16LE_AT(data);
 
-        if (format == 0x55) {
+        if ((format == WAVE_FORMAT_MPEGLAYER3) || (format == WAVE_FORMAT_MPEG)) {
             track->mMeta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG);
+        } else if (format == WAVE_FORMAT_AAC) {
+//          The WAVEFORMATEX structure in AVI container is as below:
+//          ____________________________________________________________________________
+//          |Format|channel|sample rate|nAvgBytesPerSec|nBlockAlign|wBitsPerSample|cbSize|
+//     Bytes 0    1  2   3   4 ----- 7   8   -----  11   12 --- 13    14 --- 15    16  17
+//          where Format = 0x00FF, for AAC Audio.
+//          After these 18 bytes the bitstream contains the following information:
+//          ______Byte[18]_____,___Byte[19]______
+//          |AACProfile+1 |sf_index |ChannelCount| .....
+//     Bits  7   -----  3, 2--0 | 7,  6 ----- 3 , .....
+
+            uint8_t profile, sf_index, channels;
+            profile = (data[18] >> 3) -1;
+            sf_index = (((data[18] & 0x7) << 1 ) | (data[19] >> 0x7));
+            uint32_t sr = get_sample_rate(sf_index);
+            if (sr == 0) {
+                return ERROR_MALFORMED;
+            }
+            channels = (data[19] & 0x7F) >> 3;
+            track->mMeta = MakeAACCodecSpecificData(profile, sf_index, channels);
+            return OK;
         } else {
             ALOGW("Unsupported audio format = 0x%04x", format);
         }
@@ -791,6 +835,13 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
 
         uint8_t hi = chunkType >> 24;
         uint8_t lo = (chunkType >> 16) & 0xff;
+
+        // chunType is "0x37467878" equal '7Fxx', it is user defined chunk, now just skip it;
+        if (chunkType == 0x37467878) {
+            data += 16;
+            size -= 16;
+            continue;
+        }
 
         if (hi < '0' || hi > '9' || lo < '0' || lo > '9') {
             return ERROR_MALFORMED;
@@ -885,7 +936,7 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
 
             double avgChunkSize = 0;
             size_t j;
-            for (j = 0; j <= numSamplesToAverage; ++j) {
+            for (j = 0; j < numSamplesToAverage; ++j) {
                 off64_t offset;
                 size_t size;
                 bool isKey;
@@ -914,8 +965,12 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
         }
 
         int64_t durationUs;
-        CHECK_EQ((status_t)OK,
-                 getSampleTime(i, track->mSamples.size() - 1, &durationUs));
+        status_t err = OK;
+
+        err = getSampleTime(i, track->mSamples.size() - 1, &durationUs);
+        if (err != OK) {
+            return err;
+        }
 
         ALOGV("track %d duration = %.2f secs", i, durationUs / 1E6);
 
@@ -928,16 +983,23 @@ status_t AVIExtractor::parseIndex(off64_t offset, size_t size) {
         AString mime = tmp;
 
         if (!strncasecmp("video/", mime.c_str(), 6)) {
+            if (durationUs != 0) {
+                int32_t frameRate = (track->mSamples.size() * 1000000LL + (durationUs >> 1)) / durationUs;
+                if (frameRate > 0) {
+                    track->mMeta->setInt32(kKeyFrameRate, frameRate);
+                    ALOGV("video framerate = %d", frameRate);
+                }
+            }
             if (track->mThumbnailSampleIndex >= 0) {
                 int64_t thumbnailTimeUs;
-                CHECK_EQ((status_t)OK,
-                         getSampleTime(i, track->mThumbnailSampleIndex,
-                                       &thumbnailTimeUs));
 
+                err = getSampleTime(i, track->mThumbnailSampleIndex,
+                                       &thumbnailTimeUs);
+                if (err != OK) {
+                    return err;
+                }
                 track->mMeta->setInt64(kKeyThumbnailTime, thumbnailTimeUs);
             }
-
-            status_t err = OK;
 
             if (!strcasecmp(mime.c_str(), MEDIA_MIMETYPE_VIDEO_MPEG4)) {
                 err = addMPEG4CodecSpecificData(i);
@@ -1163,7 +1225,10 @@ status_t AVIExtractor::getSampleInfo(
         sampleIndex = sampleStartInBytes / track.mBytesPerSample;
     }
 
-    *sampleTimeUs = (sampleIndex * 1000000ll * track.mRate) / track.mScale;
+    if (track.mScale)
+        *sampleTimeUs = (sampleIndex * 1000000ll * track.mRate) / track.mScale;
+    else
+        return ERROR_MALFORMED;
 
     return OK;
 }
@@ -1217,6 +1282,12 @@ status_t AVIExtractor::getSampleIndexAtTime(
     if (mode == MediaSource::ReadOptions::SEEK_CLOSEST) {
         *sampleIndex = closestSampleIndex;
 
+        return OK;
+    }
+
+    // Only video track should be considered for Sync samples
+    if (track.mKind != Track::VIDEO) {
+        *sampleIndex = closestSampleIndex;
         return OK;
     }
 
