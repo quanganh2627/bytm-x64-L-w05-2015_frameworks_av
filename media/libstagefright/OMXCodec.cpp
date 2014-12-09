@@ -183,6 +183,15 @@ static sp<MediaSource> InstantiateSoftwareDecoder(
 #endif // #ifdef USE_INTEL_MDP
 
 #undef FACTORY_CREATE_ENCODER
+
+#ifdef TARGET_HAS_ISV
+#define INIT_OMX_TYPE(f) \
+  memset(&f, 0, sizeof(f)); \
+  (f).nSize = sizeof(f); \
+  (f).nVersion.s.nVersionMajor = 1; \
+  (f).nVersion.s.nVersionMinor = 1
+#endif
+
 #undef FACTORY_REF
 
 #define CODEC_LOGI(x, ...) ALOGI("[%s] "x, mComponentName, ##__VA_ARGS__)
@@ -751,6 +760,12 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
         if (mIsEncoder) {
             setVideoInputFormat(mMIME, meta);
         } else {
+#ifdef TARGET_HAS_ISV
+            OMX_PARAM_DEBLOCKINGTYPE deblock;
+            INIT_OMX_TYPE(deblock);
+            deblock.bDeblocking = OMX_TRUE;
+            mOMX->setParameter(mNode, OMX_IndexParamCommonDeblocking, &deblock, sizeof(deblock));
+#endif
             status_t err = setVideoOutputFormat(
                     mMIME, meta);
 
