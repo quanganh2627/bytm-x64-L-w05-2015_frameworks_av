@@ -170,7 +170,7 @@ status_t Converter::initEncoder() {
     } else {
         mOutputFormat->setInt32("bitrate", videoBitrate);
         mOutputFormat->setInt32("bitrate-mode", OMX_Video_ControlRateConstant);
-        mOutputFormat->setInt32("frame-rate", 30);
+        mOutputFormat->setInt32("frame-rate", 24);
         mOutputFormat->setInt32("i-frame-interval", 20);  // Iframes every 20 secs
 
         int width, height, mbs;
