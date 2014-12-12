@@ -380,6 +380,12 @@ sp<MediaSource> OMXCodec::Create(
             && requiresSecureBuffers) {
         flags |= kIgnoreCodecSpecificData;
         flags |= kUseSecureInputBuffers;
+    } else {
+        // To support Widevine classic level3 for which Secure Video Path is not needed.
+        // If this flag is not cleared, the decoded video data will not be delivered up
+        // to the render, and therefore no video is output.
+        ALOGI("remove kEnableGrallocUsageProtected for WV classic l3!");
+        flags &= ~OMXCodec::kEnableGrallocUsageProtected;
     }
 
     const char *mime;
