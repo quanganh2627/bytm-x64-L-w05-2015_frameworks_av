@@ -77,7 +77,6 @@ enum{
 
 #ifdef USE_INTEL_MDP
 #include "UMCMacro.h"
-//#include "include/ThreadedSource.h"
 #endif
 
 #ifdef USE_INTEL_ASF_EXTRACTOR
@@ -105,15 +104,7 @@ static sp<MediaSource> Make##name(const sp<MediaSource> &source, const sp<MetaDa
 #define FACTORY_REF(name) { #name, Make##name },
 
 #ifdef USE_INTEL_MDP
-FACTORY_CREATE_DECL(CIPMP3Decoder)
-FACTORY_CREATE_DECL(CIPAACDecoder)
-FACTORY_CREATE_ENCODER_DECL(CIPAACEncoder)
-FACTORY_CREATE_DECL(CIPAMRNBDecoder)
-FACTORY_CREATE_ENCODER_DECL(CIPAMRNBEncoder)
-FACTORY_CREATE_DECL(CIPAMRWBDecoder)
-FACTORY_CREATE_ENCODER_DECL(CIPAMRWBEncoder)
-FACTORY_CREATE_DECL(CIPVorbisDecoder)
-FACTORY_CREATE_DECL(CIPWMADecoder)
+FACTORY_CREATE_DECL(MDPWMADecoder)
 #endif
 
 FACTORY_CREATE_ENCODER(AACEncoder)
@@ -126,21 +117,7 @@ static sp<MediaSource> InstantiateSoftwareEncoder(
         sp<MediaSource> (*CreateFunc)(const sp<MediaSource> &, const sp<MetaData> &);
     };
 
-    if (!strncmp(name, "CIPAACEncoder", 13)) {
-        int32_t aacProfile;
-        meta->findInt32(kKeyAACProfile, &aacProfile);
-        if(aacProfile != OMX_AUDIO_AACObjectLC) {
-           return NULL; //Use Google AAC encoder for all AAC profiles except AAC_LC.
-        }
-    }
-
-
     static const FactoryInfo kFactoryInfo[] = {
-#ifdef USE_INTEL_MDP
-        FACTORY_REF(CIPAMRNBEncoder)
-        FACTORY_REF(CIPAMRWBEncoder)
-        FACTORY_REF(CIPAACEncoder)
-#endif // #ifdef USE_INTEL_MDP
         FACTORY_REF(AACEncoder)
     };
     for (size_t i = 0;
@@ -164,12 +141,7 @@ static sp<MediaSource> InstantiateSoftwareDecoder(
 
     static const FactoryInfo kFactoryInfo[] = {
 
-        FACTORY_REF(CIPMP3Decoder)
-        FACTORY_REF(CIPAACDecoder)
-        FACTORY_REF(CIPAMRNBDecoder)
-        FACTORY_REF(CIPAMRWBDecoder)
-        FACTORY_REF(CIPVorbisDecoder)
-        FACTORY_REF(CIPWMADecoder)
+        FACTORY_REF(MDPWMADecoder)
     };
     for (size_t i = 0;
          i < sizeof(kFactoryInfo) / sizeof(kFactoryInfo[0]); ++i) {
@@ -714,7 +686,56 @@ status_t OMXCodec::configureCodec(const sp<MetaData> &meta) {
             CODEC_LOGE("setAACFormat() failed (err = %d)", err);
             return err;
         }
-    } else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_MPEG, mMIME)) {
+    }
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_WMA, mMIME)) {
+        ALOGV("WMA codec initialization");
+
+        // Get sample rate:
+        int32_t iSampleRate = 0;
+        if (meta->findInt32(kKeySampleRate, &iSampleRate)) {
+            ALOGV("   - Sample rate: %d", iSampleRate);
+        }
+        // Get channels count:
+        int32_t iChannelCount = 0;
+        if (meta->findInt32(kKeyChannelCount, &iChannelCount)) {
+            ALOGV("   - Channel count: %d", iChannelCount);
+        }
+
+        // Get bit rate:
+        int32_t iBitRate = 0;
+        if (meta->findInt32(kKeyBitRate, &iBitRate)) {
+            ALOGV("   - Bit rate: %d", iBitRate);
+        }
+        // Get WMA block alignment size:
+        int32_t iWmaBlockAlign = 0;
+        if (meta->findInt32(kKeyWmaBlockAlign, &iWmaBlockAlign)) {
+            ALOGV("   - WMA block align: %d", iWmaBlockAlign);
+        }
+        // Get WMA Format tag from metadata:
+        int32_t iWmaFormatTag;
+        if (meta->findInt32(kKeyWmaFormatTag, &iWmaFormatTag)) {
+            ALOGV("   - WMA format tag: %d", iWmaFormatTag);
+        }
+
+        // Get WMA decoder-specific data size from metadata:
+        size_t      iDecSpecInfoDataSize;
+        const void *pDecSpecInfoData;
+        uint32_t    type = 0;
+        if (meta->findData(kKeyConfigData, &type, &pDecSpecInfoData, &iDecSpecInfoDataSize)) {
+            ALOGV("   - Codec-specific data size: %d", iDecSpecInfoDataSize);
+        }
+
+        status_t err = setWMAFormat(iChannelCount, iSampleRate, iBitRate, iWmaFormatTag, iWmaBlockAlign);
+        if (err != OK) {
+            CODEC_LOGE("setWMAFormat() failed (err = %d)", err);
+            return err;
+        }
+        addCodecSpecificData(
+                    pDecSpecInfoData, iDecSpecInfoDataSize);
+    }
+#endif
+    else if (!strcasecmp(MEDIA_MIMETYPE_AUDIO_MPEG, mMIME)) {
         int32_t numChannels, sampleRate;
         if (meta->findInt32(kKeyChannelCount, &numChannels)
                 && meta->findInt32(kKeySampleRate, &sampleRate)) {
@@ -3793,7 +3814,37 @@ void OMXCodec::setAMRFormat(bool isWAMR, int32_t bitRate) {
         setRawAudioFormat(kPortIndexInput, sampleRate, numChannels);
     }
 }
+#ifdef USE_INTEL_ASF_EXTRACTOR
+status_t OMXCodec::setWMAFormat( int32_t numChannels, int32_t sampleRate,
+        int32_t bitRate, int32_t  wmaFormatTag,
+        int32_t wmaBlockAlign)
+{
+    OMX_AUDIO_PARAM_WMATYPE profile;
+    InitOMXParams(&profile);
+    profile.nPortIndex = kPortIndexInput;
 
+    status_t err = mOMX->getParameter(
+                mNode, OMX_IndexParamAudioWma, &profile, sizeof(profile));
+
+    if (err != OK) {
+        return err;
+    }
+
+    profile.nChannels = numChannels;
+    profile.nSamplingRate = sampleRate;
+
+    profile.eProfile = OMX_AUDIO_WMAProfileL3;
+    profile.nSuperBlockAlign = wmaFormatTag; // WA to pass Format TAG
+    profile.nBlockAlign = wmaBlockAlign;
+    profile.nBitRate = bitRate;
+
+    status_t res = mOMX->setParameter(mNode, OMX_IndexParamAudioWma, &profile, sizeof(profile));
+    if (res != OK) {
+        ALOGE("WMA decoder set parameter is failed");
+    }
+    return res;
+}
+#endif
 status_t OMXCodec::setAACFormat(
         int32_t numChannels, int32_t sampleRate, int32_t bitRate, int32_t aacProfile, bool isADTS) {
     if (numChannels > 2) {

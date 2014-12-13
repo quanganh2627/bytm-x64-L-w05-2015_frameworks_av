@@ -278,7 +278,12 @@ private:
             int32_t aacProfile, bool isADTS, int32_t sbrMode,
             int32_t maxOutputChannelCount, const drcParams_t& drc,
             int32_t pcmLimiterEnable);
-
+#ifdef USE_INTEL_ASF_EXTRACTOR
+    status_t setupWMACodec(
+        int32_t numChannels, int32_t sampleRate,
+        int32_t bitRate, int32_t  wmaFormatTag,
+        int32_t wmaBlockAlign);
+#endif
     status_t setupAC3Codec(bool encoder, int32_t numChannels, int32_t sampleRate);
 
     status_t selectAudioPortFormat(
