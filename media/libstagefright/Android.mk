@@ -114,17 +114,6 @@ LOCAL_STATIC_LIBRARIES := \
         libFLAC \
         libmedia_helper
 
-ifeq ($(USE_INTEL_MDP),true)
-LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/media_codecs
-
-LOCAL_STATIC_LIBRARIES += \
-        lib_stagefright_mdp_vp8dec \
-        libmc_vp8_dec \
-        libmc_codec_common \
-        libmc_core
-LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
-endif
-
 ifeq ($(USE_INTEL_ASF_EXTRACTOR),true)
 
 LOCAL_C_INCLUDES += \
@@ -140,28 +129,47 @@ LOCAL_C_INCLUDES += \
           $(TARGET_OUT_HEADERS)/media_codecs
 
 LOCAL_STATIC_LIBRARIES += \
-          lib_stagefright_mdp_mp3dec \
-          libmc_mp3_dec \
-          lib_stagefright_mdp_aacdec \
-          libmc_aac_dec \
-          lib_stagefright_mdp_aacenc \
-          libmc_aac_enc \
-          lib_stagefright_mdp_amrnbdec \
-          libmc_gsmamr \
-          lib_stagefright_mdp_amrnbenc \
-          lib_stagefright_mdp_amrwbdec \
-          lib_stagefright_mdp_amrwbenc \
-          libmc_amrwb \
-          libmc_amrcommon \
-          lib_stagefright_mdp_vorbisdec \
-          libmc_vorbis_dec \
-          libmc_codec_common \
-          libmc_core \
           lib_stagefright_mdp_wmadec \
-          libmc_wma_dec
-
+          libmc_wma_dec \
+          libmc_umc_core_merged \
+          libmc_codec_common
 
 LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
+
+ifeq ($(TARGET_ARCH), x86)
+ifeq ($(TARGET_BOARD_PLATFORM), clovertrail)
+    IPP_LIB_EXT := ia32
+    IPP_LIB_ARCH := s_s8
+else
+    IPP_LIB_EXT := ia32
+    IPP_LIB_ARCH := s_p8
+endif
+else
+    IPP_LIB_EXT := intel64
+    IPP_LIB_ARCH := s_e9
+endif
+
+IPP_LIBS := \
+    -L$(TOP)/vendor/intel/PRIVATE/media_codecs/codecs/core/ipp/lib/$(IPP_LIB_EXT)/ \
+    -Xlinker --start-group \
+    -lippcore \
+    -lippac_$(IPP_LIB_ARCH) \
+    -lippvc_$(IPP_LIB_ARCH) \
+    -lippdc_$(IPP_LIB_ARCH) \
+    -lippcc_$(IPP_LIB_ARCH) \
+    -lipps_$(IPP_LIB_ARCH) \
+    -lippsc_$(IPP_LIB_ARCH) \
+    -lippi_$(IPP_LIB_ARCH) \
+    -lippvm \
+    -Xlinker --end-group \
+    -lsvml \
+    -limf \
+    -lirc
+
+LOCAL_LDFLAGS += \
+         -Wl,--no-warn-shared-textrel \
+         $(IPP_LIBS) \
+
 endif
 
 LOCAL_SHARED_LIBRARIES += \
