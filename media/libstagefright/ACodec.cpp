@@ -31,6 +31,7 @@
 
 #include <inttypes.h>
 #include <utils/Trace.h>
+#include <cutils/properties.h>
 
 #include <media/stagefright/ACodec.h>
 
@@ -2183,13 +2184,22 @@ status_t ACodec::setupVideoDecoder(
 }
 
 status_t ACodec::setupVideoEncoder(const char *mime, const sp<AMessage> &msg) {
-    int32_t tmp;
+    int32_t tmp, miracast = 0;
+    char propertyVal[PROPERTY_VALUE_MAX];
+
     if (!msg->findInt32("color-format", &tmp)) {
         return INVALID_OPERATION;
     }
 
     OMX_COLOR_FORMATTYPE colorFormat =
         static_cast<OMX_COLOR_FORMATTYPE>(tmp);
+    if (property_get("media.wfd.prepared", propertyVal, "false") &&
+        strncmp(propertyVal, "true", PROPERTY_VALUE_MAX) == 0) {
+        miracast = 1;
+    }
+
+    if (miracast == 0)
+        colorFormat = OMX_COLOR_FormatYUV420SemiPlanar;
 
     status_t err = setVideoPortFormatType(
             kPortIndexInput, OMX_VIDEO_CodingUnused, colorFormat);
