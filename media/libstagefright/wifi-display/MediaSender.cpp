@@ -22,6 +22,9 @@
 
 #include "rtp/RTPSender.h"
 #include "source/TSPacketizer.h"
+#ifdef WFD_STATS
+#include "WifiDisplayStats.h"
+#endif
 
 #include "include/avc_utils.h"
 
@@ -213,6 +216,16 @@ status_t MediaSender::queueAccessUnit(
 
     if (mMode == MODE_TRANSPORT_STREAM) {
         TrackInfo *info = &mTrackInfos.editItemAt(trackIndex);
+
+#ifdef WFD_STATS
+        int64_t starttime = systemTime();
+        WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+        if(!info->mIsAudio)
+        {
+            stats.updateVideoPackStartTime(starttime);
+        }
+#endif
+
         info->mAccessUnits.push_back(accessUnit);
 
         mTSPacketizer->extractCSDIfNecessary(info->mPacketizerTrackIndex);
@@ -266,6 +279,14 @@ status_t MediaSender::queueAccessUnit(
                         33 /* packetType */,
                         RTPSender::PACKETIZATION_TRANSPORT_STREAM);
             }
+
+#ifdef WFD_STATS
+            WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+            if(!info->mIsAudio)
+            {
+                stats.updateVideoPackEndTime(systemTime());
+            }
+#endif
 
             if (err != OK) {
                 return err;

@@ -3,6 +3,9 @@
 #include <utils/Log.h>
 
 #include "RepeaterSource.h"
+#ifdef WFD_STATS
+#include "WifiDisplayStats.h"
+#endif
 
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/foundation/ALooper.h>
@@ -156,6 +159,11 @@ status_t RepeaterSource::read(
                 *buffer = mBuffer;
                 (*buffer)->meta_data()->setInt64(kKeyTime, bufferTimeUs);
                 ++mFrameCount;
+
+#ifdef WFD_STATS
+                WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+                stats.updateFrameType(mBuffer);
+#endif
             }
         }
 
@@ -181,6 +189,11 @@ void RepeaterSource::onMessageReceived(const sp<AMessage> &msg) {
         {
             MediaBuffer *buffer;
             status_t err = mSource->read(&buffer);
+
+#ifdef WFD_STATS
+            WifiDisplayStats & stats = WifiDisplayStats::getInstance();
+            stats.updateInputFPS(systemTime());
+#endif
 
             ALOGV("read mbuf %p", buffer);
 

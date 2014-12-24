@@ -22,6 +22,9 @@
 #include "PlaybackSession.h"
 #include "Parameters.h"
 #include "rtp/RTPSender.h"
+#ifdef WFD_STATS
+#include "WifiDisplayStats.h"
+#endif
 
 #include <binder/IServiceManager.h>
 #include <gui/IGraphicBufferProducer.h>
@@ -111,6 +114,11 @@ status_t WifiDisplaySource::start(const char *iface) {
         ALOGE("Unable to set the property media.wfd.prepared to true");
     }
 
+#ifdef WFD_STATS
+    WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+    stats.start();
+#endif
+
     sp<AMessage> msg = new AMessage(kWhatStart, id());
     msg->setString("iface", iface);
 
@@ -122,6 +130,11 @@ status_t WifiDisplaySource::stop() {
     if (property_set("media.wfd.prepared","false") < 0) {
         ALOGE("Unable to reset the property media.wfd.prepared to false");
     }
+
+#ifdef WFD_STATS
+    WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+    stats.stop();
+#endif
 
     sp<AMessage> msg = new AMessage(kWhatStop, id());
 

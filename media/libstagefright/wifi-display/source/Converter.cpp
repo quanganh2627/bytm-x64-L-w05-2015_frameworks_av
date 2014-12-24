@@ -22,6 +22,9 @@
 
 #include "MediaPuller.h"
 #include "include/avc_utils.h"
+#ifdef WFD_STATS
+#include "WifiDisplayStats.h"
+#endif
 
 #include <cutils/properties.h>
 #include <gui/Surface.h>
@@ -563,6 +566,11 @@ status_t Converter::feedRawAudioInputBuffers() {
                 notify->post();
 
                 mPartialAudioAU.clear();
+
+#ifdef WFD_STATS
+                WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+                stats.updateOutputSampleRate(systemTime(), kFramesPerAU * kNumAUsPerPESPacket);
+#endif
             }
         }
 
@@ -611,6 +619,11 @@ status_t Converter::feedRawAudioInputBuffers() {
                 notify->post();
 
                 partialAudioAU.clear();
+
+#ifdef WFD_STATS
+                WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+                stats.updateOutputSampleRate(systemTime(), kFramesPerAU * kNumAUsPerPESPacket);
+#endif
                 continue;
             }
 
@@ -656,6 +669,9 @@ status_t Converter::feedEncoderInputBuffers() {
             flags = MediaCodec::BUFFER_FLAG_EOS;
         }
 
+
+        int64_t starttime = systemTime();
+
         status_t err = mEncoder->queueInputBuffer(
                 bufferIndex, 0, (buffer == NULL) ? 0 : buffer->size(),
                 timeUs, flags);
@@ -663,6 +679,14 @@ status_t Converter::feedEncoderInputBuffers() {
         if (err != OK) {
             return err;
         }
+
+#ifdef WFD_STATS
+        WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+        if(mIsVideo)
+        {
+            stats.updateVideoEncodeStartTime(starttime);
+        }
+#endif
     }
 
     return OK;
@@ -724,6 +748,20 @@ status_t Converter::doMoreWork() {
             }
             break;
         }
+
+#ifdef WFD_STATS
+        WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+        if(mIsVideo)
+        {
+            if(!(flags & MediaCodec::BUFFER_FLAG_CODECCONFIG))
+            {
+                stats.updateVideoEncodeEndTime(systemTime());
+                stats.updateOutputFPS(systemTime());
+            }
+
+            stats.updateVideoEncodeBits(size * 8);
+        }
+#endif
 
         if (flags & MediaCodec::BUFFER_FLAG_EOS) {
             sp<AMessage> notify = mNotify->dup();

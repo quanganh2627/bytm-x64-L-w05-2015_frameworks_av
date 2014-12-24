@@ -28,6 +28,9 @@
 #include <stdlib.h>
 
 #include "ExtAudioSource.h"
+#ifdef WFD_STATS
+#include "WifiDisplayStats.h"
+#endif
 
 namespace android {
 
@@ -358,6 +361,11 @@ void ExtAudioSource::queueInputBuffer_l(MediaBuffer *buffer, int64_t timeUs) {
     mNumFramesReceived += bufferSize / frameSize;
     mBuffersReceived.push_back(buffer);
     mFrameAvailableCondition.signal();
+
+#ifdef WFD_STATS
+    WifiDisplayStats &stats = WifiDisplayStats::getInstance();
+    stats.updateInputSampleRate(systemTime(), bufferSize / frameSize);
+#endif
 }
 
 void ExtAudioSource::trackMaxAmplitude(int16_t *data, int nSamples) {

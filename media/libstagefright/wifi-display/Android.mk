@@ -31,6 +31,11 @@ LOCAL_SHARED_LIBRARIES:= \
         libui                           \
         libutils                        \
 
+ifneq (,$(filter eng,$(TARGET_BUILD_VARIANT)))
+LOCAL_SRC_FILES += WifiDisplayStats.cpp
+LOCAL_CPPFLAGS += -DWFD_STATS
+endif
+
 LOCAL_MODULE:= libstagefright_wfd
 
 LOCAL_MODULE_TAGS:= optional
