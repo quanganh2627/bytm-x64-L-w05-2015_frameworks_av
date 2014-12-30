@@ -115,7 +115,7 @@ AudioRecord::~AudioRecord()
             mAudioRecord.clear();
         }
         IPCThreadState::self()->flushCommands();
-        AudioSystem::releaseAudioSessionId(mSessionId);
+        AudioSystem::releaseAudioSessionId(mSessionId, -1);
     }
 }
 
@@ -268,7 +268,7 @@ status_t AudioRecord::set(
     mMarkerReached = false;
     mNewPosition = 0;
     mUpdatePeriod = 0;
-    AudioSystem::acquireAudioSessionId(mSessionId);
+    AudioSystem::acquireAudioSessionId(mSessionId, -1);
     mSequence = 1;
     mObservedSequence = mSequence;
     mInOverrun = false;
@@ -545,13 +545,13 @@ status_t AudioRecord::obtainBuffer(Buffer* audioBuffer, int32_t waitCount)
     }
 
     const struct timespec *requested;
+    struct timespec timeout;
     if (waitCount == -1) {
         requested = &ClientProxy::kForever;
     } else if (waitCount == 0) {
         requested = &ClientProxy::kNonBlocking;
     } else if (waitCount > 0) {
         long long ms = WAIT_PERIOD_MS * (long long) waitCount;
-        struct timespec timeout;
         timeout.tv_sec = ms / 1000;
         timeout.tv_nsec = (int) (ms % 1000) * 1000000;
         requested = &timeout;
