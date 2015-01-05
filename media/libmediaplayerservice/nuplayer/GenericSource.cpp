@@ -50,6 +50,7 @@ NuPlayer::GenericSource::GenericSource(
       mDurationUs(0ll),
       mAudioIsVorbis(false),
       mIsWidevine(false),
+      mIsSecure(false),
       mUIDValid(uidValid),
       mUID(uid),
       mDrmManagerClient(NULL),
@@ -157,6 +158,18 @@ status_t NuPlayer::GenericSource::initFromDataSource() {
         if (mFileMeta->findInt64(kKeyDuration, &duration)) {
             mDurationUs = duration;
         }
+        if (!mIsWidevine) {
+
+            // Check mime to see if we actually have a widevine source.
+            // If the data source is not URL-type (eg. file source), we
+            // won't be able to tell until now.
+            const char *fileMime;
+            if (mFileMeta->findCString(kKeyMIMEType, &fileMime)
+                    && !strncasecmp(fileMime, "video/wvm", 9)) {
+
+                mIsWidevine = true;
+            }
+        }
     }
 
     int32_t totalBitrate = 0;
@@ -202,7 +215,7 @@ status_t NuPlayer::GenericSource::initFromDataSource() {
                 int32_t secure;
                 if (meta->findInt32(kKeyRequiresSecureBuffers, &secure)
                         && secure) {
-                    mIsWidevine = true;
+                    mIsSecure = true;
                     if (mUIDValid) {
                         extractor->setUID(mUID);
                     }
@@ -257,7 +270,7 @@ int64_t NuPlayer::GenericSource::getLastReadPosition() {
 
 status_t NuPlayer::GenericSource::setBuffers(
         bool audio, Vector<MediaBuffer *> &buffers) {
-    if (mIsWidevine && !audio) {
+    if (mIsSecure && !audio) {
         return mVideoTrack.mSource->setBuffers(buffers);
     }
     return INVALID_OPERATION;
@@ -286,6 +299,10 @@ void NuPlayer::GenericSource::prepareAsync() {
 void NuPlayer::GenericSource::onPrepareAsync() {
     // delayed data source creation
     if (mDataSource == NULL) {
+        // set to false first, if the extractor
+        // comes back as secure, set it to true then.
+        mIsSecure = false;
+
         if (!mUri.empty()) {
             const char* uri = mUri.c_str();
             mIsWidevine = !strncasecmp(uri, "widevine://", 11);
@@ -305,8 +322,6 @@ void NuPlayer::GenericSource::onPrepareAsync() {
                    mHTTPService, uri, &mUriHeaders, &mContentType,
                    static_cast<HTTPBase *>(mHttpSource.get()));
         } else {
-            // set to false first, if the extractor
-            // comes back as secure, set it to true then.
             mIsWidevine = false;
 
             mDataSource = new FileSource(mFd, mOffset, mLength);
@@ -360,7 +375,7 @@ void NuPlayer::GenericSource::onPrepareAsync() {
     }
 
     notifyFlagsChanged(
-            (mIsWidevine ? FLAG_SECURE : 0)
+            (mIsSecure ? FLAG_SECURE : 0)
             | FLAG_CAN_PAUSE
             | FLAG_CAN_SEEK_BACKWARD
             | FLAG_CAN_SEEK_FORWARD
@@ -477,8 +492,8 @@ void NuPlayer::GenericSource::stop() {
     // nothing to do, just account for DRM playback status
     setDrmPlaybackStatusIfNeeded(Playback::STOP, 0);
     mStarted = false;
-    if (mIsWidevine) {
-        // For a widevine source we need to prevent any further reads.
+    if (mIsWidevine || mIsSecure) {
+        // For widevine or secure sources we need to prevent any further reads.
         sp<AMessage> msg = new AMessage(kWhatStopWidevine, id());
         sp<AMessage> response;
         (void) msg->postAndAwaitResponse(&response);
@@ -842,7 +857,13 @@ status_t NuPlayer::GenericSource::dequeueAccessUnit(
 
     status_t finalResult;
     if (!track->mPackets->hasBufferAvailable(&finalResult)) {
-        return (finalResult == OK ? -EWOULDBLOCK : finalResult);
+        if (finalResult == OK) {
+
+            postReadBuffer(
+                    audio ? MEDIA_TRACK_TYPE_AUDIO : MEDIA_TRACK_TYPE_VIDEO);
+            return -EWOULDBLOCK;
+        }
+        return finalResult;
     }
 
     status_t result = track->mPackets->dequeueAccessUnit(accessUnit);
@@ -1157,7 +1178,7 @@ sp<ABuffer> NuPlayer::GenericSource::mediaBufferToABuffer(
     }
 
     sp<ABuffer> ab;
-    if (mIsWidevine && !audio) {
+    if (mIsSecure && !audio) {
         // data is already provided in the buffer
         ab = new ABuffer(NULL, mb->range_length());
         mb->add_ref();
@@ -1226,10 +1247,10 @@ void NuPlayer::GenericSource::onReadBuffer(sp<AMessage> msg) {
     int32_t tmpType;
     CHECK(msg->findInt32("trackType", &tmpType));
     media_track_type trackType = (media_track_type)tmpType;
+    readBuffer(trackType);
     {
         // only protect the variable change, as readBuffer may
-        // take considerable time.  This may result in one extra
-        // read being processed, but that is benign.
+        // take considerable time.
         Mutex::Autolock _l(mReadBufferLock);
         mPendingReadBufferTypes &= ~(1 << trackType);
     }
@@ -1286,7 +1307,7 @@ void NuPlayer::GenericSource::readBuffer(
         seeking = true;
     }
 
-    if (mIsWidevine && trackType != MEDIA_TRACK_TYPE_AUDIO) {
+    if (mIsSecure) {
         options.setNonBlocking();
     }
 
