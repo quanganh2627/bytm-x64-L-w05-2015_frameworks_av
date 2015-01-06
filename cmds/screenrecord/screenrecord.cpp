@@ -49,6 +49,12 @@
 #include <media/stagefright/MediaMuxer.h>
 #include <media/ICrypto.h>
 
+#ifdef INTEL_FEATURE_ASF
+#include "AsfVersionAosp.h"
+#if PLATFORM_ASF_VERSION >= ASF_VERSION_2
+#include "AsfDeviceAosp.h"
+#endif
+#endif
 #include "screenrecord.h"
 #include "Overlay.h"
 #include "FrameOutput.h"
@@ -972,6 +978,21 @@ int main(int argc, char* const argv[]) {
         fprintf(stderr, "Must specify output file (see --help).\n");
         return 2;
     }
+
+#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
+        // Place call to function that acts as a hook point for screen capture events
+        bool response = AsfDeviceAosp::sendScreencaptureEvent(
+                                IPCThreadState::self()->getCallingUid(),
+                                IPCThreadState::self()->getCallingPid() );
+        // If response is false, deny access to requested application and return NULL.
+        // If response is true, then either ASF allowed access to take screen capture or
+        // ASF Client is not running
+        if (!response) {
+            ALOGE("ASF client denied screen recording.");
+            fprintf(stderr, "ASF client denied screen recording.\n");
+            return 1;
+        }
+#endif
 
     const char* fileName = argv[optind];
     if (gOutputFormat == FORMAT_MP4) {

@@ -63,6 +63,14 @@
 #include <media/AudioParameter.h>
 #include <private/android_filesystem_config.h>
 
+#ifdef INTEL_FEATURE_ASF
+#include "AsfVersionAosp.h"
+#if PLATFORM_ASF_VERSION >= ASF_VERSION_2
+// The interface file for inserting hooks to communicate with security
+// manager service
+#include "AsfDeviceAosp.h"
+#endif
+#endif //INTEL_FEATURE_ASF_END
 // ----------------------------------------------------------------------------
 
 // Note: the following macro is used for extremely verbose logging message.  In
@@ -1889,6 +1897,20 @@ status_t AudioFlinger::openInput(audio_module_handle_t module,
                                           audio_input_flags_t flags)
 {
     Mutex::Autolock _l(mLock);
+
+#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
+    // Place call to function that acts as a hook point for microphone events
+    bool allowed = AsfDeviceAosp::sendMicrophoneEvent(
+                           IPCThreadState::self()->getCallingUid(),
+                           IPCThreadState::self()->getCallingPid() );
+    // If allowed is false, deny access to requested application and
+    // return 0 if allowed is true, either ASF allowed access to
+    // Microphone to open or ASF Client is not running
+    if (!allowed) {
+        ALOGE("ASF client denied permission for microphone, returning PERMISSION_DENIED");
+        return 0;
+    }
+#endif
 
     if (*device == AUDIO_DEVICE_NONE) {
         return BAD_VALUE;

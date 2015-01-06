@@ -34,6 +34,20 @@ LOCAL_C_INCLUDES := \
 	$(TOP)/frameworks/native/include/media/openmax \
 	external/jpeg
 
+ifeq ($(strip $(INTEL_FEATURE_ASF)),true)
+    LOCAL_CPPFLAGS += -DINTEL_FEATURE_ASF
+    LOCAL_CPPFLAGS += -DPLATFORM_ASF_VERSION=$(PLATFORM_ASF_VERSION)
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/asfaosp
+ifneq ($(strip $(PLATFORM_ASF_VERSION)),1)
+ifneq ($(strip $(PLATFORM_ASF_VERSION)),0)
+    LOCAL_SHARED_LIBRARIES += libsecuritydeviceserviceclient
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/libsecuritydeviceserviceclient
+endif
+endif
+else
+   LOCAL_CPPFLAGS += -DPLATFORM_ASF_VERSION=0
+endif
+
 LOCAL_CFLAGS += -Wno-multichar
 #LOCAL_CFLAGS += -UNDEBUG
 

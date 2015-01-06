@@ -49,6 +49,14 @@
 #include "api2/CameraDeviceClient.h"
 #include "utils/CameraTraces.h"
 #include "CameraDeviceFactory.h"
+#ifdef INTEL_FEATURE_ASF
+#include "AsfVersionAosp.h"
+#if PLATFORM_ASF_VERSION >= ASF_VERSION_2
+// The interface file for inserting hooks to
+// communicate with native service securitydevice
+#include "AsfDeviceAosp.h"
+#endif
+#endif
 
 namespace android {
 
@@ -749,6 +757,19 @@ status_t CameraService::connect(
         return status;
     }
 
+#if defined(INTEL_FEATURE_ASF) && (PLATFORM_ASF_VERSION >= ASF_VERSION_2)
+    // Place call to function that acts as a hook point for camera events
+    // Adding hook to call security device service
+    bool allow = AsfDeviceAosp::sendCameraEvent(IPCThreadState::self()->getCallingUid(),
+                                        IPCThreadState::self()->getCallingPid());
+    // If response is false, deny access to requested application and return NULL
+    // response is true, either ASF allowed access to camera to open or if
+    // ASF Client is not running
+    if (!allow) {
+        ALOGE("ASF Client denied permission, returning NULL");
+        return PERMISSION_DENIED;
+    }
+#endif
 
     sp<Client> client;
     {
