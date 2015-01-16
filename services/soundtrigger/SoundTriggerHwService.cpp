@@ -485,7 +485,7 @@ SoundTriggerHwService::Module::Module(const sp<SoundTriggerHwService>& service,
                                       sound_trigger_module_descriptor descriptor,
                                       const sp<ISoundTriggerClient>& client)
  : mService(service), mHwDevice(hwDevice), mDescriptor(descriptor),
-   mClient(client), mServiceState(SOUND_TRIGGER_STATE_NO_INIT)
+   mClient(client), mServiceState(SOUND_TRIGGER_STATE_NO_INIT), mIsStartOrStop(false)
 {
 }
 
@@ -761,7 +761,7 @@ void SoundTriggerHwService::Module::setCaptureState_l(bool active)
     // WoV(Sound trigger): workaround
     char wov[512] = { 0 };
     property_get("persist.wov.enable", wov, "1");
-    if (atoi(wov) == 1 && mIsStartOrStop) {
+    if (atoi(wov) == 1 || mIsStartOrStop) {
         ALOGW("WoV workaround: don't send service event.");
         return;
     }
