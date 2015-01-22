@@ -138,37 +138,50 @@ LOCAL_CPPFLAGS += -DUSE_INTEL_MDP
 
 ifeq ($(TARGET_ARCH), x86)
 ifeq ($(TARGET_BOARD_PLATFORM), clovertrail)
-    IPP_LIB_EXT := ia32
-    IPP_LIB_ARCH := s_s8
+    IPP_LIBS_32_EXT := ia32
+    IPP_LIBS_32_ARCH := s_s8
 else
-    IPP_LIB_EXT := ia32
-    IPP_LIB_ARCH := s_p8
+    IPP_LIBS_32_EXT := ia32
+    IPP_LIBS_32_ARCH := s_p8
 endif
 else
-    IPP_LIB_EXT := intel64
-    IPP_LIB_ARCH := s_e9
+    IPP_LIBS_64_EXT := intel64
+    IPP_LIBS_64_ARCH := s_e9
 endif
 
-IPP_LIBS := \
-    -L$(TOP)/vendor/intel/PRIVATE/media_codecs/codecs/core/ipp/lib/$(IPP_LIB_EXT)/ \
-    -Xlinker --start-group \
-    -lippcore \
-    -lippac_$(IPP_LIB_ARCH) \
-    -lippvc_$(IPP_LIB_ARCH) \
-    -lippdc_$(IPP_LIB_ARCH) \
-    -lippcc_$(IPP_LIB_ARCH) \
-    -lipps_$(IPP_LIB_ARCH) \
-    -lippsc_$(IPP_LIB_ARCH) \
-    -lippi_$(IPP_LIB_ARCH) \
-    -lippvm \
-    -Xlinker --end-group \
-    -lsvml \
-    -limf \
-    -lirc
+LOCAL_STATIC_LIBRARIES_32 += \
+    libmediaipp_libippcore \
+    libmediaipp_libippac_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippvc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippdc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippcc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libipps_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippsc_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippi_$(IPP_LIBS_32_ARCH) \
+    libmediaipp_libippvm \
+    libmediaipp_libsvml \
+    libmediaipp_libimf \
+    libmediaipp_libirc
+
+LOCAL_STATIC_LIBRARIES_64 += \
+    libmediaipp_libippcore \
+    libmediaipp_libippac_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippvc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippdc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippcc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libipps_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippsc_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippi_$(IPP_LIBS_64_ARCH) \
+    libmediaipp_libippvm \
+    libmediaipp_libsvml \
+    libmediaipp_libimf \
+    libmediaipp_libirc
+
+# group static libraries to resolve cyclic dependencies for ipp
+LOCAL_GROUP_STATIC_LIBRARIES := true
 
 LOCAL_LDFLAGS += \
-         -Wl,--no-warn-shared-textrel \
-         $(IPP_LIBS) \
+         -Wl,--no-warn-shared-textrel
 
 endif
 
