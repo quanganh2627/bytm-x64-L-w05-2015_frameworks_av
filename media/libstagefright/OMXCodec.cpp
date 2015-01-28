@@ -4950,6 +4950,8 @@ void OMXCodec::initOutputFormat(const sp<MetaData> &inputFormat) {
 
             mOutputFormat->setInt32(kKeyWidth, video_def->nFrameWidth);
             mOutputFormat->setInt32(kKeyHeight, video_def->nFrameHeight);
+            mOutputFormat->setInt32(kKeyStride, def.format.video.nStride);
+            mOutputFormat->setInt32(kKeySliceHeight, def.format.video.nSliceHeight);
             mOutputFormat->setInt32(kKeyColorFormat, video_def->eColorFormat);
 
             if (!mIsEncoder) {

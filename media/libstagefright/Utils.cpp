@@ -100,11 +100,16 @@ status_t convertMetaDataToMessage(
 
     if (!strncasecmp("video/", mime, 6)) {
         int32_t width, height;
+        int32_t stride, sliceheight;
         CHECK(meta->findInt32(kKeyWidth, &width));
         CHECK(meta->findInt32(kKeyHeight, &height));
+        CHECK(meta->findInt32(kKeyStride, &stride));
+        CHECK(meta->findInt32(kKeySliceHeight, &sliceheight));
 
         msg->setInt32("width", width);
         msg->setInt32("height", height);
+        msg->setInt32("stride", stride);
+        msg->setInt32("slice-height", sliceheight);
 
         int32_t sarWidth, sarHeight;
         if (meta->findInt32(kKeySARWidth, &sarWidth)
